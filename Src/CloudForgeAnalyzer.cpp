@@ -105,8 +105,9 @@ void CloudForgeAnalyzer::Slot_fi_open_Triggered() {
         TeEDebug(">>无法加载点云文件");
         return;
     }
-
-    ReplacePointCloud(cloud);
+    ColorManager color(255, 255, 255);
+    ClearAllPointCloud();
+    AddPointCloud("example",cloud,color);
     UpdateCamera(0, 0, 1);
 }
 void CloudForgeAnalyzer::Slot_ed_dork_Triggered() {
@@ -124,12 +125,18 @@ void CloudForgeAnalyzer::Slot_fi_saveas_Triggered() {
 void CloudForgeAnalyzer::Slot_fl_2_Triggered() {
     Filter_sor fs(cloud);
     *cloud = *fs.Get_filtered();
-    ReplacePointCloud(cloud);
+    ColorManager color(255, 255, 255);
+    ClearAllPointCloud();
+    AddPointCloud("example", cloud, color);
+    UpdateCamera(0, 0, 1);
 }
 void CloudForgeAnalyzer::Slot_fl_1_Triggered() {
     Filter_voxel fv(cloud);
     *cloud = *fv.Get_filtered();
-    ReplacePointCloud(cloud);
+    ColorManager color(255, 255, 255);
+    ClearAllPointCloud();
+    AddPointCloud("example", cloud, color);
+    UpdateCamera(0, 0, 1);
 }
 void CloudForgeAnalyzer::Slot_ph_1_Triggered() {
     Cluster cs(cloud);
@@ -170,7 +177,7 @@ void CloudForgeAnalyzer::Slot_CurveFittingPC() {
         pcl::PointCloud<pcl::PointXYZ>::Ptr newcloud(new pcl::PointCloud<pcl::PointXYZ>);
         //*newcloud = *PDC1.main_cloud;
         *newcloud = *cloud;
-        ReplacePointCloud(newcloud);
+        //ReplacePointCloud(newcloud);
         viewer->addPointCloud(PDC1.defects_cloud, "cloud_defect");
         viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_COLOR, 1.0, 0.0, 0.0, "cloud_defect", 0);
         viewer->addCylinder(PDC1.coefficients_cylinder, "cycler", 0); // 可视化拟合出来的圆柱模型
@@ -266,22 +273,7 @@ void CloudForgeAnalyzer::TeEDebug(std::string debugMes) {
 
 
 
-void CloudForgeAnalyzer::ReplacePointCloud(pcl::PointCloud<pcl::PointXYZ>::Ptr new_cloud) {
-    if (!new_cloud || new_cloud->empty()) {
-        TeEDebug(">>槽upc:无效或空点云");
-        return;
-    }
-    *cloud = *new_cloud;
-    viewer->removeAllShapes();
-    viewer->removeAllPointClouds();
-    viewer->addPointCloud(cloud, *renderer_custom, "cloud");
 
-
-    TeEDebug(">>槽RPC:替换点云点数:" + std::to_string(cloud->points.size()));//这里正常
-    ui->textEdit_Show_CFmes->clear();
-    ui->winOfAnalyzer->renderWindow()->Render();
-    ui->winOfAnalyzer->update();
-}
 void CloudForgeAnalyzer::UpdateCamera(int a, int b, int c) {
     vtkRenderer* renderer = viewer->getRendererCollection()->GetFirstRenderer();
     if (!renderer) {
