@@ -382,3 +382,7 @@ FodyWeavers.xsd
 /PCDfiles/nowCloud.pcd
 /PCDfiles/nowCloud1.pcd
 /PCDfiles/test33.pcd
+*.pcd
+/PCDfiles/savetest2.pcd
+*.pcd
+*.pcd

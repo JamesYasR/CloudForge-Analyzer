@@ -1,6 +1,6 @@
-#include "Dialog/Dialog_SelectPC.h"
+#include "Dialog/Dialog_SelectPointCloud.h"
 
-Dialog_SelectPC::Dialog_SelectPC(std::map<std::string, pcl::PointCloud<pcl::PointXYZ>::Ptr> cloudm, std::map<std::string, ColorManager> colorm, QWidget* parent)
+Dialog_SelectPointCloud::Dialog_SelectPointCloud(std::map<std::string, pcl::PointCloud<pcl::PointXYZ>::Ptr> cloudm, std::map<std::string, ColorManager> colorm, QWidget* parent)
     : QDialog(parent)
 {
     cloudmap = cloudm;
@@ -19,7 +19,7 @@ Dialog_SelectPC::Dialog_SelectPC(std::map<std::string, pcl::PointCloud<pcl::Poin
 
 
 
-void Dialog_SelectPC::InitializeScrollAreaOfPointCloud() {
+void Dialog_SelectPointCloud::InitializeScrollAreaOfPointCloud() {
     std::vector<std::string> cloudIds;
     for (const auto& entry : cloudmap) {
         cloudIds.push_back(entry.first);
@@ -64,10 +64,10 @@ void Dialog_SelectPC::InitializeScrollAreaOfPointCloud() {
     mainLayout->addWidget(scrollArea);
 }
 
-void Dialog_SelectPC::InitializeButtonAndConnect() {
+void Dialog_SelectPointCloud::InitializeButtonAndConnect() {
 
 }
-std::vector<std::string> Dialog_SelectPC::Get_SelectedList() {
+std::vector<std::string> Dialog_SelectPointCloud::Get_SelectedList() {
     std::vector<std::string> SelectList;
     for (int i = 0; i < m_checkBoxes.size(); ++i) {
         if (m_checkBoxes[i]->isChecked()) {
@@ -76,7 +76,7 @@ std::vector<std::string> Dialog_SelectPC::Get_SelectedList() {
     }
     return SelectList;
 }
-std::vector<std::string> Dialog_SelectPC::Get_unSelectedList() {
+std::vector<std::string> Dialog_SelectPointCloud::Get_unSelectedList() {
     std::vector<std::string> unSelectList;
     for (int i = 0; i < m_checkBoxes.size(); ++i) {
         if (!m_checkBoxes[i]->isChecked()) {
@@ -86,7 +86,7 @@ std::vector<std::string> Dialog_SelectPC::Get_unSelectedList() {
     return unSelectList;
 }
 
-void Dialog_SelectPC::ClearAllCheckBoxes() {
+void Dialog_SelectPointCloud::ClearAllCheckBoxes() {
     for (QCheckBox* checkBox : m_checkBoxes) {
         if (checkBox) {
             checkBox->setChecked(false); // 将每个复选框的选中状态设置为false
@@ -94,7 +94,7 @@ void Dialog_SelectPC::ClearAllCheckBoxes() {
     }
 }
 
-void Dialog_SelectPC::SelectAllCheckBoxes() {
+void Dialog_SelectPointCloud::SelectAllCheckBoxes() {
     for (QCheckBox* checkBox : m_checkBoxes) {
         if (checkBox) {
             checkBox->setChecked(true); // 将每个复选框的选中状态设置为false

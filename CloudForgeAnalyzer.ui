@@ -192,8 +192,8 @@
                 </property>
                 <property name="maximumSize">
                  <size>
-                  <width>16777215</width>
-                  <height>16777215</height>
+                  <width>140</width>
+                  <height>25</height>
                  </size>
                 </property>
                </widget>
@@ -255,87 +255,6 @@
               <property name="sizeConstraint">
                <enum>QLayout::SizeConstraint::SetDefaultConstraint</enum>
               </property>
-              <item>
-               <widget class="QPushButton" name="pushButton_PCIncise">
-                <property name="sizePolicy">
-                 <sizepolicy hsizetype="MinimumExpanding" vsizetype="MinimumExpanding">
-                  <horstretch>0</horstretch>
-                  <verstretch>0</verstretch>
-                 </sizepolicy>
-                </property>
-                <property name="minimumSize">
-                 <size>
-                  <width>44</width>
-                  <height>22</height>
-                 </size>
-                </property>
-                <property name="maximumSize">
-                 <size>
-                  <width>44</width>
-                  <height>22</height>
-                 </size>
-                </property>
-                <property name="text">
-                 <string>裁切</string>
-                </property>
-               </widget>
-              </item>
-              <item>
-               <widget class="QPushButton" name="pushButton_CtrlZPCIC">
-                <property name="enabled">
-                 <bool>false</bool>
-                </property>
-                <property name="sizePolicy">
-                 <sizepolicy hsizetype="MinimumExpanding" vsizetype="MinimumExpanding">
-                  <horstretch>0</horstretch>
-                  <verstretch>0</verstretch>
-                 </sizepolicy>
-                </property>
-                <property name="minimumSize">
-                 <size>
-                  <width>44</width>
-                  <height>22</height>
-                 </size>
-                </property>
-                <property name="maximumSize">
-                 <size>
-                  <width>44</width>
-                  <height>22</height>
-                 </size>
-                </property>
-                <property name="text">
-                 <string>撤销</string>
-                </property>
-               </widget>
-              </item>
-              <item>
-               <widget class="QPushButton" name="pushButton_DoPCIC">
-                <property name="enabled">
-                 <bool>false</bool>
-                </property>
-                <property name="sizePolicy">
-                 <sizepolicy hsizetype="MinimumExpanding" vsizetype="MinimumExpanding">
-                  <horstretch>0</horstretch>
-                  <verstretch>0</verstretch>
-                 </sizepolicy>
-                </property>
-                <property name="minimumSize">
-                 <size>
-                  <width>44</width>
-                  <height>22</height>
-                 </size>
-                </property>
-                <property name="maximumSize">
-                 <size>
-                  <width>44</width>
-                  <height>22</height>
-                 </size>
-                </property>
-                <property name="text">
-                 <string>确定</string>
-                </property>
-               </widget>
-              </item>
              </layout>
             </item>
             <item>
@@ -937,60 +856,12 @@ QMenu::item:selected {
    <slot>Slot_CurveFittingPC()</slot>
    <hints>
     <hint type="sourcelabel">
-     <x>1093</x>
-     <y>286</y>
+     <x>1156</x>
+     <y>239</y>
     </hint>
     <hint type="destinationlabel">
      <x>1365</x>
      <y>298</y>
-    </hint>
-   </hints>
-  </connection>
-  <connection>
-   <sender>pushButton_PCIncise</sender>
-   <signal>clicked()</signal>
-   <receiver>CloudForgeAnalyzerClass</receiver>
-   <slot>Slot_CloudPointIncise()</slot>
-   <hints>
-    <hint type="sourcelabel">
-     <x>1048</x>
-     <y>596</y>
-    </hint>
-    <hint type="destinationlabel">
-     <x>1327</x>
-     <y>602</y>
-    </hint>
-   </hints>
-  </connection>
-  <connection>
-   <sender>pushButton_CtrlZPCIC</sender>
-   <signal>clicked()</signal>
-   <receiver>CloudForgeAnalyzerClass</receiver>
-   <slot>Slot_CtrlZPCIC()</slot>
-   <hints>
-    <hint type="sourcelabel">
-     <x>1086</x>
-     <y>591</y>
-    </hint>
-    <hint type="destinationlabel">
-     <x>1343</x>
-     <y>612</y>
-    </hint>
-   </hints>
-  </connection>
-  <connection>
-   <sender>pushButton_DoPCIC</sender>
-   <signal>clicked()</signal>
-   <receiver>CloudForgeAnalyzerClass</receiver>
-   <slot>Slot_DoCPIC()</slot>
-   <hints>
-    <hint type="sourcelabel">
-     <x>1142</x>
-     <y>592</y>
-    </hint>
-    <hint type="destinationlabel">
-     <x>1426</x>
-     <y>740</y>
     </hint>
    </hints>
   </connection>
@@ -1001,8 +872,8 @@ QMenu::item:selected {
    <slot>Slot_ChangeVA_x()</slot>
    <hints>
     <hint type="sourcelabel">
-     <x>1035</x>
-     <y>628</y>
+     <x>1045</x>
+     <y>460</y>
     </hint>
     <hint type="destinationlabel">
      <x>1046</x>
@@ -1017,8 +888,8 @@ QMenu::item:selected {
    <slot>Slot_ChangeVA_y()</slot>
    <hints>
     <hint type="sourcelabel">
-     <x>1064</x>
-     <y>625</y>
+     <x>1080</x>
+     <y>460</y>
     </hint>
     <hint type="destinationlabel">
      <x>1103</x>
@@ -1033,8 +904,8 @@ QMenu::item:selected {
    <slot>Slot_ChangeVA_z()</slot>
    <hints>
     <hint type="sourcelabel">
-     <x>1105</x>
-     <y>626</y>
+     <x>1115</x>
+     <y>460</y>
     </hint>
     <hint type="destinationlabel">
      <x>1120</x>
@@ -1049,8 +920,8 @@ QMenu::item:selected {
    <slot>Slot_ChangeVA_o()</slot>
    <hints>
     <hint type="sourcelabel">
-     <x>1142</x>
-     <y>628</y>
+     <x>1150</x>
+     <y>460</y>
     </hint>
     <hint type="destinationlabel">
      <x>1158</x>
@@ -1067,9 +938,6 @@ QMenu::item:selected {
   <slot>Slot_ChangeVA_y()</slot>
   <slot>Slot_ChangeVA_z()</slot>
   <slot>Slot_ChangeVA_o()</slot>
-  <slot>Slot_CloudPointIncise()</slot>
-  <slot>Slot_DoCPIC()</slot>
-  <slot>Slot_CtrlZPCIC()</slot>
   <slot>Slot_savePCDfile()</slot>
  </slots>
 </ui>

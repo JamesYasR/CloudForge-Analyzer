@@ -1,57 +1,26 @@
-#include "Dialog/Dialog_saveas.h"
+#include "Dialog/Dialog_SelectCloudToSaveAs.h"
 
-Dialog_saveas::Dialog_saveas(PCLVisualizerPtr viewer, QWidget* parent)
-    : QDialog(parent), m_viewer(viewer)
+Dialog_SelectCloudToSaveAs::Dialog_SelectCloudToSaveAs(std::map<std::string, pcl::PointCloud<pcl::PointXYZ>::Ptr> cloudm, std::map<std::string, ColorManager> colorm, QWidget* parent = nullptr)
+    : Dialog_SelectPointCloud(cloudm, colorm, parent)
 {
-    // 主布局
-    QVBoxLayout* mainLayout = new QVBoxLayout(this);
-
-    // 获取当前所有点云ID
-    auto cloudActorMap = m_viewer->getCloudActorMap();
-    for (const auto& entry : *cloudActorMap) {
-        m_cloudIds << QString::fromStdString(entry.first);
-    }
-
-    // 滚动区域
-    QScrollArea* scrollArea = new QScrollArea;
-    QWidget* contentWidget = new QWidget;
-    QVBoxLayout* contentLayout = new QVBoxLayout(contentWidget);
-
-    // 为每个点云添加复选框
-    for (const QString& id : m_cloudIds) {
-        QHBoxLayout* rowLayout = new QHBoxLayout;
-
-        // 颜色标签（示例颜色，实际可从CloudActor获取）
-        QLabel* colorLabel = new QLabel;
-        colorLabel->setFixedSize(20, 20);
-        colorLabel->setStyleSheet("background-color: #888888;");
-
-        // 复选框
-        QCheckBox* checkBox = new QCheckBox(id);
-
-        rowLayout->addWidget(colorLabel);
-        rowLayout->addWidget(checkBox);
-        contentLayout->addLayout(rowLayout);
-        m_checkBoxes.append(checkBox);
-    }
-
-    scrollArea->setWidget(contentWidget);
-
-    // 保存按钮
-    QPushButton* saveButton = new QPushButton("保存");
-    connect(saveButton, &QPushButton::clicked, this, &Dialog_saveas::saveas);
-
-    mainLayout->addWidget(scrollArea);
-    mainLayout->addWidget(saveButton);
-    setLayout(mainLayout);
-    resize(400, 300);
+    InitializeButtonAndConnect();
+    this->setWindowTitle("选择点云另存为");
     this->exec();
 }
 
+Dialog_SelectCloudToSaveAs::~Dialog_SelectCloudToSaveAs() = default;
+
+void Dialog_SelectCloudToSaveAs::InitializeButtonAndConnect() {
+    QPushButton* Button = new QPushButton("另存为", this);
+    connect(Button, &QPushButton::clicked, this, &Dialog_SelectCloudToSaveAs::Saveas);
+    mainLayout->addWidget(Button);
+}
 // 保存功能实现
-void Dialog_saveas::saveas()
+void Dialog_SelectCloudToSaveAs::Saveas()
 {
-    // 1. 获取选中的点云ID
+    this->accept();
+}
+/*// 1. 获取选中的点云ID
     QStringList selectedIds;
     for (int i = 0; i < m_checkBoxes.size(); ++i) {
         if (m_checkBoxes[i]->isChecked()) {
@@ -165,5 +134,4 @@ void Dialog_saveas::saveas()
             QMessageBox::critical(this, "错误",
                 QString("保存失败：\n%1").arg(e.what()));
         }
-    }
-}
+    }*/

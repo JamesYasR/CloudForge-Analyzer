@@ -22,7 +22,6 @@
 #include "QFileDialog"
 #include <string>
 #include <filesystem>
-#include "PointCloudIncise.h"
 #include "Protrusion_Depression_Cylinder.h"
 #include "Linear_Depression_Plane.h"
 #include "funcs.h"
@@ -49,9 +48,6 @@ private slots:
     void Slot_ChangeVA_y();
     void Slot_ChangeVA_z();
     void Slot_ChangeVA_o();
-    void Slot_CloudPointIncise();
-    void Slot_DoCPIC();
-    void Slot_CtrlZPCIC();
     void Slot_fi_open_Triggered();
     void Slot_fi_save_Triggered();
     void Slot_fi_saveas_Triggered();
@@ -70,7 +66,6 @@ private:
     void InitalizeRenderer();
     void InitalizeConnects();
     void TeEDebug(std::string debugMes);
-    void ReplacePointCloud(pcl::PointCloud<pcl::PointXYZ>::Ptr new_cloud);
     void UpdateCamera(int a, int b, int c);
     void Update_CFmes(std::string cfmes);
 

@@ -8,6 +8,7 @@ CloudForgeAnalyzer::CloudForgeAnalyzer(QWidget *parent)
 {
     //qt控件区head
     ui->setupUi(this);
+
     InitalizeQWidgets();
     InitalizeConnects();
     InitalizeRenderer();
@@ -60,11 +61,11 @@ void CloudForgeAnalyzer::InitalizeConnects() {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////*槽函数start*/
 void CloudForgeAnalyzer::Slot_fit_cy_Triggered() {
-    Dialog_SelSingleCloud PDFCY(CloudMap, ColorMap);
-    if (PDFCY.Get_Selected().empty()) {
+    Dialog_SelectCloudToFit window(CloudMap, ColorMap);
+    if (window.Get_SelectedList().empty()) {
         return;
     }
-    pcl::PointCloud<pcl::PointXYZ>::Ptr Cloud_Temp = CloudMap[PDFCY.Get_Selected()];
+    pcl::PointCloud<pcl::PointXYZ>::Ptr Cloud_Temp = CloudMap[window.Get_SelectedList()[0]];
 
     Fit_Cylinder fcy1(Cloud_Temp);
     pcl::PointCloud<pcl::PointXYZ>::Ptr Cloud_Inliers, Cloud_Outliers;
@@ -86,14 +87,14 @@ void CloudForgeAnalyzer::Slot_fit_cy_Triggered() {
     coeff1 = fcy1.Get_Coeff_in();
     coeff2 = fcy2.Get_Coeff_in();
 
-    Update_CFmes("圆柱1轴上一点坐标为：" + std::to_string(coeff1[0]) + "," + std::to_string(coeff1[1]) + "," + std::to_string(coeff1[2])
+   /* Update_CFmes("圆柱1轴上一点坐标为：" + std::to_string(coeff1[0]) + "," + std::to_string(coeff1[1]) + "," + std::to_string(coeff1[2])
         + "\n圆柱轴方向为：" + std::to_string(coeff1[3]) + "," + std::to_string(coeff1[4]) + "," + std::to_string(coeff1[5])
         + "\n圆柱半径为：" + std::to_string(coeff1[6])
         + "\n圆柱轴上一点坐标为：" + std::to_string(coeff2[0]) + "," + std::to_string(coeff2[1]) + "," + std::to_string(coeff2[2])
         + "\n圆柱轴方向的x为：" + std::to_string(coeff2[3]) + "," + std::to_string(coeff2[4]) + "," + std::to_string(coeff2[5])
         + "\n圆柱半径为：" + std::to_string(coeff2[6])
         + "\n半径差值："+ std::to_string(coeff1[6]- coeff2[6])
-        + "\n焊接区宽度：" + std::to_string(fcy2.ComputeCylinderHeight()));
+        + "\n焊接区宽度：" + std::to_string(fcy2.ComputeCylinderHeight()));*/
 
 
 
@@ -111,7 +112,7 @@ void CloudForgeAnalyzer::Slot_fi_open_Triggered() {
     UpdateCamera(0, 0, 1);
 }
 void CloudForgeAnalyzer::Slot_ed_dork_Triggered() {
-    Dialog_cc dcc(CloudMap,ColorMap);
+    Dialog_RemovePointCloud dcc(CloudMap,ColorMap);
     std::vector<std::string> todelete = dcc.Get_toDelete();
     for (const auto& it : todelete) {
         DelePointCloud(it);
@@ -120,7 +121,8 @@ void CloudForgeAnalyzer::Slot_ed_dork_Triggered() {
     ui->winOfAnalyzer->update();
 }
 void CloudForgeAnalyzer::Slot_fi_saveas_Triggered() {
-    Dialog_saveas dsvas(viewer);
+    Dialog_SelectCloudToSaveAs dsvas(viewer);
+
 }
 void CloudForgeAnalyzer::Slot_fl_2_Triggered() {
     Filter_sor fs(cloud);
@@ -217,18 +219,6 @@ void CloudForgeAnalyzer::Slot_ChangeVA_y() { UpdateCamera(0, 1, 0); }
 void CloudForgeAnalyzer::Slot_ChangeVA_z() { UpdateCamera(0, 0, 1); }
 void CloudForgeAnalyzer::Slot_ChangeVA_o() { UpdateCamera(0, 0, 1); }
 
-void CloudForgeAnalyzer::Slot_CloudPointIncise() {
-
-}
-
-
-void CloudForgeAnalyzer::Slot_DoCPIC() {
-
-}
-
-void CloudForgeAnalyzer::Slot_CtrlZPCIC() {
-
-}
 
 void CloudForgeAnalyzer::Slot_fi_save_Triggered() {
     pcl::PointCloud<pcl::PointXYZ>::Ptr nowCloud(new pcl::PointCloud<pcl::PointXYZ>);
