@@ -1,0 +1,1075 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>CloudForgeAnalyzerClass</class>
+ <widget class="QMainWindow" name="CloudForgeAnalyzerClass">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>1202</width>
+    <height>855</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>CloudForgeAnalyzer</string>
+  </property>
+  <property name="windowIcon">
+   <iconset resource="CloudForgeAnalyzer.qrc">
+    <normaloff>:/new/prefix1/Icons/icon_MainWindow.png</normaloff>:/new/prefix1/Icons/icon_MainWindow.png</iconset>
+  </property>
+  <widget class="QWidget" name="centralWidget">
+   <property name="sizePolicy">
+    <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+     <horstretch>8</horstretch>
+     <verstretch>5</verstretch>
+    </sizepolicy>
+   </property>
+   <layout class="QGridLayout" name="gridLayout" rowstretch="80,1">
+    <item row="0" column="0">
+     <widget class="QTabWidget" name="tabWidget">
+      <property name="sizePolicy">
+       <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+        <horstretch>8</horstretch>
+        <verstretch>5</verstretch>
+       </sizepolicy>
+      </property>
+      <property name="styleSheet">
+       <string notr="true"/>
+      </property>
+      <property name="tabPosition">
+       <enum>QTabWidget::TabPosition::East</enum>
+      </property>
+      <property name="currentIndex">
+       <number>1</number>
+      </property>
+      <property name="elideMode">
+       <enum>Qt::TextElideMode::ElideLeft</enum>
+      </property>
+      <property name="tabsClosable">
+       <bool>false</bool>
+      </property>
+      <property name="movable">
+       <bool>false</bool>
+      </property>
+      <widget class="QWidget" name="tab">
+       <property name="sizePolicy">
+        <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+         <horstretch>8</horstretch>
+         <verstretch>5</verstretch>
+        </sizepolicy>
+       </property>
+       <attribute name="title">
+        <string>扫描</string>
+       </attribute>
+       <widget class="QLabel" name="label">
+        <property name="geometry">
+         <rect>
+          <x>10</x>
+          <y>0</y>
+          <width>141</width>
+          <height>31</height>
+         </rect>
+        </property>
+        <property name="text">
+         <string>Scanner</string>
+        </property>
+       </widget>
+      </widget>
+      <widget class="QWidget" name="tab_2">
+       <property name="sizePolicy">
+        <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+         <horstretch>8</horstretch>
+         <verstretch>5</verstretch>
+        </sizepolicy>
+       </property>
+       <attribute name="title">
+        <string>分析</string>
+       </attribute>
+       <layout class="QHBoxLayout" name="horizontalLayout">
+        <property name="leftMargin">
+         <number>0</number>
+        </property>
+        <property name="topMargin">
+         <number>0</number>
+        </property>
+        <item>
+         <layout class="QGridLayout" name="gridLayout_2" rowstretch="1,2,20,1,10" columnstretch="8,1,1">
+          <item row="0" column="0">
+           <widget class="QLabel" name="label_2">
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="MinimumExpanding" vsizetype="MinimumExpanding">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+            <property name="text">
+             <string>Analyzer</string>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="0" rowspan="4">
+           <widget class="QVTKOpenGLNativeWidget" name="winOfAnalyzer">
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="MinimumExpanding" vsizetype="MinimumExpanding">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+            <property name="minimumSize">
+             <size>
+              <width>0</width>
+              <height>0</height>
+             </size>
+            </property>
+            <property name="cursor">
+             <cursorShape>ArrowCursor</cursorShape>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="1">
+           <widget class="QLabel" name="label_Show_CFmes">
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="MinimumExpanding" vsizetype="MinimumExpanding">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+            <property name="text">
+             <string>拟合结果</string>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="2" rowspan="2">
+           <layout class="QVBoxLayout" name="verticalLayout_4">
+            <property name="sizeConstraint">
+             <enum>QLayout::SizeConstraint::SetNoConstraint</enum>
+            </property>
+            <item>
+             <layout class="QVBoxLayout" name="verticalLayout_5">
+              <property name="sizeConstraint">
+               <enum>QLayout::SizeConstraint::SetDefaultConstraint</enum>
+              </property>
+             </layout>
+            </item>
+            <item>
+             <layout class="QHBoxLayout" name="horizontalLayout_4">
+              <property name="spacing">
+               <number>4</number>
+              </property>
+              <property name="sizeConstraint">
+               <enum>QLayout::SizeConstraint::SetDefaultConstraint</enum>
+              </property>
+             </layout>
+            </item>
+            <item>
+             <layout class="QVBoxLayout" name="verticalLayout_6">
+              <item>
+               <widget class="QLabel" name="label_ChoiceCFmethod">
+                <property name="sizePolicy">
+                 <sizepolicy hsizetype="MinimumExpanding" vsizetype="MinimumExpanding">
+                  <horstretch>0</horstretch>
+                  <verstretch>0</verstretch>
+                 </sizepolicy>
+                </property>
+                <property name="text">
+                 <string>选择拟合方式</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QComboBox" name="comboBox_ChoiceCFmethod">
+                <property name="sizePolicy">
+                 <sizepolicy hsizetype="MinimumExpanding" vsizetype="MinimumExpanding">
+                  <horstretch>0</horstretch>
+                  <verstretch>0</verstretch>
+                 </sizepolicy>
+                </property>
+                <property name="minimumSize">
+                 <size>
+                  <width>140</width>
+                  <height>0</height>
+                 </size>
+                </property>
+                <property name="maximumSize">
+                 <size>
+                  <width>16777215</width>
+                  <height>16777215</height>
+                 </size>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QPushButton" name="pushButton_ChoiceCFmethod">
+                <property name="sizePolicy">
+                 <sizepolicy hsizetype="MinimumExpanding" vsizetype="MinimumExpanding">
+                  <horstretch>0</horstretch>
+                  <verstretch>0</verstretch>
+                 </sizepolicy>
+                </property>
+                <property name="minimumSize">
+                 <size>
+                  <width>24</width>
+                  <height>22</height>
+                 </size>
+                </property>
+                <property name="maximumSize">
+                 <size>
+                  <width>16777215</width>
+                  <height>22</height>
+                 </size>
+                </property>
+                <property name="text">
+                 <string>拟合分析</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <spacer name="verticalSpacer">
+                <property name="sizePolicy">
+                 <sizepolicy hsizetype="Minimum" vsizetype="MinimumExpanding">
+                  <horstretch>0</horstretch>
+                  <verstretch>0</verstretch>
+                 </sizepolicy>
+                </property>
+                <property name="orientation">
+                 <enum>Qt::Orientation::Vertical</enum>
+                </property>
+                <property name="sizeType">
+                 <enum>QSizePolicy::Policy::MinimumExpanding</enum>
+                </property>
+                <property name="sizeHint" stdset="0">
+                 <size>
+                  <width>20</width>
+                  <height>40</height>
+                 </size>
+                </property>
+               </spacer>
+              </item>
+             </layout>
+            </item>
+            <item>
+             <layout class="QHBoxLayout" name="horizontalLayout_5">
+              <property name="spacing">
+               <number>0</number>
+              </property>
+              <property name="sizeConstraint">
+               <enum>QLayout::SizeConstraint::SetDefaultConstraint</enum>
+              </property>
+              <item>
+               <widget class="QPushButton" name="pushButton_PCIncise">
+                <property name="sizePolicy">
+                 <sizepolicy hsizetype="MinimumExpanding" vsizetype="MinimumExpanding">
+                  <horstretch>0</horstretch>
+                  <verstretch>0</verstretch>
+                 </sizepolicy>
+                </property>
+                <property name="minimumSize">
+                 <size>
+                  <width>44</width>
+                  <height>22</height>
+                 </size>
+                </property>
+                <property name="maximumSize">
+                 <size>
+                  <width>44</width>
+                  <height>22</height>
+                 </size>
+                </property>
+                <property name="text">
+                 <string>裁切</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QPushButton" name="pushButton_CtrlZPCIC">
+                <property name="enabled">
+                 <bool>false</bool>
+                </property>
+                <property name="sizePolicy">
+                 <sizepolicy hsizetype="MinimumExpanding" vsizetype="MinimumExpanding">
+                  <horstretch>0</horstretch>
+                  <verstretch>0</verstretch>
+                 </sizepolicy>
+                </property>
+                <property name="minimumSize">
+                 <size>
+                  <width>44</width>
+                  <height>22</height>
+                 </size>
+                </property>
+                <property name="maximumSize">
+                 <size>
+                  <width>44</width>
+                  <height>22</height>
+                 </size>
+                </property>
+                <property name="text">
+                 <string>撤销</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QPushButton" name="pushButton_DoPCIC">
+                <property name="enabled">
+                 <bool>false</bool>
+                </property>
+                <property name="sizePolicy">
+                 <sizepolicy hsizetype="MinimumExpanding" vsizetype="MinimumExpanding">
+                  <horstretch>0</horstretch>
+                  <verstretch>0</verstretch>
+                 </sizepolicy>
+                </property>
+                <property name="minimumSize">
+                 <size>
+                  <width>44</width>
+                  <height>22</height>
+                 </size>
+                </property>
+                <property name="maximumSize">
+                 <size>
+                  <width>44</width>
+                  <height>22</height>
+                 </size>
+                </property>
+                <property name="text">
+                 <string>确定</string>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </item>
+            <item>
+             <layout class="QHBoxLayout" name="horizontalLayout_6">
+              <item>
+               <widget class="QPushButton" name="pushButton_ChangeVA_x">
+                <property name="sizePolicy">
+                 <sizepolicy hsizetype="MinimumExpanding" vsizetype="MinimumExpanding">
+                  <horstretch>0</horstretch>
+                  <verstretch>0</verstretch>
+                 </sizepolicy>
+                </property>
+                <property name="minimumSize">
+                 <size>
+                  <width>24</width>
+                  <height>22</height>
+                 </size>
+                </property>
+                <property name="maximumSize">
+                 <size>
+                  <width>24</width>
+                  <height>22</height>
+                 </size>
+                </property>
+                <property name="text">
+                 <string>x</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QPushButton" name="pushButton_ChangeVA_y">
+                <property name="sizePolicy">
+                 <sizepolicy hsizetype="MinimumExpanding" vsizetype="MinimumExpanding">
+                  <horstretch>0</horstretch>
+                  <verstretch>0</verstretch>
+                 </sizepolicy>
+                </property>
+                <property name="minimumSize">
+                 <size>
+                  <width>24</width>
+                  <height>22</height>
+                 </size>
+                </property>
+                <property name="maximumSize">
+                 <size>
+                  <width>24</width>
+                  <height>22</height>
+                 </size>
+                </property>
+                <property name="text">
+                 <string>y</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QPushButton" name="pushButton_ChangeVA_z">
+                <property name="sizePolicy">
+                 <sizepolicy hsizetype="MinimumExpanding" vsizetype="MinimumExpanding">
+                  <horstretch>0</horstretch>
+                  <verstretch>0</verstretch>
+                 </sizepolicy>
+                </property>
+                <property name="minimumSize">
+                 <size>
+                  <width>24</width>
+                  <height>22</height>
+                 </size>
+                </property>
+                <property name="maximumSize">
+                 <size>
+                  <width>24</width>
+                  <height>22</height>
+                 </size>
+                </property>
+                <property name="text">
+                 <string>z</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QPushButton" name="pushButton_ChangeVA_o">
+                <property name="sizePolicy">
+                 <sizepolicy hsizetype="MinimumExpanding" vsizetype="MinimumExpanding">
+                  <horstretch>0</horstretch>
+                  <verstretch>0</verstretch>
+                 </sizepolicy>
+                </property>
+                <property name="minimumSize">
+                 <size>
+                  <width>24</width>
+                  <height>22</height>
+                 </size>
+                </property>
+                <property name="maximumSize">
+                 <size>
+                  <width>24</width>
+                  <height>22</height>
+                 </size>
+                </property>
+                <property name="text">
+                 <string>o</string>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </item>
+           </layout>
+          </item>
+          <item row="2" column="1">
+           <widget class="QTextEdit" name="textEdit_Show_CFmes">
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="MinimumExpanding" vsizetype="MinimumExpanding">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+            <property name="minimumSize">
+             <size>
+              <width>140</width>
+              <height>200</height>
+             </size>
+            </property>
+            <property name="maximumSize">
+             <size>
+              <width>16777215</width>
+              <height>16777215</height>
+             </size>
+            </property>
+            <property name="cursor" stdset="0">
+             <cursorShape>IBeamCursor</cursorShape>
+            </property>
+            <property name="styleSheet">
+             <string notr="true">font: 8pt &quot;Microsoft YaHei UI&quot;;</string>
+            </property>
+            <property name="documentTitle">
+             <string>拟合信息</string>
+            </property>
+            <property name="readOnly">
+             <bool>true</bool>
+            </property>
+           </widget>
+          </item>
+          <item row="3" column="1" colspan="2">
+           <widget class="QLabel" name="label_3">
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="MinimumExpanding" vsizetype="MinimumExpanding">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+            <property name="text">
+             <string>调试信息</string>
+            </property>
+           </widget>
+          </item>
+          <item row="4" column="1">
+           <widget class="QTextEdit" name="textEdit_Show_Debug">
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="MinimumExpanding" vsizetype="MinimumExpanding">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+            <property name="minimumSize">
+             <size>
+              <width>140</width>
+              <height>200</height>
+             </size>
+            </property>
+            <property name="maximumSize">
+             <size>
+              <width>16777215</width>
+              <height>200</height>
+             </size>
+            </property>
+            <property name="styleSheet">
+             <string notr="true">/* 设置垂直滚动条基本样式 */
+QScrollBar:vertical {
+    width: 8px; /* 滚动条宽度 */
+    background: rgba(0, 0, 0, 25%); /* 背景颜色（原滑块颜色） */
+    margin: 0px 0px 0px 0px; /* 外边距 */
+    padding-top: 9px; /* 顶部留出空间给上箭头 */
+    padding-bottom: 9px; /* 底部留出空间给下箭头 */
+}
+
+/* 滚动条滑块样式 */
+QScrollBar::handle:vertical {
+    width: 8px; /* 滑块宽度 */
+    background: rgba(255, 255, 255, 50%); /* 滑块颜色（原背景颜色） */
+    border-radius: 4px; /* 滑块圆角 */
+    min-height: 20px; /* 最小高度 */
+}
+
+/* 鼠标悬停时滑块样式 */
+QScrollBar::handle:vertical:hover {
+    width: 8px; /* 滑块宽度 */
+    background: rgba(255, 255, 255, 75%); /* 颜色加深 */
+    border-radius: 4px; /* 圆角保持不变 */
+    min-height: 20px; /* 最小高度 */
+}
+
+/* 下箭头样式 */
+QScrollBar::add-line:vertical {
+    height: 9px; /* 高度 */
+    width: 8px; /* 宽度 */
+    border-image: url(:/image/123.png); /* 箭头图片 */
+    subcontrol-position: bottom; /* 位置在底部 */
+}
+
+/* 上箭头样式 */
+QScrollBar::sub-line:vertical {
+    height: 9px; /* 高度 */
+    width: 8px; /* 宽度 */
+    border-image: url(:/image/123.png); /* 箭头图片 */
+    subcontrol-position: top; /* 位置在顶部 */
+}
+
+/* 鼠标悬停时下箭头样式 */
+QScrollBar::add-line:vertical:hover {
+    height: 9px; /* 高度 */
+    width: 8px; /* 宽度 */
+    border-image: url(:/image/456.png); /* 鼠标悬停时的箭头图片 */
+    subcontrol-position: bottom; /* 位置在底部 */
+}
+
+/* 鼠标悬停时上箭头样式 */
+QScrollBar::sub-line:vertical:hover {
+    height: 9px; /* 高度 */
+    width: 8px; /* 宽度 */
+    border-image: url(:/image/456.png); /* 鼠标悬停时的箭头图片 */
+    subcontrol-position: top; /* 位置在顶部 */
+}
+
+/* 滚动条上方未滚动部分的样式 */
+QScrollBar::sub-page:vertical {
+    background: rgba(255, 255, 255, 20%); /* 背景颜色（与滑块颜色一致） */
+    border-radius: 4px; /* 圆角 */
+}
+
+/* 滚动条下方未滚动部分的样式 */
+QScrollBar::add-page:vertical {
+    background: rgba(255, 255, 255, 20%); /* 背景颜色（与滑块颜色一致） */
+    border-radius: 4px; /* 圆角 */
+}
+QTextEdit {
+    font: 8pt &quot;Microsoft YaHei UI&quot;;
+}</string>
+            </property>
+            <property name="readOnly">
+             <bool>true</bool>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </item>
+       </layout>
+      </widget>
+     </widget>
+    </item>
+    <item row="1" column="0">
+     <widget class="QLabel" name="label_countpoints">
+      <property name="minimumSize">
+       <size>
+        <width>0</width>
+        <height>10</height>
+       </size>
+      </property>
+      <property name="maximumSize">
+       <size>
+        <width>16777215</width>
+        <height>10</height>
+       </size>
+      </property>
+      <property name="font">
+       <font>
+        <pointsize>8</pointsize>
+        <italic>false</italic>
+        <bold>false</bold>
+        <underline>false</underline>
+        <strikeout>false</strikeout>
+        <kerning>true</kerning>
+       </font>
+      </property>
+      <property name="text">
+       <string>TextLabel</string>
+      </property>
+     </widget>
+    </item>
+   </layout>
+  </widget>
+  <widget class="QToolBar" name="mainToolBar">
+   <attribute name="toolBarArea">
+    <enum>TopToolBarArea</enum>
+   </attribute>
+   <attribute name="toolBarBreak">
+    <bool>false</bool>
+   </attribute>
+   <addaction name="separator"/>
+  </widget>
+  <widget class="QStatusBar" name="statusBar"/>
+  <widget class="QMenuBar" name="menuBar">
+   <property name="geometry">
+    <rect>
+     <x>0</x>
+     <y>0</y>
+     <width>1202</width>
+     <height>32</height>
+    </rect>
+   </property>
+   <property name="maximumSize">
+    <size>
+     <width>16777215</width>
+     <height>32</height>
+    </size>
+   </property>
+   <property name="font">
+    <font>
+     <pointsize>6</pointsize>
+    </font>
+   </property>
+   <property name="defaultUp">
+    <bool>false</bool>
+   </property>
+   <property name="nativeMenuBar">
+    <bool>false</bool>
+   </property>
+   <widget class="QMenu" name="menu_file">
+    <property name="geometry">
+     <rect>
+      <x>359</x>
+      <y>175</y>
+      <width>94</width>
+      <height>188</height>
+     </rect>
+    </property>
+    <property name="maximumSize">
+     <size>
+      <width>16777215</width>
+      <height>16777215</height>
+     </size>
+    </property>
+    <property name="styleSheet">
+     <string notr="true">QMenu {
+  background:#f3f3f3; /* 深色背景，类似VS的暗色主题 */
+  border: 1px solid #3c3c3c; /* 深色边框，与背景协调 */
+  border-radius: 4px; /* 边角稍微圆润，符合VS的简洁风格 */
+}
+
+QMenu::item {
+  padding: 8px 16px; /* 适当调整内边距，使菜单项看起来更紧凑 */
+  color: #000000; /* 浅色文字，与深色背景对比明显 */
+  font-size: 10px; /* 字体稍大一些，便于阅读 */
+  font-family: &quot;Consolas&quot;, &quot;Courier New&quot;, monospace; /* 使用类似VS的等宽字体 */
+}
+
+QMenu::item:hover {
+  background-color: #404040; /* 悬停时的深色背景，有轻微的高亮效果 */
+}
+
+QMenu::item:selected {
+  background-color: #404040; /* 选中时的背景色与悬停时一致 */
+}</string>
+    </property>
+    <property name="title">
+     <string>文件</string>
+    </property>
+    <property name="separatorsCollapsible">
+     <bool>false</bool>
+    </property>
+    <property name="toolTipsVisible">
+     <bool>false</bool>
+    </property>
+    <widget class="QMenu" name="menu_recent">
+     <property name="title">
+      <string>最近打开</string>
+     </property>
+     <addaction name="actiontest"/>
+    </widget>
+    <addaction name="action_fi_open"/>
+    <addaction name="menu_recent"/>
+    <addaction name="action_fi_save"/>
+    <addaction name="action_fi_saveas"/>
+   </widget>
+   <widget class="QMenu" name="menu_hardware">
+    <property name="styleSheet">
+     <string notr="true">QMenu {
+  background:#f3f3f3; /* 深色背景，类似VS的暗色主题 */
+  border: 1px solid #3c3c3c; /* 深色边框，与背景协调 */
+  border-radius: 4px; /* 边角稍微圆润，符合VS的简洁风格 */
+}
+
+QMenu::item {
+  padding: 8px 16px; /* 适当调整内边距，使菜单项看起来更紧凑 */
+  color: #000000; /* 浅色文字，与深色背景对比明显 */
+  font-size: 10px; /* 字体稍大一些，便于阅读 */
+  font-family: &quot;Consolas&quot;, &quot;Courier New&quot;, monospace; /* 使用类似VS的等宽字体 */
+}
+
+QMenu::item:hover {
+  background-color: #404040; /* 悬停时的深色背景，有轻微的高亮效果 */
+}
+
+QMenu::item:selected {
+  background-color: #404040; /* 选中时的背景色与悬停时一致 */
+}</string>
+    </property>
+    <property name="title">
+     <string>硬件</string>
+    </property>
+    <addaction name="action_5"/>
+    <addaction name="action_6"/>
+   </widget>
+   <widget class="QMenu" name="menu_prehandle">
+    <property name="styleSheet">
+     <string notr="true">QMenu {
+  background:#f3f3f3; /* 深色背景，类似VS的暗色主题 */
+  border: 1px solid #3c3c3c; /* 深色边框，与背景协调 */
+  border-radius: 4px; /* 边角稍微圆润，符合VS的简洁风格 */
+}
+
+QMenu::item {
+  padding: 8px 16px; /* 适当调整内边距，使菜单项看起来更紧凑 */
+  color: #000000; /* 浅色文字，与深色背景对比明显 */
+  font-size: 10px; /* 字体稍大一些，便于阅读 */
+  font-family: &quot;Consolas&quot;, &quot;Courier New&quot;, monospace; /* 使用类似VS的等宽字体 */
+}
+
+QMenu::item:hover {
+  background-color: #404040; /* 悬停时的深色背景，有轻微的高亮效果 */
+}
+
+QMenu::item:selected {
+  background-color: #404040; /* 选中时的背景色与悬停时一致 */
+}</string>
+    </property>
+    <property name="title">
+     <string>预处理</string>
+    </property>
+    <widget class="QMenu" name="menu_filter">
+     <property name="title">
+      <string>滤波</string>
+     </property>
+     <addaction name="action_fl_1"/>
+     <addaction name="action_fl_2"/>
+    </widget>
+    <addaction name="action_ph_1"/>
+    <addaction name="menu_filter"/>
+   </widget>
+   <widget class="QMenu" name="menu_fit">
+    <property name="styleSheet">
+     <string notr="true">QMenu {
+  background:#f3f3f3; /* 深色背景，类似VS的暗色主题 */
+  border: 1px solid #3c3c3c; /* 深色边框，与背景协调 */
+  border-radius: 4px; /* 边角稍微圆润，符合VS的简洁风格 */
+}
+
+QMenu::item {
+  padding: 8px 16px; /* 适当调整内边距，使菜单项看起来更紧凑 */
+  color: #000000; /* 浅色文字，与深色背景对比明显 */
+  font-size: 10px; /* 字体稍大一些，便于阅读 */
+  font-family: &quot;Consolas&quot;, &quot;Courier New&quot;, monospace; /* 使用类似VS的等宽字体 */
+}
+
+QMenu::item:hover {
+  background-color: #404040; /* 悬停时的深色背景，有轻微的高亮效果 */
+}
+
+QMenu::item:selected {
+  background-color: #404040; /* 选中时的背景色与悬停时一致 */
+}</string>
+    </property>
+    <property name="title">
+     <string>拟合</string>
+    </property>
+    <addaction name="action_fit_cy"/>
+   </widget>
+   <widget class="QMenu" name="menu_edit">
+    <property name="styleSheet">
+     <string notr="true">QMenu {
+  background:#f3f3f3; /* 深色背景，类似VS的暗色主题 */
+  border: 1px solid #3c3c3c; /* 深色边框，与背景协调 */
+  border-radius: 4px; /* 边角稍微圆润，符合VS的简洁风格 */
+}
+
+QMenu::item {
+  padding: 8px 16px; /* 适当调整内边距，使菜单项看起来更紧凑 */
+  color: #000000; /* 浅色文字，与深色背景对比明显 */
+  font-size: 10px; /* 字体稍大一些，便于阅读 */
+  font-family: &quot;Consolas&quot;, &quot;Courier New&quot;, monospace; /* 使用类似VS的等宽字体 */
+}
+
+QMenu::item:hover {
+  background-color: #404040; /* 悬停时的深色背景，有轻微的高亮效果 */
+}
+
+QMenu::item:selected {
+  background-color: #404040; /* 选中时的背景色与悬停时一致 */
+}
+</string>
+    </property>
+    <property name="title">
+     <string>编辑</string>
+    </property>
+    <addaction name="action_ed_dork"/>
+   </widget>
+   <addaction name="menu_file"/>
+   <addaction name="menu_edit"/>
+   <addaction name="menu_hardware"/>
+   <addaction name="menu_prehandle"/>
+   <addaction name="menu_fit"/>
+  </widget>
+  <action name="action1">
+   <property name="text">
+    <string>1</string>
+   </property>
+  </action>
+  <action name="action">
+   <property name="text">
+    <string>打开</string>
+   </property>
+  </action>
+  <action name="action_fi_open">
+   <property name="text">
+    <string>打开</string>
+   </property>
+   <property name="font">
+    <font>
+     <kerning>false</kerning>
+    </font>
+   </property>
+  </action>
+  <action name="action_fi_save">
+   <property name="text">
+    <string>保存</string>
+   </property>
+  </action>
+  <action name="action_fi_saveas">
+   <property name="text">
+    <string>另存为</string>
+   </property>
+  </action>
+  <action name="actiontest">
+   <property name="text">
+    <string>test</string>
+   </property>
+  </action>
+  <action name="action_ph_1">
+   <property name="text">
+    <string>聚类</string>
+   </property>
+  </action>
+  <action name="action_5">
+   <property name="text">
+    <string>连接相机</string>
+   </property>
+  </action>
+  <action name="action_6">
+   <property name="text">
+    <string>连接投影</string>
+   </property>
+  </action>
+  <action name="action_fl_1">
+   <property name="text">
+    <string>下采样</string>
+   </property>
+  </action>
+  <action name="action_fit_cy">
+   <property name="text">
+    <string>RANSAC圆柱</string>
+   </property>
+  </action>
+  <action name="action_fl_2">
+   <property name="text">
+    <string>统计离群滤波</string>
+   </property>
+  </action>
+  <action name="action_ed_dork">
+   <property name="text">
+    <string>删除/保留点云簇</string>
+   </property>
+  </action>
+ </widget>
+ <layoutdefault spacing="6" margin="11"/>
+ <customwidgets>
+  <customwidget>
+   <class>QVTKOpenGLNativeWidget</class>
+   <extends>QOpenGLWidget</extends>
+   <header>qvtkopenglnativewidget.h</header>
+  </customwidget>
+ </customwidgets>
+ <resources>
+  <include location="CloudForgeAnalyzer.qrc"/>
+ </resources>
+ <connections>
+  <connection>
+   <sender>pushButton_ChoiceCFmethod</sender>
+   <signal>clicked()</signal>
+   <receiver>CloudForgeAnalyzerClass</receiver>
+   <slot>Slot_CurveFittingPC()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>1093</x>
+     <y>286</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>1365</x>
+     <y>298</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>pushButton_PCIncise</sender>
+   <signal>clicked()</signal>
+   <receiver>CloudForgeAnalyzerClass</receiver>
+   <slot>Slot_CloudPointIncise()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>1048</x>
+     <y>596</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>1327</x>
+     <y>602</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>pushButton_CtrlZPCIC</sender>
+   <signal>clicked()</signal>
+   <receiver>CloudForgeAnalyzerClass</receiver>
+   <slot>Slot_CtrlZPCIC()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>1086</x>
+     <y>591</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>1343</x>
+     <y>612</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>pushButton_DoPCIC</sender>
+   <signal>clicked()</signal>
+   <receiver>CloudForgeAnalyzerClass</receiver>
+   <slot>Slot_DoCPIC()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>1142</x>
+     <y>592</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>1426</x>
+     <y>740</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>pushButton_ChangeVA_x</sender>
+   <signal>clicked()</signal>
+   <receiver>CloudForgeAnalyzerClass</receiver>
+   <slot>Slot_ChangeVA_x()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>1035</x>
+     <y>628</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>1046</x>
+     <y>876</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>pushButton_ChangeVA_y</sender>
+   <signal>clicked()</signal>
+   <receiver>CloudForgeAnalyzerClass</receiver>
+   <slot>Slot_ChangeVA_y()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>1064</x>
+     <y>625</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>1103</x>
+     <y>844</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>pushButton_ChangeVA_z</sender>
+   <signal>clicked()</signal>
+   <receiver>CloudForgeAnalyzerClass</receiver>
+   <slot>Slot_ChangeVA_z()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>1105</x>
+     <y>626</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>1120</x>
+     <y>920</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>pushButton_ChangeVA_o</sender>
+   <signal>clicked()</signal>
+   <receiver>CloudForgeAnalyzerClass</receiver>
+   <slot>Slot_ChangeVA_o()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>1142</x>
+     <y>628</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>1158</x>
+     <y>898</y>
+    </hint>
+   </hints>
+  </connection>
+ </connections>
+ <slots>
+  <slot>Slot_ChoicePcdFP()</slot>
+  <slot>Slot_ShowPointCloud()</slot>
+  <slot>Slot_CurveFittingPC()</slot>
+  <slot>Slot_ChangeVA_x()</slot>
+  <slot>Slot_ChangeVA_y()</slot>
+  <slot>Slot_ChangeVA_z()</slot>
+  <slot>Slot_ChangeVA_o()</slot>
+  <slot>Slot_CloudPointIncise()</slot>
+  <slot>Slot_DoCPIC()</slot>
+  <slot>Slot_CtrlZPCIC()</slot>
+  <slot>Slot_savePCDfile()</slot>
+ </slots>
+</ui>
