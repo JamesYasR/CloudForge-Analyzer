@@ -70,7 +70,6 @@ private:
     void InitalizeRenderer();
     void InitalizeConnects();
     void TeEDebug(std::string debugMes);
-    void ReplacePointCloud(pcl::PointCloud<pcl::PointXYZ>::Ptr new_cloud);
     void UpdateCamera(int a, int b, int c);
     void Update_CFmes(std::string cfmes);
 
