@@ -361,3 +361,24 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
+/PCDfiles/Cylinder_5
+/PCDfiles/plane
+/PCDfiles/splicing
+/PCDfiles/split
+/PCDfiles/1.txt
+/PCDfiles/20250329_144934.pcd
+/PCDfiles/Armadillo.pcd
+/PCDfiles/Armadillo.ply
+/PCDfiles/bullet_dent_cylinder_20250221_144818.pcd
+/PCDfiles/cloud_20250504203742.pcd
+/PCDfiles/cloud_20250506230614.pcd
+/PCDfiles/Cylinder.pcd
+/PCDfiles/Cylinder2.pcd
+/PCDfiles/Cylinder3.pcd
+/PCDfiles/Cylinder_n.pcd
+/PCDfiles/Cylinder_nn.pcd
+/PCDfiles/dcylinder_20250221_144114.pcd
+/PCDfiles/hanfeng_incised.pcd
+/PCDfiles/nowCloud.pcd
+/PCDfiles/nowCloud1.pcd
+/PCDfiles/test33.pcd

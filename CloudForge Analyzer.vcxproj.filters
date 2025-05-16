@@ -1,0 +1,189 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
+      <Extensions>qml;cpp;c;cc;cxx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
+    </Filter>
+    <Filter Include="Header Files">
+      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
+      <Extensions>h;hh;hpp;hxx;hm;inl;inc;xsd</Extensions>
+    </Filter>
+    <Filter Include="Resource Files">
+      <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
+      <Extensions>qrc;rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
+    </Filter>
+    <Filter Include="Form Files">
+      <UniqueIdentifier>{99349809-55BA-4b9d-BF79-8FDBB0286EB3}</UniqueIdentifier>
+      <Extensions>ui</Extensions>
+    </Filter>
+    <Filter Include="Translation Files">
+      <UniqueIdentifier>{639EADAA-A684-42e4-A9AD-28FC9BCB8F7C}</UniqueIdentifier>
+      <Extensions>ts</Extensions>
+    </Filter>
+    <Filter Include="Source Files\Dialog">
+      <UniqueIdentifier>{907de5dd-9d72-43d9-878b-ed5c63efda58}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\Fitting">
+      <UniqueIdentifier>{0228b5fb-2e7c-4182-8c71-b3ed44644c82}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\Fitting">
+      <UniqueIdentifier>{a045d355-4c9a-4c64-bf8f-04dcf807a2c3}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\Dialog">
+      <UniqueIdentifier>{22a253f7-5183-431b-996f-6d49a97e9d13}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\PreProcessing">
+      <UniqueIdentifier>{aad94f04-2f64-4b3d-8688-4ceb7af7c32b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\PreProcessing">
+      <UniqueIdentifier>{87dab9a4-2510-481a-b8b2-b515ab9d2c0e}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <QtRcc Include="CloudForgeAnalyzer.qrc">
+      <Filter>Resource Files</Filter>
+    </QtRcc>
+    <QtUic Include="CloudForgeAnalyzer.ui">
+      <Filter>Form Files</Filter>
+    </QtUic>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="Src\funcs.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Src\Linear_Depression_Plane.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Src\PointCloudIncise.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Src\Protrusion_Depression_Cylinder.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Src\CloudForgeAnalyzer.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Src\Loops.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Src\main.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Src\Dialog\ParamDialog_ec.cpp">
+      <Filter>Source Files\Dialog</Filter>
+    </ClCompile>
+    <ClCompile Include="Src\Dialog\ParamDialog_sor.cpp">
+      <Filter>Source Files\Dialog</Filter>
+    </ClCompile>
+    <ClCompile Include="Src\Dialog\ParamDialog_vg.cpp">
+      <Filter>Source Files\Dialog</Filter>
+    </ClCompile>
+    <ClCompile Include="Src\Dialog\Dialog_cc.cpp">
+      <Filter>Source Files\Dialog</Filter>
+    </ClCompile>
+    <ClCompile Include="Src\Dialog\Dialog_saveas.cpp">
+      <Filter>Source Files\Dialog</Filter>
+    </ClCompile>
+    <ClCompile Include="Src\PreProcessing\Cluster.cpp">
+      <Filter>Source Files\PreProcessing</Filter>
+    </ClCompile>
+    <ClCompile Include="Src\PreProcessing\Filter_sor.cpp">
+      <Filter>Source Files\PreProcessing</Filter>
+    </ClCompile>
+    <ClCompile Include="Src\PreProcessing\Filter_voxel.cpp">
+      <Filter>Source Files\PreProcessing</Filter>
+    </ClCompile>
+    <ClCompile Include="Src\Fitting\Fit_Cylinder.cpp">
+      <Filter>Source Files\Fitting</Filter>
+    </ClCompile>
+    <ClCompile Include="Src\Dialog\Dialog_SelSingleCloud.cpp">
+      <Filter>Source Files\Dialog</Filter>
+    </ClCompile>
+    <ClCompile Include="Src\ColorManager.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Src\Dialog\Dialog_SelectPC.cpp">
+      <Filter>Source Files\Dialog</Filter>
+    </ClCompile>
+    <ClCompile Include="Src\Dialog\ParamDialog_FittingCylinder.cpp">
+      <Filter>Source Files\Dialog</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <QtMoc Include="Inc\CloudForgeAnalyzer.h">
+      <Filter>Header Files</Filter>
+    </QtMoc>
+    <QtMoc Include="Inc\PointCloudIncise.h">
+      <Filter>Header Files</Filter>
+    </QtMoc>
+    <QtMoc Include="Inc\Loops.h">
+      <Filter>Header Files</Filter>
+    </QtMoc>
+    <QtMoc Include="Inc\Dialog\ParamDialog_ec.h">
+      <Filter>Header Files\Dialog</Filter>
+    </QtMoc>
+    <QtMoc Include="Inc\Dialog\ParamDialog_sor.h">
+      <Filter>Header Files\Dialog</Filter>
+    </QtMoc>
+    <QtMoc Include="Inc\Dialog\ParamDialog_vg.h">
+      <Filter>Header Files\Dialog</Filter>
+    </QtMoc>
+    <QtMoc Include="Inc\Dialog\Dialog_saveas.h">
+      <Filter>Header Files\Dialog</Filter>
+    </QtMoc>
+    <QtMoc Include="Inc\Dialog\Dialog_SelectPC.h">
+      <Filter>Header Files\Dialog</Filter>
+    </QtMoc>
+    <QtMoc Include="Inc\Dialog\ParamDialog_FittingCylinder.h">
+      <Filter>Header Files\Dialog</Filter>
+    </QtMoc>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Inc\funcs.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Inc\Linear_Depression_Plane.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Inc\Protrusion_Depression_Cylinder.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Inc\Dialog\Dialog.h">
+      <Filter>Header Files\Dialog</Filter>
+    </ClInclude>
+    <ClInclude Include="Inc\PreProcessing\Cluster.h">
+      <Filter>Header Files\PreProcessing</Filter>
+    </ClInclude>
+    <ClInclude Include="Inc\PreProcessing\Filter_sor.h">
+      <Filter>Header Files\PreProcessing</Filter>
+    </ClInclude>
+    <ClInclude Include="Inc\PreProcessing\Filter_voxel.h">
+      <Filter>Header Files\PreProcessing</Filter>
+    </ClInclude>
+    <ClInclude Include="Inc\PreProcessing\headers.h">
+      <Filter>Header Files\PreProcessing</Filter>
+    </ClInclude>
+    <ClInclude Include="Inc\PreProcessing\PreProcessing.h">
+      <Filter>Header Files\PreProcessing</Filter>
+    </ClInclude>
+    <ClInclude Include="Inc\Dialog\headers.h">
+      <Filter>Header Files\Dialog</Filter>
+    </ClInclude>
+    <ClInclude Include="Inc\Fitting\Fit_Cylinder.h">
+      <Filter>Header Files\Fitting</Filter>
+    </ClInclude>
+    <ClInclude Include="Inc\Fitting\Fitting.h">
+      <Filter>Header Files\Fitting</Filter>
+    </ClInclude>
+    <ClInclude Include="Inc\ColorManager.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Inc\Dialog\Dialog_cc.h">
+      <Filter>Header Files\Dialog</Filter>
+    </ClInclude>
+    <ClInclude Include="Inc\Dialog\Dialog_SelSingleCloud.h">
+      <Filter>Header Files\Dialog</Filter>
+    </ClInclude>
+  </ItemGroup>
+</Project>
