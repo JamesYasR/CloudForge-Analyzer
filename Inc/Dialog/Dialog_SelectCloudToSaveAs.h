@@ -11,7 +11,7 @@ public:
     explicit Dialog_SelectCloudToSaveAs(std::map<std::string, pcl::PointCloud<pcl::PointXYZ>::Ptr> cloudm, std::map<std::string, ColorManager> colorm, QWidget* parent = nullptr);
     ~Dialog_SelectCloudToSaveAs();
 private slots:
-    void Saveas();
+    void Confirm();
 
 private:
     void InitializeButtonAndConnect() override;

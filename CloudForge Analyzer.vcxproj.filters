@@ -82,7 +82,7 @@
     <ClCompile Include="Src\Dialog\Dialog_RemovePointCloud.cpp">
       <Filter>Source Files\Dialog</Filter>
     </ClCompile>
-    <ClCompile Include="Src\Dialog\Dialog_saveas.cpp">
+    <ClCompile Include="Src\Dialog\Dialog_SelectCloudToSaveAs.cpp">
       <Filter>Source Files\Dialog</Filter>
     </ClCompile>
     <ClCompile Include="Src\PreProcessing\Cluster.cpp">
@@ -129,7 +129,7 @@
     <QtMoc Include="Inc\Dialog\ParamDialog_vg.h">
       <Filter>Header Files\Dialog</Filter>
     </QtMoc>
-    <QtMoc Include="Inc\Dialog\Dialog_saveas.h">
+    <QtMoc Include="Inc\Dialog\Dialog_SelectCloudToSaveAs.h">
       <Filter>Header Files\Dialog</Filter>
     </QtMoc>
     <QtMoc Include="Inc\Dialog\ParamDialog_FittingCylinder.h">

@@ -87,15 +87,15 @@ void CloudForgeAnalyzer::Slot_fit_cy_Triggered() {
     coeff1 = fcy1.Get_Coeff_in();
     coeff2 = fcy2.Get_Coeff_in();
 
-   /* Update_CFmes("圆柱1轴上一点坐标为：" + std::to_string(coeff1[0]) + "," + std::to_string(coeff1[1]) + "," + std::to_string(coeff1[2])
+   Update_CFmes("圆柱1轴上一点坐标为：" + std::to_string(coeff1[0]) + "," + std::to_string(coeff1[1]) + "," + std::to_string(coeff1[2])
         + "\n圆柱轴方向为：" + std::to_string(coeff1[3]) + "," + std::to_string(coeff1[4]) + "," + std::to_string(coeff1[5])
         + "\n圆柱半径为：" + std::to_string(coeff1[6])
         + "\n圆柱轴上一点坐标为：" + std::to_string(coeff2[0]) + "," + std::to_string(coeff2[1]) + "," + std::to_string(coeff2[2])
         + "\n圆柱轴方向的x为：" + std::to_string(coeff2[3]) + "," + std::to_string(coeff2[4]) + "," + std::to_string(coeff2[5])
         + "\n圆柱半径为：" + std::to_string(coeff2[6])
         + "\n半径差值："+ std::to_string(coeff1[6]- coeff2[6])
-        + "\n焊接区宽度：" + std::to_string(fcy2.ComputeCylinderHeight()));*/
-
+        + "\n焊接区宽度：" + std::to_string(fcy2.ComputeCylinderHeight()));
+   //这部分比较临时，可以考虑去改一下
 
 
 }
@@ -121,7 +121,42 @@ void CloudForgeAnalyzer::Slot_ed_dork_Triggered() {
     ui->winOfAnalyzer->update();
 }
 void CloudForgeAnalyzer::Slot_fi_saveas_Triggered() {
-    Dialog_SelectCloudToSaveAs dsvas(viewer);
+    Dialog_SelectCloudToSaveAs window(CloudMap, ColorMap);
+    auto SaveList = window.Get_SelectedList();
+    pcl::PointCloud<pcl::PointXYZ>::Ptr Cloud_Merged(new pcl::PointCloud<pcl::PointXYZ>);
+    Cloud_Merged->clear();
+    for (auto key : SaveList)
+    {
+        if (CloudMap.find(key) != CloudMap.end())
+        {
+            // 将当前点云的所有点添加到目标点云
+            *Cloud_Merged += *(CloudMap[key]);
+        }
+        else {
+            qDebug() << "Dialog_SelectCloudToSaveAs返回了无效值";
+        }
+    }
+    QDir saveDir(QDir::current().filePath("PCDfiles"));
+    if (!saveDir.exists()) saveDir.mkpath(".");
+
+    QString defaultName = QString("cloud_%1.pcd").arg(QDateTime::currentDateTime().toString("yyyyMMddHHmmss"));
+
+    QString filePath = QFileDialog::getSaveFileName(this,"保存点云文件",saveDir.filePath(defaultName),"PCD文件 (*.pcd)");
+
+    if (!filePath.isEmpty()) {
+        if (QFileInfo(filePath).suffix().compare("pcd", Qt::CaseInsensitive) != 0) {
+            filePath += ".pcd";
+        }
+
+        // 执行保存
+        if (pcl::io::savePCDFileBinaryCompressed(filePath.toStdString(), *Cloud_Merged) == -1) {
+            QMessageBox::critical(this, "错误", "保存失败");
+        }
+        else {
+            QMessageBox::information(this, "成功",
+                QString("成功保存 %1 个点云到：\n%2").arg(SaveList.size()).arg(filePath));
+        }
+    }
 
 }
 void CloudForgeAnalyzer::Slot_fl_2_Triggered() {
