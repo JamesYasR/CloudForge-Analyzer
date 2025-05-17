@@ -9,7 +9,7 @@ Filter_voxel::Filter_voxel(pcl::PointCloud<pcl::PointXYZ>::Ptr Input_c) :
 	float leafsize;
 	if (paramDialog->exec() == QDialog::Accepted) // 如果用户点击了“确定”
 	{
-		QString param = paramDialog->getParam(); // 获取输入的参数
+		QString param = paramDialog->getParams()[0]; // 获取输入的参数
 		leafsize = param.toFloat(&ok);
 		if (!ok) {
 			qDebug() << "无效数字";

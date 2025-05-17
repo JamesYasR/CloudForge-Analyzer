@@ -9,9 +9,9 @@ Cluster::Cluster(pcl::PointCloud<pcl::PointXYZ>::Ptr Input_c) :
 	bool ok1, ok2, ok3;
 	if (paramDialog->exec() == QDialog::Accepted) // 如果用户点击了“确定”
 	{
-		QString param3 = paramDialog->getParam()[2];
-		QString param2 = paramDialog->getParam()[1];
-		QString param1 = paramDialog->getParam()[0]; // 获取输入的参数
+		QString param3 = paramDialog->getParams()[2];
+		QString param2 = paramDialog->getParams()[1];
+		QString param1 = paramDialog->getParams()[0]; // 获取输入的参数
 		tolerance = param1.toFloat(&ok1);
 		min = param2.toFloat(&ok2);
 		max = param3.toFloat(&ok3);

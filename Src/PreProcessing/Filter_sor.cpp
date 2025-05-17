@@ -10,8 +10,8 @@ Filter_sor::Filter_sor(pcl::PointCloud<pcl::PointXYZ>::Ptr Input_c) :
 	float std_dev_mul_thresh;
 	if (paramDialog->exec() == QDialog::Accepted) // 如果用户点击了“确定”
 	{
-		QString param1 = paramDialog->getParam()[0]; // 获取输入的参数
-		QString param2 = paramDialog->getParam()[1]; // 获取输入的参数
+		QString param1 = paramDialog->getParams()[0]; // 获取输入的参数
+		QString param2 = paramDialog->getParams()[1]; // 获取输入的参数
 		mean_k = param1.toInt(&ok1);
 		std_dev_mul_thresh = param2.toFloat(&ok2);
 		if (!ok1 && !ok2) {

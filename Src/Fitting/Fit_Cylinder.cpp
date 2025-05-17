@@ -11,9 +11,9 @@ Fit_Cylinder::Fit_Cylinder(pcl::PointCloud<pcl::PointXYZ>::Ptr InputC) :
 
 	if (paramDialog->exec() == QDialog::Accepted) // 如果用户点击了“确定”
 	{
-		QString param1 = paramDialog->getParam()[0];
-		QString param2 = paramDialog->getParam()[1];
-		QString param3 = paramDialog->getParam()[2];// 获取输入的参数
+		QString param1 = paramDialog->getParams()[0];
+		QString param2 = paramDialog->getParams()[1];
+		QString param3 = paramDialog->getParams()[2];// 获取输入的参数
 		KSearch = param1.toInt(&ok1);
 		DistanceThreshold = param2.toFloat(&ok2);
 		MaxIterations = param3.toInt(&ok3);
