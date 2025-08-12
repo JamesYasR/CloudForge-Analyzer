@@ -97,7 +97,6 @@ void CloudForgeAnalyzer::Slot_fit_cy_Triggered() {
         //+ "\n焊接区宽度：" + std::to_string(fcy2.ComputeCylinderHeight()));
    //这部分比较临时，可以考虑去改一下
 
-
 }
 void CloudForgeAnalyzer::Slot_fi_open_Triggered() {
     QString runPath = QDir::currentPath()+"/PCDfiles";//获取项目的根路径
