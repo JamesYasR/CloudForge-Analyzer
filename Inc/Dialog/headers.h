@@ -23,6 +23,6 @@
 #include <vtkPointData.h>
 #include <vtkCellArray.h>
 #include "ColorManager.h"
-#include "Dialog/Dialog_SelectPointCloud.h"
+#include "Dialog/CloudSelectionDialog.h"
 
 

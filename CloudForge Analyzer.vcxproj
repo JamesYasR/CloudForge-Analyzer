@@ -106,12 +106,12 @@
   <ItemGroup>
     <ClCompile Include="Src\CloudForgeAnalyzer.cpp" />
     <ClCompile Include="Src\ColorManager.cpp" />
-    <ClCompile Include="Src\Dialog\Dialog_RemovePointCloud.cpp" />
-    <ClCompile Include="Src\Dialog\Dialog_SelectCloudToSaveAs.cpp" />
-    <ClCompile Include="Src\Dialog\Dialog_SelectPointCloud.cpp" />
+    <ClCompile Include="Src\Dialog\RmCloudDialog.cpp" />
+    <ClCompile Include="Src\Dialog\SaveCloudDialog.cpp" />
+    <ClCompile Include="Src\Dialog\CloudSelectionDialog.cpp" />
     <ClCompile Include="Src\Dialog\ParamDialogBase.cpp" />
     <ClCompile Include="Src\Dialog\ParamDialog_ec.cpp" />
-    <ClCompile Include="Src\Dialog\Dialog_SelectCloudToFit.cpp" />
+    <ClCompile Include="Src\Dialog\FitCloudDialog.cpp" />
     <ClCompile Include="Src\Dialog\ParamDialog_FittingCylinder.cpp" />
     <ClCompile Include="Src\Dialog\ParamDialog_sor.cpp" />
     <ClCompile Include="Src\Dialog\ParamDialog_vg.cpp" />
@@ -133,13 +133,13 @@
     <QtMoc Include="Inc\Dialog\ParamDialog_ec.h" />
     <QtMoc Include="Inc\Dialog\ParamDialog_sor.h" />
     <QtMoc Include="Inc\Dialog\ParamDialog_vg.h" />
-    <ClInclude Include="Inc\Dialog\Dialog_RemovePointCloud.h" />
-    <QtMoc Include="Inc\Dialog\Dialog_SelectCloudToSaveAs.h" />
+    <ClInclude Include="Inc\Dialog\RmCloudDialog.h" />
+    <QtMoc Include="Inc\Dialog\SaveCloudDialog.h" />
     <ClInclude Include="Inc\ColorManager.h" />
     <ClInclude Include="Inc\Dialog\Dialog.h" />
-    <QtMoc Include="Inc\Dialog\Dialog_SelectPointCloud.h" />
+    <QtMoc Include="Inc\Dialog\CloudSelectionDialog.h" />
     <ClInclude Include="Inc\Dialog\headers.h" />
-    <ClInclude Include="Inc\Dialog\Dialog_SelectCloudToFit.h" />
+    <ClInclude Include="Inc\Dialog\FitCloudDialog.h" />
     <QtMoc Include="Inc\Dialog\ParamDialog_FittingCylinder.h" />
     <QtMoc Include="Inc\Dialog\ParamDialogBase.h" />
     <ClInclude Include="Inc\Fitting\Fitting.h" />

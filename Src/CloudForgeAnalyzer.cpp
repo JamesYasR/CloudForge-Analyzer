@@ -61,11 +61,11 @@ void CloudForgeAnalyzer::InitalizeConnects() {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////*槽函数start*/
 void CloudForgeAnalyzer::Slot_fit_cy_Triggered() {
-    Dialog_SelectCloudToFit window(CloudMap, ColorMap);
-    if (window.Get_SelectedList().empty()) {
+    FitCloudDialog window(CloudMap, ColorMap);
+    if (window.getSelectedList().empty()) {
         return;
     }
-    pcl::PointCloud<pcl::PointXYZ>::Ptr Cloud_Temp = CloudMap[window.Get_SelectedList()[0]];
+    pcl::PointCloud<pcl::PointXYZ>::Ptr Cloud_Temp = CloudMap[window.getSelectedList()[0]];
 
     Fit_Cylinder fcy1(Cloud_Temp);
     pcl::PointCloud<pcl::PointXYZ>::Ptr Cloud_Inliers, Cloud_Outliers;
@@ -111,7 +111,7 @@ void CloudForgeAnalyzer::Slot_fi_open_Triggered() {
     UpdateCamera(0, 0, 1);
 }
 void CloudForgeAnalyzer::Slot_ed_dork_Triggered() {
-    Dialog_RemovePointCloud dcc(CloudMap,ColorMap);
+    RmCloudDialog dcc(CloudMap,ColorMap);
     std::vector<std::string> todelete = dcc.Get_toDelete();
     for (const auto& it : todelete) {
         DelePointCloud(it);
@@ -121,8 +121,8 @@ void CloudForgeAnalyzer::Slot_ed_dork_Triggered() {
 }
 
 void CloudForgeAnalyzer::Slot_fi_saveas_Triggered() {
-    Dialog_SelectCloudToSaveAs dialog(CloudMap, ColorMap);
-    auto SaveList = dialog.Get_SelectedList();
+    SaveCloudDialog dialog(CloudMap, ColorMap);
+    auto SaveList = dialog.getSelectedList();
     if (SaveList.empty()) return;
 
     QDir saveDir(QDir::current().filePath("PCDfiles"));

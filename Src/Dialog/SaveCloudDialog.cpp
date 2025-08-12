@@ -1,32 +1,32 @@
-#include "Dialog/Dialog_SelectCloudToSaveAs.h"
+#include "Dialog/SaveCloudDialog.h"
 
-Dialog_SelectCloudToSaveAs::Dialog_SelectCloudToSaveAs(std::map<std::string, pcl::PointCloud<pcl::PointXYZ>::Ptr> cloudm, std::map<std::string, ColorManager> colorm, QWidget* parent)
-    : Dialog_SelectPointCloud(cloudm, colorm, parent)
+SaveCloudDialog::SaveCloudDialog(std::map<std::string, pcl::PointCloud<pcl::PointXYZ>::Ptr> cloudm, std::map<std::string, ColorManager> colorm, QWidget* parent)
+    : CloudSelectionDialog(cloudm, colorm, parent)
 {
     InitializeButtonAndConnect();
     this->setWindowTitle("选择点云另存为");
     this->exec();
 }
 
-Dialog_SelectCloudToSaveAs::~Dialog_SelectCloudToSaveAs() = default;
+SaveCloudDialog::~SaveCloudDialog() = default;
 
-void Dialog_SelectCloudToSaveAs::InitializeButtonAndConnect() {
+void SaveCloudDialog::InitializeButtonAndConnect() {
     QPushButton* Button1 = new QPushButton("另存为", this);
     QPushButton* Button2 = new QPushButton("取消", this);
-    connect(Button1, &QPushButton::clicked, this, &Dialog_SelectCloudToSaveAs::Confirm);
-    connect(Button2, &QPushButton::clicked, this, &Dialog_SelectCloudToSaveAs::Cancel);
+    connect(Button1, &QPushButton::clicked, this, &SaveCloudDialog::Confirm);
+    connect(Button2, &QPushButton::clicked, this, &SaveCloudDialog::Cancel);
     mainLayout->addWidget(Button1);
     mainLayout->addWidget(Button2);
 }
 
 
-bool Dialog_SelectCloudToSaveAs::SaveSelectedClouds(const QString& filePath, QString& infoMsg) {
-    auto SaveList = Get_SelectedList();
+bool SaveCloudDialog::SaveSelectedClouds(const QString& filePath, QString& infoMsg) {
+    auto SaveList = getSelectedList();
     pcl::PointCloud<pcl::PointXYZ>::Ptr Cloud_Merged(new pcl::PointCloud<pcl::PointXYZ>);
     Cloud_Merged->clear();
     for (const auto& key : SaveList) {
-        if (cloudmap.find(key) != cloudmap.end()) {
-            *Cloud_Merged += *(cloudmap[key]);
+        if (cloudMap.find(key) != cloudMap.end()) {
+            *Cloud_Merged += *(cloudMap[key]);
         }
         else {
             infoMsg = QString("点云 %1 不存在").arg(QString::fromStdString(key));
@@ -51,11 +51,11 @@ bool Dialog_SelectCloudToSaveAs::SaveSelectedClouds(const QString& filePath, QSt
     return false;
 }
 
-void Dialog_SelectCloudToSaveAs::Confirm()
+void SaveCloudDialog::Confirm()
 {
     this->accept();
 }
 
-void Dialog_SelectCloudToSaveAs::Cancel(){
+void SaveCloudDialog::Cancel(){
     this->reject();
 }

@@ -40,6 +40,6 @@ void ParamDialogBase::accept()
             return;
         }
     }
-    emit paramsConfirmed(getParams()); // 新增：发射信号
+   // emit paramsConfirmed(getParams()); // 新增：发射信号
     QDialog::accept();
 }

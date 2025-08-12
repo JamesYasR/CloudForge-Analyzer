@@ -79,10 +79,10 @@
     <ClCompile Include="Src\Dialog\ParamDialog_vg.cpp">
       <Filter>Source Files\Dialog</Filter>
     </ClCompile>
-    <ClCompile Include="Src\Dialog\Dialog_RemovePointCloud.cpp">
+    <ClCompile Include="Src\Dialog\RmCloudDialog.cpp">
       <Filter>Source Files\Dialog</Filter>
     </ClCompile>
-    <ClCompile Include="Src\Dialog\Dialog_SelectCloudToSaveAs.cpp">
+    <ClCompile Include="Src\Dialog\SaveCloudDialog.cpp">
       <Filter>Source Files\Dialog</Filter>
     </ClCompile>
     <ClCompile Include="Src\PreProcessing\Cluster.cpp">
@@ -97,13 +97,13 @@
     <ClCompile Include="Src\Fitting\Fit_Cylinder.cpp">
       <Filter>Source Files\Fitting</Filter>
     </ClCompile>
-    <ClCompile Include="Src\Dialog\Dialog_SelectCloudToFit.cpp">
+    <ClCompile Include="Src\Dialog\FitCloudDialog.cpp">
       <Filter>Source Files\Dialog</Filter>
     </ClCompile>
     <ClCompile Include="Src\ColorManager.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="Src\Dialog\Dialog_SelectPointCloud.cpp">
+    <ClCompile Include="Src\Dialog\CloudSelectionDialog.cpp">
       <Filter>Source Files\Dialog</Filter>
     </ClCompile>
     <ClCompile Include="Src\Dialog\ParamDialog_FittingCylinder.cpp">
@@ -132,13 +132,13 @@
     <QtMoc Include="Inc\Dialog\ParamDialog_vg.h">
       <Filter>Header Files\Dialog</Filter>
     </QtMoc>
-    <QtMoc Include="Inc\Dialog\Dialog_SelectCloudToSaveAs.h">
+    <QtMoc Include="Inc\Dialog\SaveCloudDialog.h">
       <Filter>Header Files\Dialog</Filter>
     </QtMoc>
     <QtMoc Include="Inc\Dialog\ParamDialog_FittingCylinder.h">
       <Filter>Header Files\Dialog</Filter>
     </QtMoc>
-    <QtMoc Include="Inc\Dialog\Dialog_SelectPointCloud.h">
+    <QtMoc Include="Inc\Dialog\CloudSelectionDialog.h">
       <Filter>Header Files\Dialog</Filter>
     </QtMoc>
     <QtMoc Include="Inc\Dialog\ParamDialogBase.h">
@@ -185,10 +185,10 @@
     <ClInclude Include="Inc\ColorManager.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Inc\Dialog\Dialog_RemovePointCloud.h">
+    <ClInclude Include="Inc\Dialog\RmCloudDialog.h">
       <Filter>Header Files\Dialog</Filter>
     </ClInclude>
-    <ClInclude Include="Inc\Dialog\Dialog_SelectCloudToFit.h">
+    <ClInclude Include="Inc\Dialog\FitCloudDialog.h">
       <Filter>Header Files\Dialog</Filter>
     </ClInclude>
   </ItemGroup>

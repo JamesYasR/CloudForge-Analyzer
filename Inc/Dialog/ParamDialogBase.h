@@ -17,8 +17,8 @@ public:
 
     // 获取所有参数
     QVector<QString> getParams() const;
-signals:
-    void paramsConfirmed(const QVector<QString>& params); // 新增：参数确认信号
+//signals:
+    //void paramsConfirmed(const QVector<QString>& params); // 新增：参数确认信号
 
 protected slots:
     virtual void accept() override;
