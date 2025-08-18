@@ -39,6 +39,12 @@
     <Filter Include="Header Files\PreProcessing">
       <UniqueIdentifier>{87dab9a4-2510-481a-b8b2-b515ab9d2c0e}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Source Files\Measure">
+      <UniqueIdentifier>{89b16e23-6cce-44ce-b1e0-491521f58481}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\Measure">
+      <UniqueIdentifier>{da73059f-555b-48f4-8eb7-3e52d55a20f2}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <QtRcc Include="CloudForgeAnalyzer.qrc">
@@ -62,9 +68,6 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="Src\CloudForgeAnalyzer.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="Src\Loops.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="Src\main.cpp">
@@ -112,15 +115,18 @@
     <ClCompile Include="Src\Dialog\ParamDialogBase.cpp">
       <Filter>Source Files\Dialog</Filter>
     </ClCompile>
+    <ClCompile Include="Src\Measure\MeasureArc.cpp">
+      <Filter>Source Files\Measure</Filter>
+    </ClCompile>
+    <ClCompile Include="Src\Dialog\ParamDialog_measureArc.cpp">
+      <Filter>Source Files\Dialog</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <QtMoc Include="Inc\CloudForgeAnalyzer.h">
       <Filter>Header Files</Filter>
     </QtMoc>
     <QtMoc Include="Inc\PointCloudIncise.h">
-      <Filter>Header Files</Filter>
-    </QtMoc>
-    <QtMoc Include="Inc\Loops.h">
       <Filter>Header Files</Filter>
     </QtMoc>
     <QtMoc Include="Inc\Dialog\ParamDialog_ec.h">
@@ -142,6 +148,9 @@
       <Filter>Header Files\Dialog</Filter>
     </QtMoc>
     <QtMoc Include="Inc\Dialog\ParamDialogBase.h">
+      <Filter>Header Files\Dialog</Filter>
+    </QtMoc>
+    <QtMoc Include="Inc\Dialog\ParamDialog_measureArc.h">
       <Filter>Header Files\Dialog</Filter>
     </QtMoc>
   </ItemGroup>
@@ -190,6 +199,9 @@
     </ClInclude>
     <ClInclude Include="Inc\Dialog\FitCloudDialog.h">
       <Filter>Header Files\Dialog</Filter>
+    </ClInclude>
+    <ClInclude Include="Inc\Measure\MeasureArc.h">
+      <Filter>Header Files\Measure</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

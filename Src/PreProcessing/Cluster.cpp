@@ -19,12 +19,10 @@ Cluster::Cluster(pcl::PointCloud<pcl::PointXYZ>::Ptr Input_c) :
 			qDebug() << "无效数字";
 			return;
 		}
-		//qDebug() << "参数："  << param1 << "," << param2 << "," << param3;
-		//qDebug() << "tolerance:" << tolerance << "min:" << min << "max:" << max;
 	}
 	else
 	{
-		//qDebug() << "取消操作";
+		qDebug() << "取消操作";
 		return;
 	}
 	*Input_cloud = *Input_c;

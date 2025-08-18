@@ -1,5 +1,11 @@
 #pragma once
 #include <QtWidgets/QMainWindow>
+#include <QToolButton>
+#include <QMenu>
+#include <QAction>
+#include "QDir"
+#include "QFileDialog"
+#include <QTimer>
 #include "ui_CloudForgeAnalyzer.h"
 #include <vtkGenericOpenGLRenderWindow.h>
 #include <pcl/point_cloud.h>
@@ -18,8 +24,7 @@
 #include <vtkSmartPointer.h>
 #include <vtkCamera.h>
 #include <vtkOutputWindow.h>
-#include "QDir"
-#include "QFileDialog"
+
 #include <string>
 #include <filesystem>
 #include "Protrusion_Depression_Cylinder.h"
@@ -28,6 +33,8 @@
 #include "PreProcessing/PreProcessing.h"
 #include "Fitting/Fit_Cylinder.h"
 #include "ColorManager.h"
+#include "Measure/MeasureArc.h"
+
 
 QT_BEGIN_NAMESPACE
 namespace Ui { class CloudForgeAnalyzerClass; };
@@ -42,8 +49,9 @@ public:
     ~CloudForgeAnalyzer();
     Ui::CloudForgeAnalyzerClass* ui;
     pcl::PointCloud<pcl::PointXYZ>::Ptr cloud;
+
 private slots:
-    void Slot_CurveFittingPC();
+    //void Slot_CurveFittingPC();
     void Slot_ChangeVA_x();
     void Slot_ChangeVA_y();
     void Slot_ChangeVA_z();
@@ -55,8 +63,12 @@ private slots:
     void Slot_fl_1_Triggered();
     void Slot_fl_2_Triggered();
     void Slot_ed_dork_Triggered();
+    void Slot_ed_cleangeo_Triggered();
+    void Slot_ed_cleanall_Triggered();
     void Slot_fit_cy_Triggered();
 
+    void Tool_SetMeasureCylinder(bool checked);
+    void Update_PointCounts();
 private:
     //        
     void AddPointCloud(std::string name, pcl::PointCloud<pcl::PointXYZ>::Ptr cloud, ColorManager color);
@@ -68,13 +80,15 @@ private:
     void TeEDebug(std::string debugMes);
     void UpdateCamera(int a, int b, int c);
     void Update_CFmes(std::string cfmes);
-
+    void mainLoop_Init();
     //          
     
     pcl::visualization::PCLVisualizer::Ptr viewer;
     pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZ>::Ptr renderer_custom;
     std::map<std::string, pcl::PointCloud<pcl::PointXYZ>::Ptr> CloudMap;
     std::map<std::string, ColorManager> ColorMap;
+
+    bool isCylinderMeasure = false;
     
 
 };

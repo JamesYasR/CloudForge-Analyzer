@@ -1,7 +1,9 @@
 <RCC>
-    <qresource prefix="/CloudForgeAnalyzer"/>
-    <qresource prefix="/new/prefix1">
-        <file>Icons/icon_MainWindow.png</file>
+    <qresource prefix="/CloudForgeAnalyzer">
         <file>Icons/cloud_clusters.png</file>
+        <file>Icons/icon_MainWindow.png</file>
+        <file>Icons/icons_ruler.png</file>
+        <file>Icons/icons-cylinder.png</file>
+        <file>Icons/icons-line.png</file>
     </qresource>
 </RCC>

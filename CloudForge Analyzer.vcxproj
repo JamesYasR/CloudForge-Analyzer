@@ -36,8 +36,8 @@
     <Import Project="$(QtMsBuild)\qt_defaults.props" />
   </ImportGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|x64'" Label="QtSettings">
-    <QtInstall>6.7.3_msvc2022_64</QtInstall>
-    <QtModules>core;gui;widgets</QtModules>
+    <QtInstall>QT6.7.3</QtInstall>
+    <QtModules>core;gui;widgets;opengl;openglwidgets</QtModules>
     <QtBuildConfig>debug</QtBuildConfig>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Release|x64'" Label="QtSettings">
@@ -62,6 +62,7 @@
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|x64'">
     <IncludePath>$(PCL_ROOT)\include\pcl-1.14;$(PCL_ROOT)\3rdParty\Boost\include\boost-1_84;$(PCL_ROOT)\3rdParty\Eigen3\include\eigen3;$(PCL_ROOT)\3rdParty\FLANN\include;$(PCL_ROOT)\3rdParty\OpenNI2\Include;$(PCL_ROOT)\3rdParty\Qhull\include;$(PCL_ROOT)\3rdParty\VTK\include\vtk-9.3;$(IncludePath)</IncludePath>
+    <ExecutablePath>$(PCL_ROOT)\3rdParty\VTK\bin;$(ExecutablePath)</ExecutablePath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Release|x64'">
   </PropertyGroup>
@@ -106,6 +107,7 @@
   <ItemGroup>
     <ClCompile Include="Src\CloudForgeAnalyzer.cpp" />
     <ClCompile Include="Src\ColorManager.cpp" />
+    <ClCompile Include="Src\Dialog\ParamDialog_measureArc.cpp" />
     <ClCompile Include="Src\Dialog\RmCloudDialog.cpp" />
     <ClCompile Include="Src\Dialog\SaveCloudDialog.cpp" />
     <ClCompile Include="Src\Dialog\CloudSelectionDialog.cpp" />
@@ -118,8 +120,8 @@
     <ClCompile Include="Src\Fitting\Fit_Cylinder.cpp" />
     <ClCompile Include="Src\funcs.cpp" />
     <ClCompile Include="Src\Linear_Depression_Plane.cpp" />
-    <ClCompile Include="Src\Loops.cpp" />
     <ClCompile Include="Src\main.cpp" />
+    <ClCompile Include="Src\Measure\MeasureArc.cpp" />
     <ClCompile Include="Src\PointCloudIncise.cpp" />
     <ClCompile Include="Src\PreProcessing\Cluster.cpp" />
     <ClCompile Include="Src\PreProcessing\Filter_sor.cpp" />
@@ -133,6 +135,7 @@
     <QtMoc Include="Inc\Dialog\ParamDialog_ec.h" />
     <QtMoc Include="Inc\Dialog\ParamDialog_sor.h" />
     <QtMoc Include="Inc\Dialog\ParamDialog_vg.h" />
+    <QtMoc Include="Inc\Dialog\ParamDialog_measureArc.h" />
     <ClInclude Include="Inc\Dialog\RmCloudDialog.h" />
     <QtMoc Include="Inc\Dialog\SaveCloudDialog.h" />
     <ClInclude Include="Inc\ColorManager.h" />
@@ -146,7 +149,7 @@
     <ClInclude Include="Inc\Fitting\Fit_Cylinder.h" />
     <ClInclude Include="Inc\funcs.h" />
     <ClInclude Include="Inc\Linear_Depression_Plane.h" />
-    <QtMoc Include="Inc\Loops.h" />
+    <ClInclude Include="Inc\Measure\MeasureArc.h" />
     <ClInclude Include="Inc\PreProcessing\Cluster.h" />
     <ClInclude Include="Inc\PreProcessing\Filter_sor.h" />
     <ClInclude Include="Inc\PreProcessing\Filter_voxel.h" />

@@ -8,11 +8,10 @@ CloudForgeAnalyzer::CloudForgeAnalyzer(QWidget *parent)
 {
     //qt控件区head
     ui->setupUi(this);
-
     InitalizeQWidgets();
     InitalizeConnects();
     InitalizeRenderer();
-
+    mainLoop_Init();
     if (pcl::io::loadPCDFile("PCDfiles/rabbit.pcd", *cloud) == -1) {
         TeEDebug(">>qt构造:无法加载点云文件");
         return;
@@ -43,13 +42,13 @@ void CloudForgeAnalyzer::InitalizeRenderer() {
     viewer->addCoordinateSystem(4.0);
 }
 void CloudForgeAnalyzer::InitalizeQWidgets() {
-    QStringList items;
-    items << "圆柱" << "平面-凹陷-直线" << "Option 3";
-    ui->comboBox_ChoiceCFmethod->addItems(items);
+
 }
 
 void CloudForgeAnalyzer::InitalizeConnects() {
     connect(ui->action_ed_dork, &QAction::triggered, this, &CloudForgeAnalyzer::Slot_ed_dork_Triggered);
+    connect(ui->action_ed_cleangeo, &QAction::triggered, this, &CloudForgeAnalyzer::Slot_ed_cleangeo_Triggered);
+    connect(ui->action_ed_cleangall, &QAction::triggered, this, &CloudForgeAnalyzer::Slot_ed_cleanall_Triggered);
     connect(ui->action_fi_open, &QAction::triggered, this, &CloudForgeAnalyzer::Slot_fi_open_Triggered);
     connect(ui->action_fi_save, &QAction::triggered, this, &CloudForgeAnalyzer::Slot_fi_save_Triggered);
     connect(ui->action_fi_saveas, &QAction::triggered, this, &CloudForgeAnalyzer::Slot_fi_saveas_Triggered);
@@ -57,9 +56,40 @@ void CloudForgeAnalyzer::InitalizeConnects() {
     connect(ui->action_fl_1, &QAction::triggered, this, &CloudForgeAnalyzer::Slot_fl_1_Triggered);
     connect(ui->action_fl_2, &QAction::triggered, this, &CloudForgeAnalyzer::Slot_fl_2_Triggered);
     connect(ui->action_fit_cy, &QAction::triggered, this, &CloudForgeAnalyzer::Slot_fit_cy_Triggered);
+    connect(ui->measure_cylinder, &QAction::toggled,this, &CloudForgeAnalyzer::Tool_SetMeasureCylinder);
+    
+}
+
+void CloudForgeAnalyzer::mainLoop_Init() {
+    QTimer* timer = new QTimer(this);
+    connect(timer, SIGNAL(timeout()), this, SLOT(Update_PointCounts())); // slotCountMessage是我们需要执行的响应函数 
+    timer->start(200); // 每隔1s 
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////*槽函数start*/
+void CloudForgeAnalyzer::Update_PointCounts() {
+    int num = 0;
+    for (const auto& cloud : CloudMap) {
+		num += cloud.second->points.size();
+    }
+	std::string countText = "总点数:" + std::to_string(num);
+    ui->label_countpoints->setText(QString::fromStdString(countText));
+}
+
+void CloudForgeAnalyzer::Tool_SetMeasureCylinder(bool checked) {
+    isCylinderMeasure = checked;
+    FitCloudDialog dialog(CloudMap, ColorMap);
+    if (dialog.getSelectedList().empty()) {
+        return;
+    }
+    pcl::PointCloud<pcl::PointXYZ>::Ptr Cloud_Temp = CloudMap[dialog.getSelectedList()[0]];
+	MeasureArc ma;
+    ma.FitCylinder(Cloud_Temp);
+    float arclength = ma.calculateArcLength();
+    TeEDebug("弧长为:"+std::to_string(arclength));
+}
+
+
 void CloudForgeAnalyzer::Slot_fit_cy_Triggered() {
     FitCloudDialog window(CloudMap, ColorMap);
     if (window.getSelectedList().empty()) {
@@ -67,10 +97,10 @@ void CloudForgeAnalyzer::Slot_fit_cy_Triggered() {
     }
     pcl::PointCloud<pcl::PointXYZ>::Ptr Cloud_Temp = CloudMap[window.getSelectedList()[0]];
 
-    Fit_Cylinder fcy1(Cloud_Temp);
+    Fit_Cylinder fcy(Cloud_Temp);
     pcl::PointCloud<pcl::PointXYZ>::Ptr Cloud_Inliers, Cloud_Outliers;
-    Cloud_Inliers = fcy1.Get_Inliers();
-    Cloud_Outliers = fcy1.Get_Outliers();
+    Cloud_Inliers = fcy.Get_Inliers();
+    Cloud_Outliers = fcy.Get_Outliers();
     if (Cloud_Inliers->empty()) {
         qDebug() << "圆柱拟合结果为空";
         return;
@@ -84,8 +114,13 @@ void CloudForgeAnalyzer::Slot_fit_cy_Triggered() {
     //Fit_Cylinder fcy2(Cloud_Outliers);
     Eigen::VectorXf coeff1;//, coeff2;
 
-    coeff1 = fcy1.Get_Coeff_in();
+    coeff1 = fcy.Get_Coeff_in();
     //coeff2 = fcy2.Get_Coeff_in();
+    pcl::ModelCoefficients::Ptr cylinder_coeff(new pcl::ModelCoefficients);
+    cylinder_coeff->values.resize(7);
+    for (std::size_t i = 0; i < 7; ++i)
+        cylinder_coeff->values[i] = coeff1(i);
+	viewer->addCylinder(*cylinder_coeff, "fitted_cylinder");
 
     Update_CFmes("圆柱1轴上一点坐标为：" + std::to_string(coeff1[0]) + "," + std::to_string(coeff1[1]) + "," + std::to_string(coeff1[2])
         + "\n圆柱轴方向为：" + std::to_string(coeff1[3]) + "," + std::to_string(coeff1[4]) + "," + std::to_string(coeff1[5])
@@ -119,7 +154,17 @@ void CloudForgeAnalyzer::Slot_ed_dork_Triggered() {
     ui->winOfAnalyzer->renderWindow()->Render();
     ui->winOfAnalyzer->update();
 }
-
+void CloudForgeAnalyzer::Slot_ed_cleangeo_Triggered() {
+    viewer->removeAllShapes();
+    ui->winOfAnalyzer->renderWindow()->Render();
+    ui->winOfAnalyzer->update();
+}
+void CloudForgeAnalyzer::Slot_ed_cleanall_Triggered() {
+    viewer->removeAllShapes();
+    ClearAllPointCloud();
+    ui->winOfAnalyzer->renderWindow()->Render();
+    ui->winOfAnalyzer->update();
+}
 void CloudForgeAnalyzer::Slot_fi_saveas_Triggered() {
     SaveCloudDialog dialog(CloudMap, ColorMap);
     auto SaveList = dialog.getSelectedList();
@@ -177,59 +222,6 @@ void CloudForgeAnalyzer::Slot_ph_1_Triggered() {
     
 }
 
-
-void CloudForgeAnalyzer::Slot_CurveFittingPC() {
-    QString cfmod = ui->comboBox_ChoiceCFmethod->currentText().trimmed();
-    if (cfmod == "圆柱") {
-        //输入部分start
-        TeEDebug(">>槽CFPC:开始拟合圆柱");
-        pcl::PointCloud<pcl::PointXYZ>::Ptr acloud(new pcl::PointCloud<pcl::PointXYZ>);
-        *acloud = *cloud;
-        TeEDebug(">>槽CFPC:输入点云点数:" + std::to_string(acloud->points.size()));
-        //输入部分end
-
-        //子弹缺陷圆柱用法
-        Protrusion_Depression_Cylinder PDC1(acloud, [this](const std::string& message) {
-            this->TeEDebug(message); });
-        PDC1.VoxelGrid_Sor_filter();
-        PDC1.FitCylinderModel();
-        PDC1.AnalyzeDefects(); // 新增分析
-        pcl::PointCloud<pcl::PointXYZ>::Ptr newcloud(new pcl::PointCloud<pcl::PointXYZ>);
-        //*newcloud = *PDC1.main_cloud;
-        *newcloud = *cloud;
-        //ReplacePointCloud(newcloud);
-        viewer->addPointCloud(PDC1.defects_cloud, "cloud_defect");
-        viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_COLOR, 1.0, 0.0, 0.0, "cloud_defect", 0);
-        viewer->addCylinder(PDC1.coefficients_cylinder, "cycler", 0); // 可视化拟合出来的圆柱模型
-        PDC1.MarkDefects(viewer);//标记缺陷，包括返回缺陷数
-
-        Update_CFmes(PDC1.mainbody_fit_data + PDC1.defect_fit_data);
-        ui->winOfAnalyzer->update();
-    }
-    else if (cfmod == "平面-凹陷-直线") {
-        TeEDebug(">>槽CFPC:开始拟合平面-凹陷-直线");
-        pcl::PointCloud<pcl::PointXYZ>::Ptr acloud(new pcl::PointCloud<pcl::PointXYZ>);
-        *acloud = *cloud;
-        TeEDebug(">>槽CFPC:输入点云点数:" + std::to_string(acloud->points.size()));
-        Linear_Depression_Plane LDP1(acloud, [this](const std::string& message) {
-            this->TeEDebug(message); });
-        LDP1.VoxelGrid_Sor_filter();//滤波
-        LDP1.FitPlaneModel();
-        float scale[2] = { 200,500 };
-        auto plane = createPlane(LDP1.coefficients_plane, 3, 3, 3, scale);
-        viewer->addModelFromPolyData(plane, "plane_1");
-        viewer->setShapeRenderingProperties(pcl::visualization::PCL_VISUALIZER_COLOR, 0.9, 0.1, 0.1, "plane_1", 0);
-        viewer->setShapeRenderingProperties(pcl::visualization::PCL_VISUALIZER_OPACITY, 0.6, "plane_1", 0);
-        viewer->addPlane(LDP1.coefficients_plane, "plane");
-        ui->winOfAnalyzer->update();
-
-        Update_CFmes(LDP1.get_mainbody_fit_data() + "\n识别数量:2\n" + "平均深度1:2.3754\n" + "平均深度1:2.0353\n");//这部分还没做完哈
-
-    }
-    else {
-        TeEDebug(">>槽CFPC:未定义的曲线拟合方法");
-    }
-}
 
 
 void CloudForgeAnalyzer::Slot_ChangeVA_x() { UpdateCamera(1, 0, 0); }
@@ -332,6 +324,9 @@ void CloudForgeAnalyzer::AddPointCloud(std::string name, pcl::PointCloud<pcl::Po
 }
 
 void CloudForgeAnalyzer::ClearAllPointCloud() {
+    for (auto& pair : CloudMap) {
+        pair.second.reset(); // 智能指针置空，释放点云
+    }
     CloudMap.clear();
     ColorMap.clear();
     viewer->removeAllPointClouds();
@@ -341,6 +336,11 @@ void CloudForgeAnalyzer::ClearAllPointCloud() {
 }
 
 void CloudForgeAnalyzer::DelePointCloud(std::string name) {
+    auto it = CloudMap.find(name);
+    if (it != CloudMap.end()) {
+        it->second.reset(); // 智能指针置空，释放点云
+        CloudMap.erase(it);
+    }
     CloudMap.erase(name);
     ColorMap.erase(name);
     viewer->removePointCloud(name);
