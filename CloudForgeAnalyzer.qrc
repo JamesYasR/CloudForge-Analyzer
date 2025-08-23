@@ -5,5 +5,6 @@
         <file>Icons/icons_ruler.png</file>
         <file>Icons/icons-cylinder.png</file>
         <file>Icons/icons-line.png</file>
+        <file>Icons/icons_measureArc.png</file>
     </qresource>
 </RCC>

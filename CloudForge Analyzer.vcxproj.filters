@@ -45,6 +45,12 @@
     <Filter Include="Header Files\Measure">
       <UniqueIdentifier>{da73059f-555b-48f4-8eb7-3e52d55a20f2}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Header Files\Basic">
+      <UniqueIdentifier>{c3386ecc-5346-4f50-a65b-6e9bdb7ebabf}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\Basic">
+      <UniqueIdentifier>{6985a9d1-7c33-4a18-afea-b0f4b752a66f}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <QtRcc Include="CloudForgeAnalyzer.qrc">
@@ -121,6 +127,21 @@
     <ClCompile Include="Src\Dialog\ParamDialog_measureArc.cpp">
       <Filter>Source Files\Dialog</Filter>
     </ClCompile>
+    <ClCompile Include="Src\Measure\GeodesicArcMeasurer.cpp">
+      <Filter>Source Files\Measure</Filter>
+    </ClCompile>
+    <ClCompile Include="Src\Basic\PointPicker.cpp">
+      <Filter>Source Files\Basic</Filter>
+    </ClCompile>
+    <ClCompile Include="Src\Dialog\ChoseCloudDialog.cpp">
+      <Filter>Source Files\Dialog</Filter>
+    </ClCompile>
+    <ClCompile Include="Src\Basic\PointPickerMgr.cpp">
+      <Filter>Source Files\Basic</Filter>
+    </ClCompile>
+    <ClCompile Include="Src\Dialog\ParamDialogMeaArc.cpp">
+      <Filter>Source Files\Dialog</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <QtMoc Include="Inc\CloudForgeAnalyzer.h">
@@ -151,6 +172,18 @@
       <Filter>Header Files\Dialog</Filter>
     </QtMoc>
     <QtMoc Include="Inc\Dialog\ParamDialog_measureArc.h">
+      <Filter>Header Files\Dialog</Filter>
+    </QtMoc>
+    <QtMoc Include="Inc\Basic\PointPicker.h">
+      <Filter>Header Files\Basic</Filter>
+    </QtMoc>
+    <QtMoc Include="Inc\Dialog\ChoseCloudDialog.h">
+      <Filter>Header Files\Dialog</Filter>
+    </QtMoc>
+    <QtMoc Include="Inc\Basic\PointPickerMgr.h">
+      <Filter>Header Files\Basic</Filter>
+    </QtMoc>
+    <QtMoc Include="Inc\Dialog\ParamDialogMeaArc.h">
       <Filter>Header Files\Dialog</Filter>
     </QtMoc>
   </ItemGroup>
@@ -201,6 +234,9 @@
       <Filter>Header Files\Dialog</Filter>
     </ClInclude>
     <ClInclude Include="Inc\Measure\MeasureArc.h">
+      <Filter>Header Files\Measure</Filter>
+    </ClInclude>
+    <ClInclude Include="Inc\Measure\GeodesicArcMeasurer.h">
       <Filter>Header Files\Measure</Filter>
     </ClInclude>
   </ItemGroup>

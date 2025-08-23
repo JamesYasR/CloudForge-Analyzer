@@ -6,6 +6,7 @@
 #include "FitCloudDialog.h"
 #include "ParamDialog_FittingCylinder.h"
 #include "ParamDialogBase.h"
-
+#include "ChoseCloudDialog.h"
+#include "ParamDialogMeaArc.h"
 
 

@@ -105,9 +105,18 @@
     <QtUic Include="CloudForgeAnalyzer.ui" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="Src\Basic\PointPicker.cpp" />
+    <ClCompile Include="Src\Basic\PointPickerMgr.cpp" />
     <ClCompile Include="Src\CloudForgeAnalyzer.cpp" />
     <ClCompile Include="Src\ColorManager.cpp" />
+    <ClCompile Include="Src\Dialog\ChoseCloudDialog.cpp">
+      <DynamicSource Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">input</DynamicSource>
+      <QtMocFileName Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">%(Filename).moc</QtMocFileName>
+      <DynamicSource Condition="'$(Configuration)|$(Platform)'=='Release|x64'">input</DynamicSource>
+      <QtMocFileName Condition="'$(Configuration)|$(Platform)'=='Release|x64'">%(Filename).moc</QtMocFileName>
+    </ClCompile>
     <ClCompile Include="Src\Dialog\ParamDialog_measureArc.cpp" />
+    <ClCompile Include="Src\Dialog\ParamDialogMeaArc.cpp" />
     <ClCompile Include="Src\Dialog\RmCloudDialog.cpp" />
     <ClCompile Include="Src\Dialog\SaveCloudDialog.cpp" />
     <ClCompile Include="Src\Dialog\CloudSelectionDialog.cpp" />
@@ -121,6 +130,7 @@
     <ClCompile Include="Src\funcs.cpp" />
     <ClCompile Include="Src\Linear_Depression_Plane.cpp" />
     <ClCompile Include="Src\main.cpp" />
+    <ClCompile Include="Src\Measure\GeodesicArcMeasurer.cpp" />
     <ClCompile Include="Src\Measure\MeasureArc.cpp" />
     <ClCompile Include="Src\PointCloudIncise.cpp" />
     <ClCompile Include="Src\PreProcessing\Cluster.cpp" />
@@ -136,6 +146,10 @@
     <QtMoc Include="Inc\Dialog\ParamDialog_sor.h" />
     <QtMoc Include="Inc\Dialog\ParamDialog_vg.h" />
     <QtMoc Include="Inc\Dialog\ParamDialog_measureArc.h" />
+    <QtMoc Include="Inc\Basic\PointPicker.h" />
+    <QtMoc Include="Inc\Dialog\ChoseCloudDialog.h" />
+    <QtMoc Include="Inc\Basic\PointPickerMgr.h" />
+    <QtMoc Include="Inc\Dialog\ParamDialogMeaArc.h" />
     <ClInclude Include="Inc\Dialog\RmCloudDialog.h" />
     <QtMoc Include="Inc\Dialog\SaveCloudDialog.h" />
     <ClInclude Include="Inc\ColorManager.h" />
@@ -149,6 +163,7 @@
     <ClInclude Include="Inc\Fitting\Fit_Cylinder.h" />
     <ClInclude Include="Inc\funcs.h" />
     <ClInclude Include="Inc\Linear_Depression_Plane.h" />
+    <ClInclude Include="Inc\Measure\GeodesicArcMeasurer.h" />
     <ClInclude Include="Inc\Measure\MeasureArc.h" />
     <ClInclude Include="Inc\PreProcessing\Cluster.h" />
     <ClInclude Include="Inc\PreProcessing\Filter_sor.h" />

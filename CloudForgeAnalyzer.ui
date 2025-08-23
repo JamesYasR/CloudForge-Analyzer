@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>1202</width>
-    <height>855</height>
+    <width>1194</width>
+    <height>833</height>
    </rect>
   </property>
   <property name="minimumSize">
@@ -102,7 +102,10 @@
          <number>0</number>
         </property>
         <item>
-         <layout class="QGridLayout" name="gridLayout_2" rowstretch="2,4,40,2,20,1,1" columnstretch="8,1,0">
+         <layout class="QGridLayout" name="gridLayout_2" rowstretch="2,4,40,2,20,1,1" columnstretch="11,2,0">
+          <property name="leftMargin">
+           <number>6</number>
+          </property>
           <property name="verticalSpacing">
            <number>3</number>
           </property>
@@ -411,6 +414,9 @@ QTextEdit {
             <property name="value">
              <number>24</number>
             </property>
+            <property name="alignment">
+             <set>Qt::AlignmentFlag::AlignLeading|Qt::AlignmentFlag::AlignLeft|Qt::AlignmentFlag::AlignTop</set>
+            </property>
            </widget>
           </item>
           <item row="6" column="1">
@@ -453,7 +459,8 @@ background-color: rgb(247, 254, 236);</string>
    </property>
    <property name="font">
     <font>
-     <pointsize>6</pointsize>
+     <pointsize>5</pointsize>
+     <kerning>true</kerning>
     </font>
    </property>
    <property name="orientation">
@@ -480,13 +487,14 @@ background-color: rgb(247, 254, 236);</string>
    <addaction name="separator"/>
    <addaction name="measure_cylinder"/>
    <addaction name="separator"/>
+   <addaction name="measure_geodisic"/>
   </widget>
   <widget class="QMenuBar" name="menuBar">
    <property name="geometry">
     <rect>
      <x>0</x>
      <y>0</y>
-     <width>1202</width>
+     <width>1194</width>
      <height>32</height>
     </rect>
    </property>
@@ -510,10 +518,10 @@ background-color: rgb(247, 254, 236);</string>
    <widget class="QMenu" name="menu_file">
     <property name="geometry">
      <rect>
-      <x>413</x>
+      <x>331</x>
       <y>211</y>
       <width>94</width>
-      <height>188</height>
+      <height>219</height>
      </rect>
     </property>
     <property name="maximumSize">
@@ -560,6 +568,7 @@ QMenu::item:selected {
      <addaction name="actiontest"/>
     </widget>
     <addaction name="action_fi_open"/>
+    <addaction name="action_fi_add"/>
     <addaction name="menu_recent"/>
     <addaction name="action_fi_save"/>
     <addaction name="action_fi_saveas"/>
@@ -805,6 +814,26 @@ QMenu::item:selected {
   <action name="action_ed_cleangall">
    <property name="text">
     <string>清除全部</string>
+   </property>
+  </action>
+  <action name="action_fi_add">
+   <property name="text">
+    <string>添加</string>
+   </property>
+  </action>
+  <action name="measure_geodisic">
+   <property name="icon">
+    <iconset resource="CloudForgeAnalyzer.qrc">
+     <normaloff>:/CloudForgeAnalyzer/Icons/icons_measureArc.png</normaloff>:/CloudForgeAnalyzer/Icons/icons_measureArc.png</iconset>
+   </property>
+   <property name="text">
+    <string>弧</string>
+   </property>
+   <property name="toolTip">
+    <string>测地线积分方法测量弧长</string>
+   </property>
+   <property name="menuRole">
+    <enum>QAction::MenuRole::NoRole</enum>
    </property>
   </action>
  </widget>

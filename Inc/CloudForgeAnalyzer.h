@@ -34,7 +34,9 @@
 #include "Fitting/Fit_Cylinder.h"
 #include "ColorManager.h"
 #include "Measure/MeasureArc.h"
-
+#include "Measure/GeodesicArcMeasurer.h"
+#include "Basic/PointPicker.h"
+#include "Basic/PointPickerMgr.h"
 
 QT_BEGIN_NAMESPACE
 namespace Ui { class CloudForgeAnalyzerClass; };
@@ -59,6 +61,7 @@ private slots:
     void Slot_fi_open_Triggered();
     void Slot_fi_save_Triggered();
     void Slot_fi_saveas_Triggered();
+    void Slot_fi_add_Triggered();
     void Slot_ph_1_Triggered();
     void Slot_fl_1_Triggered();
     void Slot_fl_2_Triggered();
@@ -67,7 +70,8 @@ private slots:
     void Slot_ed_cleanall_Triggered();
     void Slot_fit_cy_Triggered();
 
-    void Tool_SetMeasureCylinder(bool checked);
+    void Tool_SetMeasureCylinder();
+    void Tool_MeasureGeodisic();
     void Update_PointCounts();
 private:
     //        
@@ -82,7 +86,11 @@ private:
     void Update_CFmes(std::string cfmes);
     void mainLoop_Init();
     //          
+    void InitializeProgressBar();
+    void SetProgressBarValue(int percentage, const QString& message = "");
+    void ResetProgressBar();
     
+
     pcl::visualization::PCLVisualizer::Ptr viewer;
     pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZ>::Ptr renderer_custom;
     std::map<std::string, pcl::PointCloud<pcl::PointXYZ>::Ptr> CloudMap;
