@@ -125,6 +125,7 @@
       <QtMocFileName Condition="'$(Configuration)|$(Platform)'=='Release|x64'">%(Filename).moc</QtMocFileName>
     </ClCompile>
     <ClCompile Include="Src\Dialog\ParamDialogCurvSeg.cpp" />
+    <ClCompile Include="Src\Dialog\ParamDialogProtrusion.cpp" />
     <ClCompile Include="Src\Dialog\ParamDialog_measureArc.cpp" />
     <ClCompile Include="Src\Dialog\ParamDialogMeaArc.cpp" />
     <ClCompile Include="Src\Dialog\RmCloudDialog.cpp" />
@@ -147,6 +148,7 @@
     <ClCompile Include="Src\PreProcessing\CurvatureSegmentation.cpp" />
     <ClCompile Include="Src\PreProcessing\Filter_sor.cpp" />
     <ClCompile Include="Src\PreProcessing\Filter_voxel.cpp" />
+    <ClCompile Include="Src\Preprocessing\ProtrusionSegmentation.cpp" />
     <ClCompile Include="Src\Protrusion_Depression_Cylinder.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -175,6 +177,7 @@
     <ClInclude Include="Inc\Dialog\FitCloudDialog.h" />
     <QtMoc Include="Inc\Dialog\ParamDialog_FittingCylinder.h" />
     <QtMoc Include="Inc\Dialog\ParamDialogBase.h" />
+    <QtMoc Include="Inc\Dialog\​​ParamDialogProtrusion.h" />
     <ClInclude Include="Inc\Fitting\Fitting.h" />
     <ClInclude Include="Inc\Fitting\Fit_Cylinder.h" />
     <ClInclude Include="Inc\funcs.h" />
@@ -188,6 +191,7 @@
     <ClInclude Include="Inc\PreProcessing\Filter_voxel.h" />
     <ClInclude Include="Inc\PreProcessing\headers.h" />
     <ClInclude Include="Inc\PreProcessing\PreProcessing.h" />
+    <ClInclude Include="Inc\Preprocessing\ProtrusionSegmentation.h" />
     <ClInclude Include="Inc\Protrusion_Depression_Cylinder.h" />
     <QtMoc Include="Inc\PointCloudIncise.h" />
   </ItemGroup>

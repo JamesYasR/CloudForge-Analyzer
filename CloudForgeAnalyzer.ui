@@ -638,6 +638,7 @@ QMenu::item:selected {
     <addaction name="action_ph_1"/>
     <addaction name="menu_filter"/>
     <addaction name="action_CurvSeg"/>
+    <addaction name="action_ProtruSeg"/>
    </widget>
    <widget class="QMenu" name="menu_fit">
     <property name="styleSheet">
@@ -840,6 +841,11 @@ QMenu::item:selected {
   <action name="action_CurvSeg">
    <property name="text">
     <string>按曲率分割</string>
+   </property>
+  </action>
+  <action name="action_ProtruSeg">
+   <property name="text">
+    <string>曲面突起分割</string>
    </property>
   </action>
  </widget>

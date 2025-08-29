@@ -55,11 +55,13 @@ void CloudForgeAnalyzer::InitalizeConnects() {
     connect(ui->action_fi_add, &QAction::triggered, this, &CloudForgeAnalyzer::Slot_fi_add_Triggered);
     connect(ui->action_ph_1, &QAction::triggered, this, &CloudForgeAnalyzer::Slot_ph_1_Triggered);
     connect(ui->action_CurvSeg, &QAction::triggered, this, &CloudForgeAnalyzer::Slot_ph_CurvSeg_Triggered);
+    connect(ui->action_ProtruSeg, &QAction::triggered, this, &CloudForgeAnalyzer::Slot_ph_ProtruSeg_Triggered);
     connect(ui->action_fl_1, &QAction::triggered, this, &CloudForgeAnalyzer::Slot_fl_1_Triggered);
     connect(ui->action_fl_2, &QAction::triggered, this, &CloudForgeAnalyzer::Slot_fl_2_Triggered);
     connect(ui->action_fit_cy, &QAction::triggered, this, &CloudForgeAnalyzer::Slot_fit_cy_Triggered);
     connect(ui->measure_cylinder, &QAction::triggered,this, &CloudForgeAnalyzer::Tool_SetMeasureCylinder);
     connect(ui->measure_geodisic, &QAction::triggered, this, &CloudForgeAnalyzer::Tool_MeasureGeodisic);
+
 }
 
 void CloudForgeAnalyzer::mainLoop_Init() {
@@ -69,6 +71,22 @@ void CloudForgeAnalyzer::mainLoop_Init() {
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////*槽函数start*/
+void CloudForgeAnalyzer::Slot_ph_ProtruSeg_Triggered() {
+    ChoseCloudDialog dialog(CloudMap, ColorMap);
+    if (dialog.getSelectedList().empty()) {
+        return;
+    }
+    pcl::PointCloud<pcl::PointXYZ>::Ptr tempcloud = CloudMap[dialog.getSelectedList()[0]];
+    ProtrusionSegmentation ps(tempcloud);
+    ps.segment();
+    pcl::PointCloud<pcl::PointXYZ>::Ptr planar = ps.getPlanarCloud();
+    pcl::PointCloud<pcl::PointXYZ>::Ptr nonplanar = ps.getProtrusionCloud();
+    ColorManager c1(255, 0, 0);
+    ColorManager c2(0, 255, 0);
+    AddPointCloud("planar", planar, c1);
+    AddPointCloud("nonplanar", nonplanar, c2);
+}
+
 void CloudForgeAnalyzer::Slot_ph_CurvSeg_Triggered() {
 	ChoseCloudDialog dialog(CloudMap, ColorMap);
     if (dialog.getSelectedList().empty()) {

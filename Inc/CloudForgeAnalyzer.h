@@ -48,6 +48,7 @@ private slots:
     void Slot_ed_cleanall_Triggered();
     void Slot_fit_cy_Triggered();
     void Slot_ph_CurvSeg_Triggered();
+    void Slot_ph_ProtruSeg_Triggered();
 
     void Tool_SetMeasureCylinder();
     void Tool_MeasureGeodisic();

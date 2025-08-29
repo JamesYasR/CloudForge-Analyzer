@@ -1,4 +1,4 @@
-#include "RmCloudDialog.h"
+﻿#include "RmCloudDialog.h"
 #include "SaveCloudDialog.h"
 #include "ParamDialog_ec.h"
 #include "ParamDialog_sor.h"
@@ -9,5 +9,5 @@
 #include "ChoseCloudDialog.h"
 #include "ParamDialogMeaArc.h"
 #include "ParamDialogCurvSeg.h"
-
+#include "​​ParamDialogProtrusion.h"
 
