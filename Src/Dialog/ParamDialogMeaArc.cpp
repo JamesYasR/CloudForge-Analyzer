@@ -6,5 +6,5 @@ ParamDialogMeaArc::ParamDialogMeaArc(QWidget* parent)
     QVector<QString> labels = { "base_radius" };
     QVector<QString> defaults = { "0.5" };
     setupUI(labels, defaults);
-    setWindowTitle("²âµØÏßËÑË÷");
+    setWindowTitle("æµ‹åœ°çº¿æœç´¢");
 }

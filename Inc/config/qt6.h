@@ -1,0 +1,10 @@
+#pragma once
+#include <QtWidgets/QMainWindow>
+#include <QToolButton>
+#include <QMenu>
+#include <QAction>
+#include "QDir"
+#include "QFileDialog"
+#include <QTimer>
+#include <QVTKOpenGLNativeWidget.h>
+#include "ui_CloudForgeAnalyzer.h"

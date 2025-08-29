@@ -8,5 +8,6 @@
 #include "ParamDialogBase.h"
 #include "ChoseCloudDialog.h"
 #include "ParamDialogMeaArc.h"
+#include "ParamDialogCurvSeg.h"
 
 

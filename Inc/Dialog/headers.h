@@ -22,7 +22,7 @@
 #include <pcl/point_types_conversion.h> // 点云转换
 #include <vtkPointData.h>
 #include <vtkCellArray.h>
-#include "ColorManager.h"
+#include "Basic/Basic.h"
 #include "Dialog/CloudSelectionDialog.h"
 
 //vs git test

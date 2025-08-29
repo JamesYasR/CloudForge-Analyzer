@@ -1,42 +1,20 @@
 #pragma once
-#include <QtWidgets/QMainWindow>
-#include <QToolButton>
-#include <QMenu>
-#include <QAction>
-#include "QDir"
-#include "QFileDialog"
-#include <QTimer>
-#include "ui_CloudForgeAnalyzer.h"
-#include <vtkGenericOpenGLRenderWindow.h>
-#include <pcl/point_cloud.h>
-#include <pcl/point_types.h>
-#include <pcl/io/pcd_io.h>
-#include <pcl/io/ply_io.h>
-#include <pcl/visualization/pcl_visualizer.h>
-#include <QVTKOpenGLNativeWidget.h>
-#include <vtkRenderer.h>
-#include <vtkSphereSource.h>
-#include <vtkPolyDataMapper.h>
-#include <vtkActor.h>
-#include <vtkRenderWindow.h>
-#include <vtkNamedColors.h>
-#include <vtkProperty.h>
-#include <vtkSmartPointer.h>
-#include <vtkCamera.h>
-#include <vtkOutputWindow.h>
+#include "config/qt6.h"
+#include "config/pcl114.h"
+#include "config/vtk9.h"
+#include "Fitting/Fitting.h"
+#include "PreProcessing/PreProcessing.h"
+#include "Measure/Measure.h"
+#include "Basic/Basic.h"
+
 
 #include <string>
 #include <filesystem>
 #include "Protrusion_Depression_Cylinder.h"
 #include "Linear_Depression_Plane.h"
 #include "funcs.h"
-#include "PreProcessing/PreProcessing.h"
-#include "Fitting/Fit_Cylinder.h"
-#include "ColorManager.h"
-#include "Measure/MeasureArc.h"
-#include "Measure/GeodesicArcMeasurer.h"
-#include "Basic/PointPicker.h"
-#include "Basic/PointPickerMgr.h"
+
+
 
 QT_BEGIN_NAMESPACE
 namespace Ui { class CloudForgeAnalyzerClass; };
@@ -69,6 +47,7 @@ private slots:
     void Slot_ed_cleangeo_Triggered();
     void Slot_ed_cleanall_Triggered();
     void Slot_fit_cy_Triggered();
+    void Slot_ph_CurvSeg_Triggered();
 
     void Tool_SetMeasureCylinder();
     void Tool_MeasureGeodisic();

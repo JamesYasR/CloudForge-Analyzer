@@ -54,6 +54,7 @@ void CloudForgeAnalyzer::InitalizeConnects() {
     connect(ui->action_fi_saveas, &QAction::triggered, this, &CloudForgeAnalyzer::Slot_fi_saveas_Triggered);
     connect(ui->action_fi_add, &QAction::triggered, this, &CloudForgeAnalyzer::Slot_fi_add_Triggered);
     connect(ui->action_ph_1, &QAction::triggered, this, &CloudForgeAnalyzer::Slot_ph_1_Triggered);
+    connect(ui->action_CurvSeg, &QAction::triggered, this, &CloudForgeAnalyzer::Slot_ph_CurvSeg_Triggered);
     connect(ui->action_fl_1, &QAction::triggered, this, &CloudForgeAnalyzer::Slot_fl_1_Triggered);
     connect(ui->action_fl_2, &QAction::triggered, this, &CloudForgeAnalyzer::Slot_fl_2_Triggered);
     connect(ui->action_fit_cy, &QAction::triggered, this, &CloudForgeAnalyzer::Slot_fit_cy_Triggered);
@@ -68,6 +69,23 @@ void CloudForgeAnalyzer::mainLoop_Init() {
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////*槽函数start*/
+void CloudForgeAnalyzer::Slot_ph_CurvSeg_Triggered() {
+	ChoseCloudDialog dialog(CloudMap, ColorMap);
+    if (dialog.getSelectedList().empty()) {
+        return;
+	}
+    pcl::PointCloud<pcl::PointXYZ>::Ptr tempcloud = CloudMap[dialog.getSelectedList()[0]];
+    CurvatureSegmentation cs(tempcloud);
+    cs.segment();
+    pcl::PointCloud<pcl::PointXYZ>::Ptr planar = cs.getPlanarCloud();
+	pcl::PointCloud<pcl::PointXYZ>::Ptr nonplanar = cs.getNonPlanarCloud();
+	ColorManager c1(255,0 , 0);
+    ColorManager c2(0, 255, 0);
+    AddPointCloud("planar", planar, c1);
+	AddPointCloud("nonplanar", nonplanar, c2);
+}
+
+
 void CloudForgeAnalyzer::Update_PointCounts() {
     int num = 0;
     for (const auto& cloud : CloudMap) {

@@ -1,4 +1,4 @@
-#include "ColorManager.h"
+#include "Basic/ColorManager.h"
 
 ColorManager::ColorManager(double R, double G, double B) {
 	r = R;

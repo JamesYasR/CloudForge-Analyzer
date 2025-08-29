@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>1194</width>
-    <height>833</height>
+    <height>824</height>
    </rect>
   </property>
   <property name="minimumSize">
@@ -637,6 +637,7 @@ QMenu::item:selected {
     </widget>
     <addaction name="action_ph_1"/>
     <addaction name="menu_filter"/>
+    <addaction name="action_CurvSeg"/>
    </widget>
    <widget class="QMenu" name="menu_fit">
     <property name="styleSheet">
@@ -834,6 +835,11 @@ QMenu::item:selected {
    </property>
    <property name="menuRole">
     <enum>QAction::MenuRole::NoRole</enum>
+   </property>
+  </action>
+  <action name="action_CurvSeg">
+   <property name="text">
+    <string>按曲率分割</string>
    </property>
   </action>
  </widget>

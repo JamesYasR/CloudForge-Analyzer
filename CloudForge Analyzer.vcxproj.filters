@@ -51,6 +51,9 @@
     <Filter Include="Source Files\Basic">
       <UniqueIdentifier>{6985a9d1-7c33-4a18-afea-b0f4b752a66f}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Header Files\config">
+      <UniqueIdentifier>{173d000d-de3a-4fe4-a4ac-071d76af4dc3}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <QtRcc Include="CloudForgeAnalyzer.qrc">
@@ -109,9 +112,6 @@
     <ClCompile Include="Src\Dialog\FitCloudDialog.cpp">
       <Filter>Source Files\Dialog</Filter>
     </ClCompile>
-    <ClCompile Include="Src\ColorManager.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="Src\Dialog\CloudSelectionDialog.cpp">
       <Filter>Source Files\Dialog</Filter>
     </ClCompile>
@@ -141,6 +141,15 @@
     </ClCompile>
     <ClCompile Include="Src\Dialog\ParamDialogMeaArc.cpp">
       <Filter>Source Files\Dialog</Filter>
+    </ClCompile>
+    <ClCompile Include="Src\Dialog\ParamDialogCurvSeg.cpp">
+      <Filter>Source Files\Dialog</Filter>
+    </ClCompile>
+    <ClCompile Include="Src\PreProcessing\CurvatureSegmentation.cpp">
+      <Filter>Source Files\PreProcessing</Filter>
+    </ClCompile>
+    <ClCompile Include="Src\Basic\ColorManager.cpp">
+      <Filter>Source Files\Basic</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -186,6 +195,9 @@
     <QtMoc Include="Inc\Dialog\ParamDialogMeaArc.h">
       <Filter>Header Files\Dialog</Filter>
     </QtMoc>
+    <QtMoc Include="Inc\Dialog\ParamDialogCurvSeg.h">
+      <Filter>Header Files\Dialog</Filter>
+    </QtMoc>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Inc\funcs.h">
@@ -224,9 +236,6 @@
     <ClInclude Include="Inc\Fitting\Fitting.h">
       <Filter>Header Files\Fitting</Filter>
     </ClInclude>
-    <ClInclude Include="Inc\ColorManager.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="Inc\Dialog\RmCloudDialog.h">
       <Filter>Header Files\Dialog</Filter>
     </ClInclude>
@@ -238,6 +247,27 @@
     </ClInclude>
     <ClInclude Include="Inc\Measure\GeodesicArcMeasurer.h">
       <Filter>Header Files\Measure</Filter>
+    </ClInclude>
+    <ClInclude Include="Inc\PreProcessing\CurvatureSegmentation.h">
+      <Filter>Header Files\PreProcessing</Filter>
+    </ClInclude>
+    <ClInclude Include="Inc\Basic\Basic.h">
+      <Filter>Header Files\Basic</Filter>
+    </ClInclude>
+    <ClInclude Include="Inc\Basic\ColorManager.h">
+      <Filter>Header Files\Basic</Filter>
+    </ClInclude>
+    <ClInclude Include="Inc\Measure\Measure.h">
+      <Filter>Header Files\Measure</Filter>
+    </ClInclude>
+    <ClInclude Include="Inc\config\pcl114.h">
+      <Filter>Header Files\config</Filter>
+    </ClInclude>
+    <ClInclude Include="Inc\config\qt6.h">
+      <Filter>Header Files\config</Filter>
+    </ClInclude>
+    <ClInclude Include="Inc\config\vtk9.h">
+      <Filter>Header Files\config</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

@@ -11,7 +11,6 @@
 #include <QPushButton>
 #include <QLabel>
 #include "Dialog/Dialog.h"
-#include <pcl/filters/extract_indices.h>
 #include <pcl/kdtree/kdtree.h>
 #include <vector>
 #include <map>

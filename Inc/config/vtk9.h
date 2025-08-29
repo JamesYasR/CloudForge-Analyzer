@@ -1,0 +1,12 @@
+#pragma once
+#include <vtkRenderer.h>
+#include <vtkSphereSource.h>
+#include <vtkPolyDataMapper.h>
+#include <vtkActor.h>
+#include <vtkRenderWindow.h>
+#include <vtkNamedColors.h>
+#include <vtkProperty.h>
+#include <vtkSmartPointer.h>
+#include <vtkCamera.h>
+#include <vtkOutputWindow.h>
+#include <vtkGenericOpenGLRenderWindow.h>
