@@ -115,6 +115,9 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Src\Basic\ColorManager.cpp" />
+    <ClCompile Include="Src\Basic\funcs.cpp" />
+    <ClCompile Include="Src\Basic\Line.cpp" />
+    <ClCompile Include="Src\Basic\ManualPolygonClipper.cpp" />
     <ClCompile Include="Src\Basic\PointPicker.cpp" />
     <ClCompile Include="Src\Basic\PointPickerMgr.cpp" />
     <ClCompile Include="Src\CloudForgeAnalyzer.cpp" />
@@ -124,8 +127,11 @@
       <DynamicSource Condition="'$(Configuration)|$(Platform)'=='Release|x64'">input</DynamicSource>
       <QtMocFileName Condition="'$(Configuration)|$(Platform)'=='Release|x64'">%(Filename).moc</QtMocFileName>
     </ClCompile>
+    <ClCompile Include="Src\Dialog\ChoseLineDialog.cpp" />
+    <ClCompile Include="Src\Dialog\LineSelectionDialog.cpp" />
     <ClCompile Include="Src\Dialog\ParamDialogCurvSeg.cpp" />
     <ClCompile Include="Src\Dialog\ParamDialogProtrusion.cpp" />
+    <ClCompile Include="Src\Dialog\ParamDialog_FittingLine.cpp" />
     <ClCompile Include="Src\Dialog\ParamDialog_measureArc.cpp" />
     <ClCompile Include="Src\Dialog\ParamDialogMeaArc.cpp" />
     <ClCompile Include="Src\Dialog\RmCloudDialog.cpp" />
@@ -138,11 +144,12 @@
     <ClCompile Include="Src\Dialog\ParamDialog_sor.cpp" />
     <ClCompile Include="Src\Dialog\ParamDialog_vg.cpp" />
     <ClCompile Include="Src\Fitting\Fit_Cylinder.cpp" />
-    <ClCompile Include="Src\funcs.cpp" />
+    <ClCompile Include="Src\Fitting\Fit_Line.cpp" />
     <ClCompile Include="Src\Linear_Depression_Plane.cpp" />
     <ClCompile Include="Src\main.cpp" />
     <ClCompile Include="Src\Measure\GeodesicArcMeasurer.cpp" />
     <ClCompile Include="Src\Measure\MeasureArc.cpp" />
+    <ClCompile Include="Src\Measure\MeasurePallel.cpp" />
     <ClCompile Include="Src\PointCloudIncise.cpp" />
     <ClCompile Include="Src\PreProcessing\Cluster.cpp" />
     <ClCompile Include="Src\PreProcessing\CurvatureSegmentation.cpp" />
@@ -166,9 +173,15 @@
     <QtMoc Include="Inc\Dialog\ParamDialogCurvSeg.h" />
     <ClInclude Include="Inc\Basic\Basic.h" />
     <ClInclude Include="Inc\Basic\ColorManager.h" />
+    <QtMoc Include="Inc\Basic\ManualPolygonClipper.h" />
+    <ClInclude Include="Inc\Basic\funcs.h" />
+    <ClInclude Include="Inc\Basic\Line.h" />
     <ClInclude Include="Inc\config\pcl114.h" />
     <ClInclude Include="Inc\config\qt6.h" />
     <ClInclude Include="Inc\config\vtk9.h" />
+    <QtMoc Include="Inc\Dialog\ParamDialog_FittingLine.h" />
+    <QtMoc Include="Inc\Dialog\ChoseLineDialog.h" />
+    <QtMoc Include="Inc\Dialog\LineSelectionDialog.h" />
     <ClInclude Include="Inc\Dialog\RmCloudDialog.h" />
     <QtMoc Include="Inc\Dialog\SaveCloudDialog.h" />
     <ClInclude Include="Inc\Dialog\Dialog.h" />
@@ -180,11 +193,12 @@
     <QtMoc Include="Inc\Dialog\​​ParamDialogProtrusion.h" />
     <ClInclude Include="Inc\Fitting\Fitting.h" />
     <ClInclude Include="Inc\Fitting\Fit_Cylinder.h" />
-    <ClInclude Include="Inc\funcs.h" />
+    <ClInclude Include="Inc\Fitting\Fit_Line.h" />
     <ClInclude Include="Inc\Linear_Depression_Plane.h" />
     <ClInclude Include="Inc\Measure\GeodesicArcMeasurer.h" />
     <ClInclude Include="Inc\Measure\Measure.h" />
     <ClInclude Include="Inc\Measure\MeasureArc.h" />
+    <ClInclude Include="Inc\Measure\MeasurePallel.h" />
     <ClInclude Include="Inc\PreProcessing\Cluster.h" />
     <ClInclude Include="Inc\PreProcessing\CurvatureSegmentation.h" />
     <ClInclude Include="Inc\PreProcessing\Filter_sor.h" />

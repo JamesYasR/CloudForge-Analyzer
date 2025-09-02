@@ -10,4 +10,6 @@
 #include "ParamDialogMeaArc.h"
 #include "ParamDialogCurvSeg.h"
 #include "​​ParamDialogProtrusion.h"
-
+#include "ParamDialog_FittingLine.h"
+#include "LineSelectionDialog.h"
+#include "ChoseLineDialog.h"

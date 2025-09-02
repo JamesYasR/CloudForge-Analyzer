@@ -34,6 +34,7 @@ void CloudForgeAnalyzer::InitalizeRenderer() {
     vtkSmartPointer<vtkGenericOpenGLRenderWindow> renderWindow = vtkSmartPointer<vtkGenericOpenGLRenderWindow>::New();
     renderWindow->AddRenderer(renderer);
     viewer.reset(new pcl::visualization::PCLVisualizer(renderer, renderWindow, "viewer", false));
+    viewer->getRenderWindow()->GlobalWarningDisplayOff();
     viewer->setupInteractor(ui->winOfAnalyzer->interactor(), ui->winOfAnalyzer->renderWindow());
     ui->winOfAnalyzer->setRenderWindow(viewer->getRenderWindow());
     QApplication::processEvents();
@@ -59,8 +60,11 @@ void CloudForgeAnalyzer::InitalizeConnects() {
     connect(ui->action_fl_1, &QAction::triggered, this, &CloudForgeAnalyzer::Slot_fl_1_Triggered);
     connect(ui->action_fl_2, &QAction::triggered, this, &CloudForgeAnalyzer::Slot_fl_2_Triggered);
     connect(ui->action_fit_cy, &QAction::triggered, this, &CloudForgeAnalyzer::Slot_fit_cy_Triggered);
+    connect(ui->action_fit_line, &QAction::triggered, this, &CloudForgeAnalyzer::Slot_fit_line_Triggered);
     connect(ui->measure_cylinder, &QAction::triggered,this, &CloudForgeAnalyzer::Tool_SetMeasureCylinder);
     connect(ui->measure_geodisic, &QAction::triggered, this, &CloudForgeAnalyzer::Tool_MeasureGeodisic);
+    connect(ui->measure_parallel, &QAction::triggered, this, &CloudForgeAnalyzer::Tool_MeasureParallel);
+    connect(ui->action_Clip, &QAction::triggered, this, &CloudForgeAnalyzer::Tool_Clip);
 
 }
 
@@ -71,6 +75,74 @@ void CloudForgeAnalyzer::mainLoop_Init() {
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////*槽函数start*/
+void CloudForgeAnalyzer::Tool_MeasureParallel() {
+	ChoseLineDialog dialog(LineMap);
+    if (dialog.getSelectedList().empty()||dialog.getSelectedList().size()!=2) {
+        return;
+    }
+    Line* line1 = new Line();
+    Line* line2 = new Line();
+    line1 = &LineMap[dialog.getSelectedList()[0]];
+    line2 = &LineMap[dialog.getSelectedList()[1]];
+    MeasurePallel measurer(line1->dir_vector,line2->dir_vector);
+	float parallelism = measurer.parallelism();
+	TeEDebug("平行度(夹角):" + std::to_string(parallelism) + "度");
+    Update_CFmes("平行度(夹角):" + std::to_string(parallelism) + "度");
+}
+
+void CloudForgeAnalyzer::Tool_Clip() {
+    ui->winOfAnalyzer->makeCurrent();
+    if (!ui->winOfAnalyzer->interactor()) {
+        qCritical() << "渲染窗口交互器未初始化!";
+        return;
+    }
+    ChoseCloudDialog dialog(CloudMap, ColorMap);
+    if (dialog.getSelectedList().empty()) {
+        return;
+    }
+    pcl::PointCloud<pcl::PointXYZ>::Ptr tempcloud = CloudMap[dialog.getSelectedList()[0]];
+
+    // 获取主窗口的渲染器和交互器
+    vtkRenderWindow* mainRenderWindow = ui->winOfAnalyzer->renderWindow();
+    vtkRenderWindowInteractor* mainInteractor = ui->winOfAnalyzer->interactor();
+
+    // 创建裁剪器
+    ManualPolygonClipper* clipper = new ManualPolygonClipper(
+        tempcloud,
+        mainRenderWindow,
+        mainInteractor,
+        viewer.get(),
+        this
+    );
+    QObject::connect(clipper, &ManualPolygonClipper::destroyed, this, [this]() {
+        // 重置交互器以防止悬空指针
+        ui->winOfAnalyzer->interactor()->SetRenderWindow(nullptr);
+        ui->winOfAnalyzer->interactor()->SetInteractorStyle(nullptr);
+        });
+    // 连接裁剪完成信号
+    connect(clipper, &ManualPolygonClipper::clippingFinished, this,
+        [this, clipper]() {
+            // 先获取裁剪结果
+            pcl::PointCloud<pcl::PointXYZ>::Ptr clippedCloud = clipper->getClippedCloud();
+
+            // 恢复交互器状态
+            clipper->cleanup();
+
+            // 处理结果
+            if (!clippedCloud->empty()) {
+                ColorManager color(0, 255, 0);
+                ClearAllPointCloud();
+                AddPointCloud("clipped", clippedCloud, color);
+            }
+			RestoreDefaultInteractor();
+            // 安全删除
+            clipper->deleteLater();
+        });
+
+    // 开始裁剪
+    clipper->startClipping();
+}
+
 void CloudForgeAnalyzer::Slot_ph_ProtruSeg_Triggered() {
     ChoseCloudDialog dialog(CloudMap, ColorMap);
     if (dialog.getSelectedList().empty()) {
@@ -114,7 +186,6 @@ void CloudForgeAnalyzer::Update_PointCounts() {
 }
 
 void CloudForgeAnalyzer::Tool_SetMeasureCylinder() {
-    //isCylinderMeasure = checked;
     FitCloudDialog dialog(CloudMap, ColorMap);
     if (dialog.getSelectedList().empty()) {
         return;
@@ -210,7 +281,38 @@ void CloudForgeAnalyzer::Tool_MeasureGeodisic() {
 }
 
 
+void CloudForgeAnalyzer::Slot_fit_line_Triggered() {
+    ChoseCloudDialog dialog(CloudMap, ColorMap);
+    if (dialog.getSelectedList().empty()) return;
 
+    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud = CloudMap[dialog.getSelectedList()[0]];
+    Fit_Line fitter(cloud);
+
+    // 获取结果并显示
+    pcl::PointCloud<pcl::PointXYZ>::Ptr inliers = fitter.Get_Inliers();
+    pcl::PointCloud<pcl::PointXYZ>::Ptr outliers = fitter.Get_Outliers();
+
+    ColorManager color1(0, 255, 0); // 内点绿色
+    ColorManager color2(255, 0, 0); // 外点红色
+
+    AddPointCloud("line_inliers", inliers, color1);
+    AddPointCloud("line_outliers", outliers, color2);
+
+    // 可视化直线
+    Eigen::VectorXf coeffs = fitter.Get_Coeff_in();
+    const pcl::PointXYZ& start = fitter.Get_StartPoint();
+    const pcl::PointXYZ& end = fitter.Get_EndPoint();
+    
+    // 使用AddLine函数添加直线
+    ColorManager lineColor(255, 0, 0); // 红色
+	std::string lineName = GenerateRandomName("fitted_line_");
+    AddLine(lineName, start, end, lineColor, 3.0, coeffs);
+
+    std::string msg="直线上一点: (" + std::to_string(coeffs[0]) + ", " + std::to_string(coeffs[1]) + ", " + std::to_string(coeffs[2]) + ")\n"
+        + "方向向量: (" + std::to_string(coeffs[3]) + ", " + std::to_string(coeffs[4]) + ", " + std::to_string(coeffs[5]) + ")";
+    Update_CFmes(msg);
+    TeEDebug(msg);
+}
 
 void CloudForgeAnalyzer::Slot_fit_cy_Triggered() {
     FitCloudDialog window(CloudMap, ColorMap);
@@ -442,7 +544,10 @@ void CloudForgeAnalyzer::Slot_fl_1_Triggered() {
     UpdateCamera(0, 0, 1);
 }
 void CloudForgeAnalyzer::Slot_ph_1_Triggered() {
-    Cluster cs(cloud);
+    ChoseCloudDialog dialog(CloudMap, ColorMap);
+    if (dialog.getSelectedList().empty()) return;
+    pcl::PointCloud<pcl::PointXYZ>::Ptr tempcloud = CloudMap[dialog.getSelectedList()[0]];
+    Cluster cs(tempcloud);
     if (cs.GetClusterMap().empty() || cs.GetColorMap().empty()) {
         return;
     }
@@ -588,4 +693,84 @@ void CloudForgeAnalyzer::SetProgressBarValue(int percentage, const QString& mess
 void CloudForgeAnalyzer::ResetProgressBar() {
     // 重置为100%完成状态
     SetProgressBarValue(100, "就绪");
+}
+
+void CloudForgeAnalyzer::RestoreDefaultInteractor() {
+    ui->winOfAnalyzer->makeCurrent();
+    vtkRenderWindow* renderWindow = ui->winOfAnalyzer->renderWindow();
+    if (!renderWindow) {
+        return;
+    }
+
+    // 如果当前有交互器，先禁用然后移除
+    vtkRenderWindowInteractor* oldInteractor = ui->winOfAnalyzer->interactor();
+    if (oldInteractor) {
+        oldInteractor->Disable();
+        oldInteractor->SetInteractorStyle(nullptr);
+        oldInteractor->SetRenderWindow(nullptr);
+
+    }
+
+    // 创建新的交互器
+    vtkNew<vtkRenderWindowInteractor> newInteractor;
+    newInteractor->SetRenderWindow(renderWindow);
+    // 设置新的交互器到QVTKOpenGLNativeWidget
+    ui->winOfAnalyzer->setRenderWindow(renderWindow);  // 这可能会将新的交互器设置进去
+
+    // 重新设置PCLVisualizer的交互器
+    viewer->setupInteractor(newInteractor, renderWindow);
+    // 设置交互器样式
+    vtkNew<vtkInteractorStyleSwitch> styleSwitch;
+    styleSwitch->SetCurrentStyleToTrackballCamera();
+    newInteractor->SetInteractorStyle(styleSwitch);
+
+    // 激活并启动事件循环
+    newInteractor->Initialize();
+    newInteractor->Start();
+
+    // 更新窗口
+    renderWindow->Render();
+    ui->winOfAnalyzer->update();
+}
+
+void CloudForgeAnalyzer::AddLine(const std::string& name,
+    const pcl::PointXYZ& start,
+    const pcl::PointXYZ& end,
+    const ColorManager& color,
+    double width,
+    Eigen::VectorXf coeffs)
+{
+    // 如果已存在同名直线则先删除
+    DeleteLine(name);
+
+    // 创建直线信息
+    Line newline(start,end,color,width,coeffs);
+    // 添加到容器
+    LineMap.emplace(name, newline);
+
+    // 添加到可视化
+    viewer->addLine<pcl::PointXYZ>(start, end,
+        color.r / 255.0, color.g / 255.0, color.b / 255.0,
+        name);
+    viewer->setShapeRenderingProperties(pcl::visualization::PCL_VISUALIZER_LINE_WIDTH,
+        width, name);
+
+    // 更新渲染
+    ui->winOfAnalyzer->renderWindow()->Render();
+    ui->winOfAnalyzer->update();
+}
+
+void CloudForgeAnalyzer::DeleteLine(const std::string& name) {
+    if (LineMap.find(name) != LineMap.end()) {
+        viewer->removeShape(name);
+        LineMap.erase(name);
+    }
+}
+
+// 清空所有直线
+void CloudForgeAnalyzer::ClearAllLines() {
+    for (auto& pair : LineMap) {
+        viewer->removeShape(pair.first);
+    }
+    LineMap.clear();
 }

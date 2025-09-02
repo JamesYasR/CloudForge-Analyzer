@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>1194</width>
-    <height>824</height>
+    <width>1203</width>
+    <height>833</height>
    </rect>
   </property>
   <property name="minimumSize">
@@ -459,7 +459,7 @@ background-color: rgb(247, 254, 236);</string>
    </property>
    <property name="font">
     <font>
-     <pointsize>5</pointsize>
+     <pointsize>6</pointsize>
      <kerning>true</kerning>
     </font>
    </property>
@@ -468,8 +468,8 @@ background-color: rgb(247, 254, 236);</string>
    </property>
    <property name="iconSize">
     <size>
-     <width>18</width>
-     <height>18</height>
+     <width>16</width>
+     <height>16</height>
     </size>
    </property>
    <property name="toolButtonStyle">
@@ -486,15 +486,18 @@ background-color: rgb(247, 254, 236);</string>
    </attribute>
    <addaction name="separator"/>
    <addaction name="measure_cylinder"/>
-   <addaction name="separator"/>
    <addaction name="measure_geodisic"/>
+   <addaction name="separator"/>
+   <addaction name="measure_parallel"/>
+   <addaction name="action_Clip"/>
+   <addaction name="separator"/>
   </widget>
   <widget class="QMenuBar" name="menuBar">
    <property name="geometry">
     <rect>
      <x>0</x>
      <y>0</y>
-     <width>1194</width>
+     <width>1203</width>
      <height>32</height>
     </rect>
    </property>
@@ -667,6 +670,7 @@ QMenu::item:selected {
      <string>拟合</string>
     </property>
     <addaction name="action_fit_cy"/>
+    <addaction name="action_fit_line"/>
    </widget>
    <widget class="QMenu" name="menu_edit">
     <property name="styleSheet">
@@ -829,7 +833,7 @@ QMenu::item:selected {
      <normaloff>:/CloudForgeAnalyzer/Icons/icons_measureArc.png</normaloff>:/CloudForgeAnalyzer/Icons/icons_measureArc.png</iconset>
    </property>
    <property name="text">
-    <string>弧</string>
+    <string>弧长</string>
    </property>
    <property name="toolTip">
     <string>测地线积分方法测量弧长</string>
@@ -846,6 +850,44 @@ QMenu::item:selected {
   <action name="action_ProtruSeg">
    <property name="text">
     <string>曲面突起分割</string>
+   </property>
+  </action>
+  <action name="action_Clip">
+   <property name="icon">
+    <iconset resource="CloudForgeAnalyzer.qrc">
+     <normaloff>:/CloudForgeAnalyzer/Icons/icon_cut.png</normaloff>:/CloudForgeAnalyzer/Icons/icon_cut.png</iconset>
+   </property>
+   <property name="text">
+    <string>裁剪</string>
+   </property>
+   <property name="toolTip">
+    <string>手动裁切点云</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+T</string>
+   </property>
+   <property name="menuRole">
+    <enum>QAction::MenuRole::NoRole</enum>
+   </property>
+  </action>
+  <action name="action_fit_line">
+   <property name="text">
+    <string>拟合直线</string>
+   </property>
+  </action>
+  <action name="measure_parallel">
+   <property name="icon">
+    <iconset resource="CloudForgeAnalyzer.qrc">
+     <normaloff>:/CloudForgeAnalyzer/Icons/icon_parallel.png</normaloff>:/CloudForgeAnalyzer/Icons/icon_parallel.png</iconset>
+   </property>
+   <property name="text">
+    <string>平行度</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+P</string>
+   </property>
+   <property name="menuRole">
+    <enum>QAction::MenuRole::NoRole</enum>
    </property>
   </action>
  </widget>

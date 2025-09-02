@@ -9,7 +9,7 @@ CloudSelectionDialog::CloudSelectionDialog(std::map<std::string, pcl::PointCloud
 
 
     InitializeScrollArea();
-    //InitializeButtonAndConnect();
+    InitializeButtonAndConnect();
 
     setLayout(mainLayout);
     resize(400, 300);
@@ -65,7 +65,20 @@ void CloudSelectionDialog::InitializeScrollArea() {
 }
 
 void CloudSelectionDialog::InitializeButtonAndConnect() {
-       
+    QHBoxLayout* buttonLayout = new QHBoxLayout;
+
+    QPushButton* selectAllBtn = new QPushButton("Select All");
+    QPushButton* clearAllBtn = new QPushButton("Clear All");
+    //QPushButton* confirmBtn = new QPushButton("Confirm");
+
+    connect(selectAllBtn, &QPushButton::clicked, this, &CloudSelectionDialog::selectAllCheckBoxes);
+    connect(clearAllBtn, &QPushButton::clicked, this, &CloudSelectionDialog::clearAllCheckBoxes);
+    //connect(confirmBtn, &QPushButton::clicked, this, &QDialog::accept);
+
+    buttonLayout->addWidget(selectAllBtn);
+    buttonLayout->addWidget(clearAllBtn);
+    // buttonLayout->addWidget(confirmBtn);
+    mainLayout->addLayout(buttonLayout);
  }
 
 std::vector<std::string> CloudSelectionDialog::getSelectedList() {

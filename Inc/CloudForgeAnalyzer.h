@@ -12,7 +12,7 @@
 #include <filesystem>
 #include "Protrusion_Depression_Cylinder.h"
 #include "Linear_Depression_Plane.h"
-#include "funcs.h"
+
 
 
 
@@ -47,14 +47,18 @@ private slots:
     void Slot_ed_cleangeo_Triggered();
     void Slot_ed_cleanall_Triggered();
     void Slot_fit_cy_Triggered();
+    void Slot_fit_line_Triggered();
     void Slot_ph_CurvSeg_Triggered();
     void Slot_ph_ProtruSeg_Triggered();
 
     void Tool_SetMeasureCylinder();
     void Tool_MeasureGeodisic();
+    void Tool_MeasureParallel();
+    void Tool_Clip();
     void Update_PointCounts();
 private:
-    //        
+    //  
+
     void AddPointCloud(std::string name, pcl::PointCloud<pcl::PointXYZ>::Ptr cloud, ColorManager color);
     void ClearAllPointCloud();
     void DelePointCloud(std::string name);
@@ -69,14 +73,23 @@ private:
     void InitializeProgressBar();
     void SetProgressBarValue(int percentage, const QString& message = "");
     void ResetProgressBar();
-    
+    void RestoreDefaultInteractor();
 
     pcl::visualization::PCLVisualizer::Ptr viewer;
     pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZ>::Ptr renderer_custom;
     std::map<std::string, pcl::PointCloud<pcl::PointXYZ>::Ptr> CloudMap;
     std::map<std::string, ColorManager> ColorMap;
 
-    bool isCylinderMeasure = false;
+    std::map<std::string, Line> LineMap;
+    void AddLine(const std::string& name,
+        const pcl::PointXYZ& start,
+        const pcl::PointXYZ& end,
+        const ColorManager& color,
+        double width = 2.0,
+        Eigen::VectorXf coeffs= Eigen::VectorXf());
+
+    void DeleteLine(const std::string& name);
+    void ClearAllLines();
     
 
 };

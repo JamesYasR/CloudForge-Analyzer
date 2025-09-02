@@ -6,5 +6,7 @@
         <file>Icons/icons-cylinder.png</file>
         <file>Icons/icons-line.png</file>
         <file>Icons/icons_measureArc.png</file>
+        <file>Icons/icon_cut.png</file>
+        <file>Icons/icon_parallel.png</file>
     </qresource>
 </RCC>

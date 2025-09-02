@@ -70,8 +70,10 @@ void ProtrusionSegmentation::segment() {
         Eigen::Vector3f coeff = A.colPivHouseholderQr().solve(b);
 
         float z_fit = coeff[0]*query.x + coeff[1]*query.y + coeff[2];
+
         float dist = query.z - z_fit;
-        if (dist > height_threshold) {
+        float abs_dist = std::abs(query.z - z_fit);
+        if (abs_dist > height_threshold) {
             protrusion_indices->indices.push_back(i);
         }
     }

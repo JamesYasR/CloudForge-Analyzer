@@ -10,9 +10,9 @@ ParamDialogProtrusion::ParamDialogProtrusion(QWidget* parent)
     };
 
     QVector<QString> defaults = {
-        "0.14",  // 典型焊缝高度1-5mm
-        "14.0",   // 30mm搜索半径
-        "16"      // 最小聚类点数
+        "0.2",  // 典型焊缝高度1-5mm
+        "16.0",   // 30mm搜索半径
+        "30"      // 最小聚类点数
     };
 
     setupUI(labels, defaults);
