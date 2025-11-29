@@ -149,6 +149,7 @@
     <ClCompile Include="Src\main.cpp" />
     <ClCompile Include="Src\Measure\GeodesicArcMeasurer.cpp" />
     <ClCompile Include="Src\Measure\MeasureArc.cpp" />
+    <ClCompile Include="Src\Measure\MeasureHeight.cpp" />
     <ClCompile Include="Src\Measure\MeasurePallel.cpp" />
     <ClCompile Include="Src\PointCloudIncise.cpp" />
     <ClCompile Include="Src\PreProcessing\Cluster.cpp" />
@@ -198,6 +199,7 @@
     <ClInclude Include="Inc\Measure\GeodesicArcMeasurer.h" />
     <ClInclude Include="Inc\Measure\Measure.h" />
     <ClInclude Include="Inc\Measure\MeasureArc.h" />
+    <ClInclude Include="Inc\Measure\MeasureHeight.h" />
     <ClInclude Include="Inc\Measure\MeasurePallel.h" />
     <ClInclude Include="Inc\PreProcessing\Cluster.h" />
     <ClInclude Include="Inc\PreProcessing\CurvatureSegmentation.h" />

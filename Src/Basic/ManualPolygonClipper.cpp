@@ -13,16 +13,17 @@ ManualPolygonClipper::ManualPolygonClipper(
     pcl::PointCloud<pcl::PointXYZ>::Ptr input_cloud,
     vtkSmartPointer<vtkRenderWindow> mainRenderWindow,
     vtkSmartPointer<vtkRenderWindowInteractor> mainInteractor,
-    pcl::visualization::PCLVisualizer*  mainviewer,
+    pcl::visualization::PCLVisualizer* mainviewer,
     QObject* parent
 ) : QObject(parent)
 , cloud_in(input_cloud)
 , cloud_polygon(new pcl::PointCloud<pcl::PointXYZ>)
 , cloud_cliped(new pcl::PointCloud<pcl::PointXYZ>)
+, cloud_remain(new pcl::PointCloud<pcl::PointXYZ>)
 , flag(false)
 , isPickingMode(false)
 , line_id(0)
-,viewer(mainviewer)
+, viewer(mainviewer)
 {
     // 保存原始交互器样式
     //originalStyle = mainInteractor->GetInteractorStyle();
@@ -40,7 +41,7 @@ ManualPolygonClipper::ManualPolygonClipper(
     styleSwitch->SetCurrentStyleToTrackballCamera();
     mainInteractor->SetInteractorStyle(styleSwitch);
 
-    viewer->setupInteractor(mainInteractor,mainRenderWindow);
+    viewer->setupInteractor(mainInteractor, mainRenderWindow);
 
     viewer->addPointCloud(cloud_polygon, "polyline");
     viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_COLOR, 1, 0, 0, "polyline");
@@ -102,6 +103,10 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr ManualPolygonClipper::getClippedCloud() cons
     return cloud_cliped;
 }
 
+pcl::PointCloud<pcl::PointXYZ>::Ptr ManualPolygonClipper::getRemainCloud() const {
+    return cloud_remain;
+}
+
 void ManualPolygonClipper::resetPolygon() {
     line_id = 0;
     cloud_polygon->clear();
@@ -110,7 +115,17 @@ void ManualPolygonClipper::resetPolygon() {
 }
 
 void ManualPolygonClipper::keyboardEventOccurred(const pcl::visualization::KeyboardEvent& event) {
-    if (event.getKeySym() == "x" && event.keyDown()) {
+    // 打印调试信息，便于查看实际收到的 keySym / keyCode
+    std::string ks = event.getKeySym();
+    int kc = event.getKeyCode();
+    qDebug() << "ManualPolygonClipper::keyboardEventOccurred keySym=" << QString::fromStdString(ks)
+        << " keyCode=" << kc << " keyDown=" << event.keyDown();
+
+    // 兼容大小写以及 keyCode（有的平台 keySym 可能为大写）
+    bool isX = (ks == "x" || ks == "X" || kc == 120 || kc == 88);
+    bool isEsc = (ks == "Escape" || ks == "Esc");
+
+    if (isX && event.keyDown()) {
         isPickingMode = !isPickingMode;
         if (isPickingMode) {
             std::cout << "\n开始绘制多边形\n";
@@ -123,7 +138,7 @@ void ManualPolygonClipper::keyboardEventOccurred(const pcl::visualization::Keybo
             emit clippingFinished();  // 通知裁剪完成
         }
     }
-    else if (event.getKeySym() == "Escape" && event.keyDown()) {
+    else if (isEsc && event.keyDown()) {
         emit clippingFinished();  // ESC键取消裁剪
     }
 }
@@ -246,13 +261,16 @@ void ManualPolygonClipper::projectInliers() {
         if (ret == 1) {
             cloud_cliped->points.push_back(cloud_in->points[i]);
         }
+        else {
+            cloud_remain->points.push_back(cloud_in->points[i]);
+        }
     }
 
     //delete[] PloyXarr;
     //delete[] PloyYarr;
 
-    viewer->updatePointCloud(cloud_cliped, "clipped_result");
-    viewer->getRenderWindow()->Render();
+    //viewer->updatePointCloud(cloud_cliped, "clipped_result");
+    //viewer->getRenderWindow()->Render();
 }
 
 // 静态事件转发

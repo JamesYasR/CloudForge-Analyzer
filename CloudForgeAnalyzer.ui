@@ -487,8 +487,9 @@ background-color: rgb(247, 254, 236);</string>
    <addaction name="separator"/>
    <addaction name="measure_cylinder"/>
    <addaction name="measure_geodisic"/>
-   <addaction name="separator"/>
    <addaction name="measure_parallel"/>
+   <addaction name="measure_height"/>
+   <addaction name="separator"/>
    <addaction name="action_Clip"/>
    <addaction name="separator"/>
   </widget>
@@ -885,6 +886,18 @@ QMenu::item:selected {
    </property>
    <property name="shortcut">
     <string>Ctrl+P</string>
+   </property>
+   <property name="menuRole">
+    <enum>QAction::MenuRole::NoRole</enum>
+   </property>
+  </action>
+  <action name="measure_height">
+   <property name="icon">
+    <iconset resource="CloudForgeAnalyzer.qrc">
+     <normaloff>:/CloudForgeAnalyzer/Icons/height_icon.png</normaloff>:/CloudForgeAnalyzer/Icons/height_icon.png</iconset>
+   </property>
+   <property name="text">
+    <string>高度</string>
    </property>
    <property name="menuRole">
     <enum>QAction::MenuRole::NoRole</enum>

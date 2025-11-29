@@ -271,6 +271,9 @@ vtkSmartPointer<vtkActor> GeodesicArcMeasurer::createSurfaceActor() {
     actor->GetProperty()->SetLighting(true);
     actor->GetProperty()->SetInterpolationToGouraud();
 
+    // 避免该actor被点选干扰后续拾取
+    actor->PickableOff();
+
     return actor;
 }
 
@@ -296,6 +299,9 @@ vtkSmartPointer<vtkActor> GeodesicArcMeasurer::createPointCloudActor() {
     actor->GetProperty()->SetColor(0.8, 0.8, 0.8); // 浅灰色
     actor->GetProperty()->SetPointSize(2);
     actor->GetProperty()->SetLighting(false); // 点云通常不需要光照
+
+    // 避免干扰拾取
+    actor->PickableOff();
 
     return actor;
 }
@@ -335,6 +341,9 @@ vtkSmartPointer<vtkActor> GeodesicArcMeasurer::createPathActor(const std::vector
     actor->GetProperty()->SetColor(1.0, 0.0, 0.0); // 橙色
     actor->GetProperty()->SetLineWidth(3);
     actor->GetProperty()->SetLighting(false); // 路径线通常不需要光照
+
+    // 不可拾取，避免后续点拾取被遮挡
+    actor->PickableOff();
 
     return actor;
 }
@@ -376,6 +385,11 @@ vtkSmartPointer<vtkAssembly> GeodesicArcMeasurer::createStartEndActors(
     assembly->AddPart(startActor);
     assembly->AddPart(endActor);
 
+    // 标记assembly及其子部件不可拾取，避免干扰点选择
+    assembly->PickableOff();
+    startActor->PickableOff();
+    endActor->PickableOff();
+
     return assembly;
 }
 
@@ -404,6 +418,9 @@ vtkSmartPointer<vtkTextActor> GeodesicArcMeasurer::createTextActor(double arc_le
         textProp->SetJustificationToLeft();
         textProp->SetVerticalJustificationToBottom();
     }
+
+    // 文本也不应参与几何拾取
+    textActor->PickableOff();
 
     return textActor;
 }

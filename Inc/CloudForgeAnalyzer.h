@@ -53,6 +53,7 @@ private slots:
 
     void Tool_SetMeasureCylinder();
     void Tool_MeasureGeodisic();
+    void Tool_MeasureHeight();
     void Tool_MeasureParallel();
     void Tool_Clip();
     void Update_PointCounts();

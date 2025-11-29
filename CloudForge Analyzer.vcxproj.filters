@@ -178,6 +178,9 @@
     <ClCompile Include="Src\Measure\MeasurePallel.cpp">
       <Filter>Source Files\Measure</Filter>
     </ClCompile>
+    <ClCompile Include="Src\Measure\MeasureHeight.cpp">
+      <Filter>Source Files\Measure</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <QtMoc Include="Inc\CloudForgeAnalyzer.h">
@@ -321,6 +324,9 @@
       <Filter>Header Files\Basic</Filter>
     </ClInclude>
     <ClInclude Include="Inc\Measure\MeasurePallel.h">
+      <Filter>Header Files\Measure</Filter>
+    </ClInclude>
+    <ClInclude Include="Inc\Measure\MeasureHeight.h">
       <Filter>Header Files\Measure</Filter>
     </ClInclude>
   </ItemGroup>

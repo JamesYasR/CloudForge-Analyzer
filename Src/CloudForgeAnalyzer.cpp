@@ -33,15 +33,29 @@ void CloudForgeAnalyzer::InitalizeRenderer() {
     vtkSmartPointer<vtkRenderer> renderer = vtkSmartPointer<vtkRenderer>::New();
     vtkSmartPointer<vtkGenericOpenGLRenderWindow> renderWindow = vtkSmartPointer<vtkGenericOpenGLRenderWindow>::New();
     renderWindow->AddRenderer(renderer);
+
+    // 创建 PCLVisualizer（使用上面创建的 renderer/renderWindow）
     viewer.reset(new pcl::visualization::PCLVisualizer(renderer, renderWindow, "viewer", false));
     viewer->getRenderWindow()->GlobalWarningDisplayOff();
-    viewer->setupInteractor(ui->winOfAnalyzer->interactor(), ui->winOfAnalyzer->renderWindow());
+
+    // 先把 renderWindow 绑定到 QVTK widget，让 QVTK widget 创建并管理其 interactor
     ui->winOfAnalyzer->setRenderWindow(viewer->getRenderWindow());
     QApplication::processEvents();
     ui->winOfAnalyzer->makeCurrent();
+
+    // 现在安全地从 widget 获取 interactor 并交给 PCLVisualizer
+    vtkRenderWindowInteractor* interactor = ui->winOfAnalyzer->interactor();
+    if (interactor) {
+        viewer->setupInteractor(interactor, ui->winOfAnalyzer->renderWindow());
+    }
+    else {
+        qWarning() << "初始化渲染器：无法从 QVTK widget 获取 interactor（可能会导致交互异常）";
+    }
+
     viewer->setBackgroundColor(0, 0.3, 0.4);
     viewer->addCoordinateSystem(4.0);
 }
+
 void CloudForgeAnalyzer::InitalizeQWidgets() {
     InitializeProgressBar();
 }
@@ -64,6 +78,7 @@ void CloudForgeAnalyzer::InitalizeConnects() {
     connect(ui->measure_cylinder, &QAction::triggered,this, &CloudForgeAnalyzer::Tool_SetMeasureCylinder);
     connect(ui->measure_geodisic, &QAction::triggered, this, &CloudForgeAnalyzer::Tool_MeasureGeodisic);
     connect(ui->measure_parallel, &QAction::triggered, this, &CloudForgeAnalyzer::Tool_MeasureParallel);
+    connect(ui->measure_height, &QAction::triggered, this, &CloudForgeAnalyzer::Tool_MeasureHeight);
     connect(ui->action_Clip, &QAction::triggered, this, &CloudForgeAnalyzer::Tool_Clip);
 
 }
@@ -75,6 +90,45 @@ void CloudForgeAnalyzer::mainLoop_Init() {
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////*槽函数start*/
+void CloudForgeAnalyzer::Tool_MeasureHeight() {
+    ChoseCloudDialog dialogMeasure(CloudMap, ColorMap);
+    if (dialogMeasure.getSelectedList().empty()) {
+        TeEDebug("测量已取消：未选择被测量点云");
+        return;
+    }
+    pcl::PointCloud<pcl::PointXYZ>::Ptr measureCloud = CloudMap[dialogMeasure.getSelectedList()[0]];
+    if (!measureCloud || measureCloud->empty()) {
+        TeEDebug("被测量点云为空或无效");
+        return;
+    }
+
+    // 选择用于拟合参考平面的点云
+    ChoseCloudDialog dialogRef(CloudMap, ColorMap);
+    if (dialogRef.getSelectedList().empty()) {
+        TeEDebug("测量已取消：未选择参考平面点云");
+        return;
+    }
+    pcl::PointCloud<pcl::PointXYZ>::Ptr refCloud = CloudMap[dialogRef.getSelectedList()[0]];
+    if (!refCloud || refCloud->empty()) {
+        TeEDebug("参考点云为空或无效");
+        return;
+    }
+
+    // 执行测量
+    MeasureHeight measurer(measureCloud, refCloud);
+    if (!measurer.measure()) {
+        TeEDebug("测高失败：无法拟合参考平面或点云无效");
+        return;
+    }
+
+    // 输出结果
+    std::string out = "测高结果：最大距离 = " + std::to_string(measurer.GetMaxDistance())
+        + "，最小距离 = " + std::to_string(measurer.GetMinDistance())
+        + "，平均距离 = " + std::to_string(measurer.GetMeanDistance());
+    TeEDebug(out);
+    Update_CFmes(out);
+}
+
 void CloudForgeAnalyzer::Tool_MeasureParallel() {
 	ChoseLineDialog dialog(LineMap);
     if (dialog.getSelectedList().empty()||dialog.getSelectedList().size()!=2) {
@@ -114,25 +168,27 @@ void CloudForgeAnalyzer::Tool_Clip() {
         viewer.get(),
         this
     );
-    QObject::connect(clipper, &ManualPolygonClipper::destroyed, this, [this]() {
-        // 重置交互器以防止悬空指针
-        ui->winOfAnalyzer->interactor()->SetRenderWindow(nullptr);
-        ui->winOfAnalyzer->interactor()->SetInteractorStyle(nullptr);
-        });
+    //QObject::connect(clipper, &ManualPolygonClipper::destroyed, this, [this]() {
+    //    // 重置交互器以防止悬空指针
+    //    ui->winOfAnalyzer->interactor()->SetRenderWindow(nullptr);
+    //    ui->winOfAnalyzer->interactor()->SetInteractorStyle(nullptr);
+    //    });
     // 连接裁剪完成信号
     connect(clipper, &ManualPolygonClipper::clippingFinished, this,
         [this, clipper]() {
             // 先获取裁剪结果
             pcl::PointCloud<pcl::PointXYZ>::Ptr clippedCloud = clipper->getClippedCloud();
-
+            pcl::PointCloud<pcl::PointXYZ>::Ptr remainCloud = clipper->getRemainCloud();
             // 恢复交互器状态
             clipper->cleanup();
 
             // 处理结果
             if (!clippedCloud->empty()) {
-                ColorManager color(0, 255, 0);
+                ColorManager color1(0, 255, 0);
+                ColorManager color2(255, 0, 0);
                 ClearAllPointCloud();
-                AddPointCloud("clipped", clippedCloud, color);
+                AddPointCloud("clipped", clippedCloud, color1);
+                AddPointCloud("remain", remainCloud, color2);
             }
 			RestoreDefaultInteractor();
             // 安全删除
@@ -261,14 +317,20 @@ void CloudForgeAnalyzer::Tool_MeasureGeodisic() {
             // 将actors添加到VTK渲染器...
             vtkRenderer* renderer = viewer->getRendererCollection()->GetFirstRenderer();
 
-            // 添加 3D actors
+            // 添加 3D actors（先设置不可拾取，避免干扰后续点拾取）
             for (auto& actor : actors3D) {
-                renderer->AddViewProp(actor);
+                if (actor) {
+                    actor->PickableOff();
+                    renderer->AddViewProp(actor);
+                }
             }
 
-            // 添加 2D 文本 actors
+            // 添加 2D 文本 actors（也设置不可拾取）
             for (auto& textActor : textActors) {
-                renderer->AddViewProp(textActor);
+                if (textActor) {
+                    textActor->PickableOff();
+                    renderer->AddViewProp(textActor);
+                }
             }
 
             // 刷新渲染
@@ -699,36 +761,44 @@ void CloudForgeAnalyzer::RestoreDefaultInteractor() {
     ui->winOfAnalyzer->makeCurrent();
     vtkRenderWindow* renderWindow = ui->winOfAnalyzer->renderWindow();
     if (!renderWindow) {
+        qWarning() << "RestoreDefaultInteractor: renderWindow 为 nullptr";
         return;
     }
 
-    // 如果当前有交互器，先禁用然后移除
-    vtkRenderWindowInteractor* oldInteractor = ui->winOfAnalyzer->interactor();
-    if (oldInteractor) {
-        oldInteractor->Disable();
-        oldInteractor->SetInteractorStyle(nullptr);
-        oldInteractor->SetRenderWindow(nullptr);
-
+    // 优先使用 QVTK widget 提供的 interactor
+    vtkRenderWindowInteractor* widgetInteractor = ui->winOfAnalyzer->interactor();
+    if (!widgetInteractor) {
+        // 退而求其次从 renderWindow 获取
+        widgetInteractor = renderWindow->GetInteractor();
+        if (!widgetInteractor) {
+            qWarning() << "RestoreDefaultInteractor: 无法获取交互器";
+            return;
+        }
     }
 
-    // 创建新的交互器
-    vtkNew<vtkRenderWindowInteractor> newInteractor;
-    newInteractor->SetRenderWindow(renderWindow);
-    // 设置新的交互器到QVTKOpenGLNativeWidget
-    ui->winOfAnalyzer->setRenderWindow(renderWindow);  // 这可能会将新的交互器设置进去
+    // 重新绑定 PCLVisualizer 到已存在的 interactor（不要创建局部 vtkNew 导致被销毁）
+    viewer->setupInteractor(widgetInteractor, renderWindow);
 
-    // 重新设置PCLVisualizer的交互器
-    viewer->setupInteractor(newInteractor, renderWindow);
-    // 设置交互器样式
-    vtkNew<vtkInteractorStyleSwitch> styleSwitch;
-    styleSwitch->SetCurrentStyleToTrackballCamera();
-    newInteractor->SetInteractorStyle(styleSwitch);
+    // 确保交互器有合理的样式（若无则设置 trackball）
+    // 修复 E0144 错误：GetInteractorStyle() 返回 vtkInteractorObserver*，需要强制类型转换为 vtkInteractorStyle*
+    vtkInteractorStyle* curStyle = vtkInteractorStyle::SafeDownCast(widgetInteractor->GetInteractorStyle());
+    if (!curStyle) {
+        vtkNew<vtkInteractorStyleSwitch> styleSwitch;
+        styleSwitch->SetCurrentStyleToTrackballCamera();
+        widgetInteractor->SetInteractorStyle(styleSwitch);
+        // SetInteractorStyle 会增加引用计数，局部 styleSwitch 不会导致悬空
+    }
+    else {
+        if (auto switchStyle = vtkInteractorStyleSwitch::SafeDownCast(curStyle)) {
+            switchStyle->SetCurrentStyleToTrackballCamera();
+        }
+    }
 
-    // 激活并启动事件循环
-    newInteractor->Initialize();
-    newInteractor->Start();
+    // 确保 interactor 已启用并初始化（但不要 Start()，避免进入 VTK 事件循环）
+    if (!widgetInteractor->GetEnabled()) widgetInteractor->Enable();
+    widgetInteractor->Initialize();
 
-    // 更新窗口
+    // 刷新渲染
     renderWindow->Render();
     ui->winOfAnalyzer->update();
 }

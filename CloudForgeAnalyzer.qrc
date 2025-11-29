@@ -8,5 +8,6 @@
         <file>Icons/icons_measureArc.png</file>
         <file>Icons/icon_cut.png</file>
         <file>Icons/icon_parallel.png</file>
+        <file>Icons/height_icon.png</file>
     </qresource>
 </RCC>

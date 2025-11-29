@@ -23,6 +23,7 @@ public:
 
     void startClipping();
     pcl::PointCloud<pcl::PointXYZ>::Ptr getClippedCloud() const;
+    pcl::PointCloud<pcl::PointXYZ>::Ptr getRemainCloud() const;
     void cleanup();
 signals:
     void clippingFinished();
@@ -33,7 +34,7 @@ private:
     vtkSmartPointer<vtkInteractorStyle> originalStyle;
     pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_in;
     pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_polygon;
-    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_cliped;
+    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_cliped, cloud_remain;
     pcl::PointXYZ curP, lastP;
     bool flag;
     bool isPickingMode;
