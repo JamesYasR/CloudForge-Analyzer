@@ -12,7 +12,7 @@
 ManualPolygonClipper::ManualPolygonClipper(
     pcl::PointCloud<pcl::PointXYZ>::Ptr input_cloud,
     vtkSmartPointer<vtkRenderWindow> mainRenderWindow,
-    vtkSmartPointer<vtkRenderWindowInteractor> mainInteractor,
+    vtkRenderWindowInteractor* mainInteractor, // 改为原生指针
     pcl::visualization::PCLVisualizer* mainviewer,
     QObject* parent
 ) : QObject(parent)
@@ -25,32 +25,30 @@ ManualPolygonClipper::ManualPolygonClipper(
 , line_id(0)
 , viewer(mainviewer)
 {
-    // 保存原始交互器样式
-    //originalStyle = mainInteractor->GetInteractorStyle();
+    // 保存传入的交互器指针（不接管其生命周期）
     this->mainInteractor = mainInteractor;
-    originalStyle = vtkInteractorStyle::SafeDownCast(mainInteractor->GetInteractorStyle());
 
-    // 确保指针有效
-    if (!originalStyle) {
-        qWarning() << "无法获取原始交互器样式";
-        originalStyle = vtkSmartPointer<vtkInteractorStyleSwitch>::New();
+    if (!mainInteractor) {
+        qWarning() << "ManualPolygonClipper: 构造时 mainInteractor 为 nullptr，功能可能不可用";
+    }
+    else {
+        // 确保 interactor 已初始化并启用（但不要调用 Start()）
+        if (!mainInteractor->GetEnabled()) mainInteractor->Enable();
+        mainInteractor->Initialize();
+
+        // 仅将 PCLVisualizer 绑定到现有 interactor/renderWindow，避免 SetInteractorStyle 改变全局样式
+        viewer->setupInteractor(mainInteractor, mainRenderWindow);
     }
 
-    // 设置自定义交互模式
-    vtkNew<vtkInteractorStyleSwitch> styleSwitch;
-    styleSwitch->SetCurrentStyleToTrackballCamera();
-    mainInteractor->SetInteractorStyle(styleSwitch);
-
-    viewer->setupInteractor(mainInteractor, mainRenderWindow);
-
+    // 添加用于绘制的点云和被裁剪点云
     viewer->addPointCloud(cloud_polygon, "polyline");
     viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_COLOR, 1, 0, 0, "polyline");
     viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 8, "polyline");
     viewer->addPointCloud(cloud_in, "cloud_in");
 
-    viewer->registerKeyboardCallback(&ManualPolygonClipper::keyboardCallback, this);
-    viewer->registerMouseCallback(&ManualPolygonClipper::mouseCallback, this);
-
+    // 使用 PCLVisualizer 的回调接口，保存返回的连接以便之后断开
+    keyboard_connection = viewer->registerKeyboardCallback(&ManualPolygonClipper::keyboardCallback, this);
+    mouse_connection = viewer->registerMouseCallback(&ManualPolygonClipper::mouseCallback, this);
 }
 
 ManualPolygonClipper::~ManualPolygonClipper() {
@@ -58,41 +56,30 @@ ManualPolygonClipper::~ManualPolygonClipper() {
 }
 
 void ManualPolygonClipper::cleanup() {
-    if (mainInteractor && originalStyle) {
-        // 恢复原始交互器样式
-        mainInteractor->SetInteractorStyle(originalStyle);
-
-        // 重新设置 PCLVisualizer 的交互器
-        if (viewer) {
-            viewer->setupInteractor(mainInteractor, mainInteractor->GetRenderWindow());
-        }
-
-        // 确保交互器启用
-        if (!mainInteractor->GetEnabled()) {
-            mainInteractor->Enable();
-        }
-
-        // 刷新渲染
-        mainInteractor->Render();
-    }
+    // 注：不要在 cleanup 中替换或释放 QVTK 提供的 interactor，
+    //      仅断开回调连接，移除临时可视化对象，保持 interactor 生命周期由 QVTK 管理。
 
     if (viewer) {
-        // 注销回调函数
-        viewer->registerMouseCallback(nullptr, nullptr);
-        viewer->registerKeyboardCallback(nullptr, nullptr);
+        // 正确断开回调连接（而不是传入 nullptr）
+        if (keyboard_connection.connected()) keyboard_connection.disconnect();
+        if (mouse_connection.connected()) mouse_connection.disconnect();
 
-        // 移除临时对象
+        // 移除临时点云/形状
         viewer->removePointCloud("polyline");
         viewer->removePointCloud("aftercut");
 
-        // 移除所有线段
-        for (int i = 0; i < line_id; ++i) {
+        // 移除所有线段（line_id 代表已添加的线段计数）
+        for (int i = 0; i < static_cast<int>(line_id); ++i) {
             char str[512];
             sprintf(str, "line#%03d", i);
             viewer->removeShape(str);
         }
     }
+
+    // 不要调用 mainInteractor->SetInteractorStyle(...) 或 SetRenderWindow(nullptr)
+    // 保持 mainInteractor 由 QVTK 管理，避免悬空或被销毁
 }
+
 void ManualPolygonClipper::startClipping() {
     resetPolygon();
     isPickingMode = true;
@@ -265,9 +252,6 @@ void ManualPolygonClipper::projectInliers() {
             cloud_remain->points.push_back(cloud_in->points[i]);
         }
     }
-
-    //delete[] PloyXarr;
-    //delete[] PloyYarr;
 
     //viewer->updatePointCloud(cloud_cliped, "clipped_result");
     //viewer->getRenderWindow()->Render();
