@@ -729,6 +729,9 @@ QMenu::item:selected {
      <kerning>false</kerning>
     </font>
    </property>
+   <property name="shortcut">
+    <string>Ctrl+O</string>
+   </property>
   </action>
   <action name="action_fi_save">
    <property name="text">
@@ -738,6 +741,9 @@ QMenu::item:selected {
   <action name="action_fi_saveas">
    <property name="text">
     <string>另存为</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+S</string>
    </property>
   </action>
   <action name="actiontest">
@@ -826,6 +832,9 @@ QMenu::item:selected {
   <action name="action_fi_add">
    <property name="text">
     <string>添加</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+A</string>
    </property>
   </action>
   <action name="measure_geodisic">

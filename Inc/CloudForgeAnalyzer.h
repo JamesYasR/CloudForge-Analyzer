@@ -91,6 +91,16 @@ private:
 
     void DeleteLine(const std::string& name);
     void ClearAllLines();
-    
+    void visualizeMeasurementResults(MeasureHeight& measurer,
+        pcl::PointCloud<pcl::PointXYZ>::Ptr measureCloud,
+        pcl::PointCloud<pcl::PointXYZ>::Ptr refCloud);
+    void colorPointCloudByHeight(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud,
+        pcl::ModelCoefficients::Ptr plane_coeffs,
+        pcl::PointCloud<pcl::PointXYZRGB>::Ptr colored_cloud);
 
+    double calculatePlaneSize(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud);
+
+    void addHeightLines(pcl::visualization::PCLVisualizer::Ptr viewer,
+        pcl::PointCloud<pcl::PointXYZ>::Ptr cloud,
+        pcl::ModelCoefficients::Ptr plane_coeffs);
 };

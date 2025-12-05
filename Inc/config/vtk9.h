@@ -10,3 +10,4 @@
 #include <vtkCamera.h>
 #include <vtkOutputWindow.h>
 #include <vtkGenericOpenGLRenderWindow.h>
+#include <vtkInteractorStyleSwitch.h>

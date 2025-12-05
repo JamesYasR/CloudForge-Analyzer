@@ -125,6 +125,7 @@ void CloudForgeAnalyzer::Tool_MeasureHeight() {
     std::string out = "测高结果：最大距离 = " + std::to_string(measurer.GetMaxDistance())
         + "，最小距离 = " + std::to_string(measurer.GetMinDistance())
         + "，平均距离 = " + std::to_string(measurer.GetMeanDistance());
+    visualizeMeasurementResults(measurer, measureCloud, refCloud);
     TeEDebug(out);
     Update_CFmes(out);
 }
@@ -843,4 +844,161 @@ void CloudForgeAnalyzer::ClearAllLines() {
         viewer->removeShape(pair.first);
     }
     LineMap.clear();
+}
+
+void CloudForgeAnalyzer::visualizeMeasurementResults(MeasureHeight& measurer,
+    pcl::PointCloud<pcl::PointXYZ>::Ptr measureCloud,
+    pcl::PointCloud<pcl::PointXYZ>::Ptr refCloud) {
+    // 创建可视化器[6](@ref)
+    pcl::visualization::PCLVisualizer::Ptr viewer(new pcl::visualization::PCLVisualizer("高度测量可视化"));
+    viewer->setBackgroundColor(0.05, 0.05, 0.05); // 深灰色背景
+
+    // 获取平面系数
+    pcl::ModelCoefficients::Ptr plane_coeffs = measurer.GetPlaneCoefficients();
+
+    // 1. 添加参考点云（用蓝色显示）[6](@ref)
+    pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZ> ref_color(refCloud, 0, 0, 255);
+    viewer->addPointCloud<pcl::PointXYZ>(refCloud, ref_color, "reference_cloud");
+    viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 2, "reference_cloud");
+
+    // 2. 添加测量点云（用绿色到红色的渐变色显示高度）[6](@ref)
+    pcl::PointCloud<pcl::PointXYZRGB>::Ptr colored_measure_cloud(new pcl::PointCloud<pcl::PointXYZRGB>);
+    colorPointCloudByHeight(measureCloud, plane_coeffs, colored_measure_cloud);
+    viewer->addPointCloud<pcl::PointXYZRGB>(colored_measure_cloud, "measure_cloud");
+    viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 3, "measure_cloud");
+
+    // 3. 添加拟合的平面（半透明）[1,4](@ref)
+    if (plane_coeffs->values.size() >= 4) {
+        // 计算平面显示的大小基于测量点云的边界[1](@ref)
+        Eigen::Vector4f centroid;
+        pcl::compute3DCentroid(*measureCloud, centroid);
+
+        // 创建有限大小的平面[1](@ref)
+        double plane_size = calculatePlaneSize(measureCloud);
+        viewer->addPlane(*plane_coeffs, centroid[0], centroid[1], centroid[2], "fitted_plane");
+        viewer->setShapeRenderingProperties(pcl::visualization::PCL_VISUALIZER_COLOR, 0.8, 0.8, 0.8, "fitted_plane");
+        viewer->setShapeRenderingProperties(pcl::visualization::PCL_VISUALIZER_OPACITY, 0.3, "fitted_plane");
+    }
+
+    // 4. 添加连接线显示高度（可选）[6](@ref)
+    addHeightLines(viewer, measureCloud, plane_coeffs);
+
+    // 5. 添加坐标系和文本信息[6](@ref)
+    viewer->addCoordinateSystem(1.0, "coord_system");
+
+    // 添加结果文本
+    std::stringstream results_text;
+    results_text << "高度测量结果\n";
+    results_text << "最大高度: " << std::fixed << std::setprecision(3) << measurer.GetMaxDistance() << " m\n";
+    results_text << "最小高度: " << measurer.GetMinDistance() << " m\n";
+    results_text << "平均高度: " << measurer.GetMeanDistance() << " m";
+
+    viewer->addText(results_text.str(), 10, 70, 14, 1.0, 1.0, 1.0, "results_text");
+
+    // 6. 设置相机位置以获得更好的视角[6](@ref)
+    viewer->initCameraParameters();
+    viewer->resetCamera();
+
+    // 添加交互说明文本
+    viewer->addText("按 'r' 重置视角, 按 'q' 退出", 10, 30, 12, 1.0, 1.0, 1.0, "help_text");
+
+    // 7. 显示可视化窗口
+    TeEDebug("可视化窗口已打开，按 'q' 退出查看");
+    while (!viewer->wasStopped()) {
+        viewer->spinOnce(100);
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
+}
+
+void CloudForgeAnalyzer::colorPointCloudByHeight(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud,
+    pcl::ModelCoefficients::Ptr plane_coeffs,
+    pcl::PointCloud<pcl::PointXYZRGB>::Ptr colored_cloud) {
+    colored_cloud->points.resize(cloud->points.size());
+
+    double a = plane_coeffs->values[0];
+    double b = plane_coeffs->values[1];
+    double c = plane_coeffs->values[2];
+    double d = plane_coeffs->values[3];
+    double denom = std::sqrt(a * a + b * b + c * c);
+    if (denom == 0.0) denom = 1.0;
+
+    // 计算高度范围用于颜色映射
+    double min_height = std::numeric_limits<double>::max();
+    double max_height = std::numeric_limits<double>::lowest();
+
+    std::vector<double> heights;
+    for (size_t i = 0; i < cloud->points.size(); ++i) {
+        const auto& p = cloud->points[i];
+        double height = std::abs(a * p.x + b * p.y + c * p.z + d) / denom;
+        heights.push_back(height);
+        if (height < min_height) min_height = height;
+        if (height > max_height) max_height = height;
+    }
+
+    double height_range = max_height - min_height;
+    if (height_range == 0) height_range = 1.0;
+
+    // 为每个点分配颜色（从绿色到红色）
+    for (size_t i = 0; i < cloud->points.size(); ++i) {
+        colored_cloud->points[i].x = cloud->points[i].x;
+        colored_cloud->points[i].y = cloud->points[i].y;
+        colored_cloud->points[i].z = cloud->points[i].z;
+
+        double normalized_height = (heights[i] - min_height) / height_range;
+
+        // 绿色(low) -> 黄色(middle) -> 红色(high)
+        if (normalized_height < 0.5) {
+            colored_cloud->points[i].r = static_cast<uint8_t>(255 * (normalized_height * 2));
+            colored_cloud->points[i].g = 255;
+            colored_cloud->points[i].b = 0;
+        }
+        else {
+            colored_cloud->points[i].r = 255;
+            colored_cloud->points[i].g = static_cast<uint8_t>(255 * (2 - normalized_height * 2));
+            colored_cloud->points[i].b = 0;
+        }
+    }
+    colored_cloud->width = cloud->width;
+    colored_cloud->height = cloud->height;
+}
+
+double CloudForgeAnalyzer::calculatePlaneSize(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud) {
+    // 计算点云边界框大小[1](@ref)
+    pcl::PointXYZ min_pt, max_pt;
+    pcl::getMinMax3D(*cloud, min_pt, max_pt);
+
+    double dx = max_pt.x - min_pt.x;
+    double dy = max_pt.y - min_pt.y;
+
+    // 返回较大的边界尺寸，并增加20%的边距
+    return std::max(dx, dy) * 1.2;
+}
+
+void CloudForgeAnalyzer::addHeightLines(pcl::visualization::PCLVisualizer::Ptr viewer,
+    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud,
+    pcl::ModelCoefficients::Ptr plane_coeffs) {
+    // 只为一小部分点添加高度线以避免过于拥挤
+    int step = std::max(1, static_cast<int>(cloud->points.size() / 50));
+
+    double a = plane_coeffs->values[0];
+    double b = plane_coeffs->values[1];
+    double c = plane_coeffs->values[2];
+    double d = plane_coeffs->values[3];
+    double denom = a * a + b * b + c * c;
+    if (denom == 0.0) return;
+
+    for (size_t i = 0; i < cloud->points.size(); i += step) {
+        const auto& p = cloud->points[i];
+
+        // 计算点到平面的投影点[5](@ref)
+        double t = -(a * p.x + b * p.y + c * p.z + d) / denom;
+        pcl::PointXYZ proj_pt;
+        proj_pt.x = p.x + a * t;
+        proj_pt.y = p.y + b * t;
+        proj_pt.z = p.z + c * t;
+
+        std::string line_id = "height_line_" + std::to_string(i);
+        viewer->addLine<pcl::PointXYZ>(p, proj_pt, 0.5, 0.5, 1.0, line_id);
+        viewer->setShapeRenderingProperties(pcl::visualization::PCL_VISUALIZER_OPACITY, 0.3, line_id);
+    }
 }
