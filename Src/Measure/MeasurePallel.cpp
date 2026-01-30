@@ -12,14 +12,14 @@ float MeasurePallel::angleBetweenVectors() {
 	float dot = vec1.dot(vec2);
 	float norm = vec1.norm() * vec2.norm();
 	float cosTheta = dot / norm;
-	// ´¦Àí¸¡µãÎó²î
+	// å¤„ç†æµ®ç‚¹è¯¯å·®
 	cosTheta = std::clamp(cosTheta, -1.0f, 1.0f);
 	return std::acos(cosTheta) * 180.0f / M_PI;
 }
 
 float MeasurePallel::parallelism() {
 	float theta = angleBetweenVectors();
-	// È¡×îĞ¡¼Ğ½Ç£¨0¡ã»ò180¡ã·½Ïò¶¼ËãÆ½ĞĞ£©
+	// å–æœ€å°å¤¹è§’ï¼ˆ0Â°æˆ–180Â°æ–¹å‘éƒ½ç®—å¹³è¡Œï¼‰
 	float minAngle = std::min(theta, 180.0f - theta);
 	return minAngle;
 }

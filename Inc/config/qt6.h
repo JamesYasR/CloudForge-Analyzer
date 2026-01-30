@@ -7,4 +7,5 @@
 #include "QFileDialog"
 #include <QTimer>
 #include <QVTKOpenGLNativeWidget.h>
+#include <QInputDialog>
 #include "ui_CloudForgeAnalyzer.h"

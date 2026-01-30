@@ -2,3 +2,4 @@
 #include "GeodesicArcMeasurer.h"
 #include "MeasurePallel.h"
 #include "MeasureHeight.h"
+#include "MeasureCylindricity.h"

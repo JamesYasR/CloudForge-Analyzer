@@ -76,9 +76,6 @@
     <ClCompile Include="Src\CloudForgeAnalyzer.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="Src\main.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="Src\Dialog\ParamDialog_ec.cpp">
       <Filter>Source Files\Dialog</Filter>
     </ClCompile>
@@ -180,6 +177,15 @@
     </ClCompile>
     <ClCompile Include="Src\Measure\MeasureHeight.cpp">
       <Filter>Source Files\Measure</Filter>
+    </ClCompile>
+    <ClCompile Include="Src\Measure\MeasureCylindricity.cpp">
+      <Filter>Source Files\Measure</Filter>
+    </ClCompile>
+    <ClCompile Include="Src\temp.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Src\main.cpp">
+      <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -327,6 +333,9 @@
       <Filter>Header Files\Measure</Filter>
     </ClInclude>
     <ClInclude Include="Inc\Measure\MeasureHeight.h">
+      <Filter>Header Files\Measure</Filter>
+    </ClInclude>
+    <ClInclude Include="Inc\Measure\MeasureCylindricity.h">
       <Filter>Header Files\Measure</Filter>
     </ClInclude>
   </ItemGroup>

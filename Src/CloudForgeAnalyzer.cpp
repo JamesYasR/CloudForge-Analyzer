@@ -79,6 +79,7 @@ void CloudForgeAnalyzer::InitalizeConnects() {
     connect(ui->measure_geodisic, &QAction::triggered, this, &CloudForgeAnalyzer::Tool_MeasureGeodisic);
     connect(ui->measure_parallel, &QAction::triggered, this, &CloudForgeAnalyzer::Tool_MeasureParallel);
     connect(ui->measure_height, &QAction::triggered, this, &CloudForgeAnalyzer::Tool_MeasureHeight);
+    connect(ui->measure_Cylindricity, &QAction::triggered, this, &CloudForgeAnalyzer::Tool_MeasureCylindricity);
     connect(ui->action_Clip, &QAction::triggered, this, &CloudForgeAnalyzer::Tool_Clip);
 
 }
@@ -90,6 +91,117 @@ void CloudForgeAnalyzer::mainLoop_Init() {
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////*槽函数start*/
+void CloudForgeAnalyzer::Tool_MeasureCylindricity()
+{
+    FitCloudDialog window(CloudMap, ColorMap);
+    if (window.getSelectedList().empty()) {
+        return;
+    }
+    pcl::PointCloud<pcl::PointXYZ>::Ptr Cloud_Temp = CloudMap[window.getSelectedList()[0]];
+
+    Fit_Cylinder fcy(Cloud_Temp);
+
+    Eigen::VectorXf coeff1;
+
+    coeff1 = fcy.Get_Coeff_in();
+
+    float inerpercent = fcy.Get_Inliers_Percentage();
+    Update_CFmes("圆柱1轴上一点坐标为：" + std::to_string(coeff1[0]) + "," + std::to_string(coeff1[1]) + "," + std::to_string(coeff1[2])
+        + "\n圆柱轴方向为：" + std::to_string(coeff1[3]) + "," + std::to_string(coeff1[4]) + "," + std::to_string(coeff1[5])
+        + "\n圆柱半径为：" + std::to_string(coeff1[6])
+        + "\n内点比例：" + std::to_string(inerpercent)+"%");
+
+    Eigen::Vector3f center = fcy.get_center_point();
+	Eigen::Vector3f axis = fcy.get_axis_direction();
+
+    ChoseCloudDialog dialog(CloudMap, ColorMap);
+    if (dialog.getSelectedList().empty()) {
+        TeEDebug("圆柱度评估已取消：未选择点云");
+        return;
+    }
+
+    pcl::PointCloud<pcl::PointXYZ>::Ptr target_cloud = CloudMap[dialog.getSelectedList()[0]];
+    if (!target_cloud || target_cloud->empty()) {
+        TeEDebug("错误: 选择的点云为空或无效");
+        return;
+    }
+
+    // 获取设计半径和容差
+    bool ok1, ok2,ok3;
+    double design_radius = QInputDialog::getDouble(this, "设计半径", "请输入圆筒设计半径(mm):",
+        1940.0, 0.1, 4000.0, 3, &ok1);
+    double tolerance = QInputDialog::getDouble(this, "容差阈值", "请输入允许的最大偏差(mm):",
+        25.0, 0.001, 100.0, 4, &ok2);
+    int iters = QInputDialog::getDouble(this, "迭代次数", "请输入允许的最大迭代次数:",
+        2000, 50, 10000, 0, &ok3);
+
+    if (!ok1 || !ok2 || !ok3) {
+        TeEDebug("圆柱度评估已取消");
+        return;
+    }
+
+    // 创建圆柱度评估器
+    MeasureCylindricity evaluator;
+    evaluator.setInputCloud(target_cloud);
+    evaluator.setDesignRadius(design_radius);
+    evaluator.setTolerance(tolerance);
+
+
+    evaluator.setInitialLine(center, axis);
+
+
+    evaluator.setMaxIterations(iters);
+    evaluator.setVerbose(true);
+
+    // 执行评估
+    auto result = evaluator.evaluateCylindricity();
+
+    qDebug() << result.assessment_message;
+
+    auto inliers = evaluator.get_inliers();    
+    auto outliers = evaluator.get_outliers();  
+    ColorManager c1(255, 0, 0);
+    ColorManager c2(0, 255, 0);
+	AddPointCloud("Cylindricity_Inliers", inliers, c1);
+	AddPointCloud("Cylindricity_Outliers", outliers, c2);
+
+    // 获取优化后的轴线参数
+    Eigen::Vector3f optimized_center = result.getCylinderAxisPoint();
+    Eigen::Vector3f optimized_axis = result.getCylinderAxisDirection();
+
+    pcl::ModelCoefficients::Ptr cylinder_coeff(new pcl::ModelCoefficients);
+    cylinder_coeff->values.resize(7);
+    cylinder_coeff->values[0] = optimized_center.x();  // 轴上一点 X
+    cylinder_coeff->values[1] = optimized_center.y();  // 轴上一点 Y
+    cylinder_coeff->values[2] = optimized_center.z();  // 轴上一点 Z
+    cylinder_coeff->values[3] = optimized_axis.x();    // 轴向 X
+    cylinder_coeff->values[4] = optimized_axis.y();    // 轴向 Y
+    cylinder_coeff->values[5] = optimized_axis.z();    // 轴向 Z
+    cylinder_coeff->values[6] = static_cast<float>(design_radius);  // 半径
+
+    viewer->addCylinder(*cylinder_coeff, "opted_cylinder");
+
+    qDebug() << "优化后轴线点: (" << optimized_center.x() << ", "
+        << optimized_center.y() << ", " << optimized_center.z() << ")" ;
+    qDebug() << "优化后轴线方向: (" << optimized_axis.x() << ", "
+        << optimized_axis.y() << ", " << optimized_axis.z() << ")" ;
+    // 显示结果
+    TeEDebug(result.assessment_message);
+    Update_CFmes(result.assessment_message);
+
+    // 可视化结果
+   // visualizeCylindricityResult(result, evaluator.getInliers(), evaluator.getOutliers());
+    ui->winOfAnalyzer->renderWindow()->Render();
+    ui->winOfAnalyzer->update();
+}
+
+void CloudForgeAnalyzer::visualizeCylindricityResult(
+    const MeasureCylindricity::AssessmentResult& result,
+    pcl::PointCloud<pcl::PointXYZ>::Ptr inliers,
+    pcl::PointCloud<pcl::PointXYZ>::Ptr outliers)
+{
+  
+}
 void CloudForgeAnalyzer::Tool_MeasureHeight() {
     ChoseCloudDialog dialogMeasure(CloudMap, ColorMap);
     if (dialogMeasure.getSelectedList().empty()) {
@@ -418,7 +530,8 @@ void CloudForgeAnalyzer::Slot_fit_cy_Triggered() {
         //+ "\n半径差值："+ std::to_string(coeff1[6]- coeff2[6])
         //+ "\n焊接区宽度：" + std::to_string(fcy2.ComputeCylinderHeight()));
    //这部分比较临时，可以考虑去改一下
-
+    ui->winOfAnalyzer->renderWindow()->Render();
+    ui->winOfAnalyzer->update();
 }
 void CloudForgeAnalyzer::Slot_fi_open_Triggered() {
     QString runPath = QDir::currentPath()+"/PCDfiles";//获取项目的根路径

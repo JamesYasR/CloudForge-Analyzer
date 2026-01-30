@@ -149,6 +149,7 @@
     <ClCompile Include="Src\main.cpp" />
     <ClCompile Include="Src\Measure\GeodesicArcMeasurer.cpp" />
     <ClCompile Include="Src\Measure\MeasureArc.cpp" />
+    <ClCompile Include="Src\Measure\MeasureCylindricity.cpp" />
     <ClCompile Include="Src\Measure\MeasureHeight.cpp" />
     <ClCompile Include="Src\Measure\MeasurePallel.cpp" />
     <ClCompile Include="Src\PointCloudIncise.cpp" />
@@ -158,6 +159,7 @@
     <ClCompile Include="Src\PreProcessing\Filter_voxel.cpp" />
     <ClCompile Include="Src\Preprocessing\ProtrusionSegmentation.cpp" />
     <ClCompile Include="Src\Protrusion_Depression_Cylinder.cpp" />
+    <ClCompile Include="Src\temp.cpp" />
   </ItemGroup>
   <ItemGroup>
     <QtMoc Include="Inc\CloudForgeAnalyzer.h" />
@@ -199,6 +201,7 @@
     <ClInclude Include="Inc\Measure\GeodesicArcMeasurer.h" />
     <ClInclude Include="Inc\Measure\Measure.h" />
     <ClInclude Include="Inc\Measure\MeasureArc.h" />
+    <ClInclude Include="Inc\Measure\MeasureCylindricity.h" />
     <ClInclude Include="Inc\Measure\MeasureHeight.h" />
     <ClInclude Include="Inc\Measure\MeasurePallel.h" />
     <ClInclude Include="Inc\PreProcessing\Cluster.h" />

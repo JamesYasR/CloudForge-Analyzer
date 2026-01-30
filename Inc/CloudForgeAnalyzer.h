@@ -56,6 +56,11 @@ private slots:
     void Tool_MeasureHeight();
     void Tool_MeasureParallel();
     void Tool_Clip();
+    void Tool_MeasureCylindricity();
+    void visualizeCylindricityResult(
+        const MeasureCylindricity::AssessmentResult& result,
+        pcl::PointCloud<pcl::PointXYZ>::Ptr inliers,
+        pcl::PointCloud<pcl::PointXYZ>::Ptr outliers);
     void Update_PointCounts();
 private:
     //  
