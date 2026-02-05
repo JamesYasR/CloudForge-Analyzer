@@ -14,11 +14,13 @@ MeasureCylindricity::MeasureCylindricity()
     , max_iterations_(100)
     , verbose_(true)
     , use_external_initial_line_(false)
+    , min_distance_(0.0)
+    , max_distance_(0.0)
 {
     input_cloud_.reset(new pcl::PointCloud<pcl::PointXYZ>);
     inliers_.reset(new pcl::PointCloud<pcl::PointXYZ>);
     outliers_.reset(new pcl::PointCloud<pcl::PointXYZ>);
-
+    heatmap_cloud_.reset(new pcl::PointCloud<pcl::PointXYZRGB>); 
     // 初始化默认外部直线参数
     external_initial_line_ = LineParams();
 
@@ -29,6 +31,92 @@ MeasureCylindricity::MeasureCylindricity()
 
 MeasureCylindricity::~MeasureCylindricity()
 {
+}
+
+// 新增：热力图颜色映射函数
+void MeasureCylindricity::getColorForDistance(double distance, uint8_t& r, uint8_t& g, uint8_t& b) const
+{
+    // 将距离映射到0-1的范围
+    double normalized_distance = 0.0;
+    if (max_distance_ > min_distance_) {
+        normalized_distance = (distance - min_distance_) / (max_distance_ - min_distance_);
+    }
+
+    // 限制在0-1范围内
+    normalized_distance = std::max(0.0, std::min(1.0, normalized_distance));
+
+    // 绿色(0.0) -> 黄色(0.5) -> 红色(1.0)的渐变
+    if (normalized_distance < 0.5) {
+        // 绿色到黄色：绿色从255递减，红色从0递增
+        r = static_cast<uint8_t>(255 * (normalized_distance * 2));
+        g = 255;
+        b = 0;
+    }
+    else {
+        // 黄色到红色：绿色从255递减，红色保持255
+        r = 255;
+        g = static_cast<uint8_t>(255 * (2 - normalized_distance * 2));
+        b = 0;
+    }
+}
+
+// 新增：生成热力图点云
+void MeasureCylindricity::generateHeatMapCloud(const LineParams& line)
+{
+    heatmap_cloud_->clear();
+    heatmap_cloud_->width = input_cloud_->width;
+    heatmap_cloud_->height = input_cloud_->height;
+    heatmap_cloud_->is_dense = input_cloud_->is_dense;
+    heatmap_cloud_->points.resize(input_cloud_->size());
+
+    // 计算距离范围
+    min_distance_ = std::numeric_limits<double>::max();
+    max_distance_ = std::numeric_limits<double>::lowest();
+
+    std::vector<double> distances;
+    for (const auto& point : input_cloud_->points) {
+        if (!isPointValid(point)) continue;
+
+        Eigen::Vector3f p(point.x, point.y, point.z);
+        double distance_to_axis = computeDistanceToLine(p, line);
+        double deviation = std::abs(distance_to_axis - design_radius_);
+
+        distances.push_back(deviation);
+        if (deviation < min_distance_) min_distance_ = deviation;
+        if (deviation > max_distance_) max_distance_ = deviation;
+    }
+
+    // 如果所有点距离相同，设置一个小的范围避免除零
+    if (std::abs(max_distance_ - min_distance_) < 1e-10) {
+        max_distance_ = min_distance_ + 1e-5;
+    }
+
+    // 为每个点分配颜色
+    for (size_t i = 0; i < input_cloud_->points.size(); ++i) {
+        const auto& point = input_cloud_->points[i];
+        heatmap_cloud_->points[i].x = point.x;
+        heatmap_cloud_->points[i].y = point.y;
+        heatmap_cloud_->points[i].z = point.z;
+
+        if (isPointValid(point)) {
+            Eigen::Vector3f p(point.x, point.y, point.z);
+            double distance_to_axis = computeDistanceToLine(p, line);
+            double deviation = std::abs(distance_to_axis - design_radius_);
+
+            uint8_t r, g, b;
+            getColorForDistance(deviation, r, g, b);
+
+            heatmap_cloud_->points[i].r = r;
+            heatmap_cloud_->points[i].g = g;
+            heatmap_cloud_->points[i].b = b;
+        }
+        else {
+            // 无效点显示为灰色
+            heatmap_cloud_->points[i].r = 128;
+            heatmap_cloud_->points[i].g = 128;
+            heatmap_cloud_->points[i].b = 128;
+        }
+    }
 }
 
 // ============================================================================
@@ -383,8 +471,16 @@ MeasureCylindricity::AssessmentResult MeasureCylindricity::computeAssessmentMetr
 
     double sum_distance = 0.0;
     double sum_squared_distance = 0.0;
+    double sum_squared_deviation = 0.0;
     int outlier_count = 0;
     int valid_points = 0;
+
+    std::vector<double> deviations;
+
+    // 新增：初始化最小偏差为最大值
+    result.min_deviation = std::numeric_limits<double>::max();
+    result.max_deviation = 0.0;
+
 
     for (const auto& p : input_cloud_->points) {
         if (!isPointValid(p)) continue;
@@ -394,6 +490,7 @@ MeasureCylindricity::AssessmentResult MeasureCylindricity::computeAssessmentMetr
         double deviation = std::abs(distance_to_axis - design_radius_);
 
         distance_map_.push_back(deviation);
+        deviations.push_back(deviation);
         sum_distance += deviation;
         sum_squared_distance += deviation * deviation;
         valid_points++;
@@ -405,6 +502,10 @@ MeasureCylindricity::AssessmentResult MeasureCylindricity::computeAssessmentMetr
         else {
             inliers_->push_back(p);
         }
+        // 更新最小偏差
+        if (deviation < result.min_deviation) {
+            result.min_deviation = deviation;
+        }
 
         if (deviation > result.max_deviation) {
             result.max_deviation = deviation;
@@ -415,13 +516,19 @@ MeasureCylindricity::AssessmentResult MeasureCylindricity::computeAssessmentMetr
         result.outlier_ratio = static_cast<double>(outlier_count) / valid_points;
         result.mean_deviation = sum_distance / valid_points;
         result.rms_error = std::sqrt(sum_squared_distance / valid_points);
+        for (double dev : deviations) {
+            sum_squared_deviation += std::pow(dev - result.mean_deviation, 2);
+        }
+        result.uniformity_rms = std::sqrt(sum_squared_deviation / valid_points);
         result.is_acceptable = (result.outlier_ratio < 0.1);
         result.best_fit_line = line;
     }
     else {
+        result.min_deviation = 0.0;  // 新增：无有效点时的默认值
         result.outlier_ratio = 1.0;
         result.mean_deviation = tolerance_ * 2;
         result.rms_error = tolerance_ * 2;
+        result.uniformity_rms = tolerance_ * 2;
         result.is_acceptable = false;
     }
 
@@ -467,9 +574,11 @@ MeasureCylindricity::AssessmentResult MeasureCylindricity::evaluateGivenLine(
 
         message << "评估结果:\n";
         message << "不贴合点比例: " << std::setprecision(2) << result.outlier_ratio * 100 << "%\n";
+        message << "最小偏差: " << std::setprecision(4) << result.min_deviation << " mm\n";
         message << "最大偏差: " << std::setprecision(4) << result.max_deviation << " mm\n";
         message << "平均偏差: " << result.mean_deviation << " m\n";
-        message << "RMS误差: " << result.rms_error << " m\n\n";
+        message << "RMS偏差: " << result.rms_error << " m\n\n";
+        message << "均匀性(标准差): " << result.uniformity_rms << " mm\n\n";
 
         message << (result.is_acceptable ? "✅ 圆柱度良好" : "❌ 圆柱度不佳");
         message << "（不贴合点比例" << (result.is_acceptable ? "＜" : "≥") << "10%）";
@@ -514,17 +623,22 @@ MeasureCylindricity::AssessmentResult MeasureCylindricity::evaluateCylindricity(
         LineParams best_line = optimizeLineParameters();
         result = computeAssessmentMetrics(best_line);
 
+        // 新增：生成热力图点云
+        generateHeatMapCloud(best_line);
+
         std::stringstream message;
-        message << "=== 圆柱度评估报告（新思路） ===\n";
+        message << "=== 圆柱度评估报告===\n";
         message << "点云点数: " << input_cloud_->size() << "\n";
         message << "设计半径: " << std::fixed << std::setprecision(4) << design_radius_ << " mm\n";
         message << "容差阈值: " << tolerance_ << " mm\n\n";
 
         message << "拟合结果:\n";
         message << "不贴合点比例: " << std::setprecision(2) << result.outlier_ratio * 100 << "%\n";
+        message << "最小偏差: " << std::setprecision(4) << result.min_deviation << " mm\n";
         message << "最大偏差: " << std::setprecision(4) << result.max_deviation << " mm\n";
         message << "平均偏差: " << result.mean_deviation << " mm\n";
         message << "RMS误差: " << result.rms_error << " mm\n\n";
+        message << "均匀性(标准差): " << result.uniformity_rms << " mm\n\n";
 
         message << "圆柱轴线参数:\n";
         message << "轴线点: (" << std::setprecision(3)

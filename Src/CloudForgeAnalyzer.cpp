@@ -38,7 +38,7 @@ void CloudForgeAnalyzer::InitalizeRenderer() {
     viewer.reset(new pcl::visualization::PCLVisualizer(renderer, renderWindow, "viewer", false));
     viewer->getRenderWindow()->GlobalWarningDisplayOff();
 
-    // 先把 renderWindow 绑定到 QVTK widget，让 QVTK widget 创建并管理其 interactor
+    // 先把 renderWindow 绑定到 QVTK widget，让 QVTK widget 创建并管理其 interactor                                                                                                                                                                
     ui->winOfAnalyzer->setRenderWindow(viewer->getRenderWindow());
     QApplication::processEvents();
     ui->winOfAnalyzer->makeCurrent();
@@ -91,6 +91,61 @@ void CloudForgeAnalyzer::mainLoop_Init() {
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////*槽函数start*/
+void CloudForgeAnalyzer::visualizeCylindricityHeatMap(
+    pcl::PointCloud<pcl::PointXYZRGB>::Ptr heatmap_cloud,
+    double min_distance, double max_distance)
+{
+    if (!heatmap_cloud || heatmap_cloud->empty()) {
+        TeEDebug("热力图点云为空，无法可视化");
+        return;
+    }
+
+    // 先清除可能存在的旧热力图
+    viewer->removePointCloud("cylindricity_heatmap");
+    viewer->removeShape("heatmap_colorbar");
+    viewer->removeText3D("heatmap_title");
+
+    // 添加热力图点云
+    viewer->addPointCloud<pcl::PointXYZRGB>(heatmap_cloud, "cylindricity_heatmap");
+    viewer->setPointCloudRenderingProperties(
+        pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 3, "cylindricity_heatmap");
+
+
+    pcl::PointXYZRGB min_pt_rgb, max_pt_rgb;
+    pcl::getMinMax3D(*heatmap_cloud, min_pt_rgb, max_pt_rgb);
+
+    // 后续用 min_pt_rgb, max_pt_rgb 替换 min_pt, max_pt
+    double text_x = min_pt_rgb.x;
+    double text_y = max_pt_rgb.y + (max_pt_rgb.y - min_pt_rgb.y) * 0.1;
+    double text_z = max_pt_rgb.z + (max_pt_rgb.z - min_pt_rgb.z) * 0.1;
+
+
+    // 添加标题
+    viewer->addText3D("圆柱度误差热力图",
+        pcl::PointXYZ(text_x, text_y, text_z), 0.5, 1.0, 1.0, 1.0, "heatmap_title");
+
+    // 添加颜色条说明
+    std::stringstream colorbar_info;
+    colorbar_info << "误差范围: " << std::fixed << std::setprecision(2)
+        << min_distance << " - " << max_distance << " mm\n";
+    colorbar_info << "颜色: 绿色(小误差) → 红色(大误差)";
+
+    viewer->addText3D(colorbar_info.str(),
+        pcl::PointXYZ(text_x, text_y - 0.7, text_z), 0.3, 1.0, 1.0, 1.0, "heatmap_colorbar");
+
+    // 在屏幕角落添加静态说明（不随相机移动）
+    std::stringstream screen_text;
+    screen_text << "圆柱度热力图说明:\n";
+    screen_text << "• 绿色: 小误差 (" << min_distance << " mm)\n";
+    screen_text << "• 红色: 大误差 (" << max_distance << " mm)\n";
+    screen_text << "• 颜色渐变表示误差大小";
+
+    viewer->addText(screen_text.str(), 10, 100, 12, 1.0, 1.0, 1.0, "heatmap_screen_info");
+
+    TeEDebug("热力图可视化完成");
+    TeEDebug("误差范围: " + std::to_string(min_distance) + " - " + std::to_string(max_distance) + " mm");
+}
+
 void CloudForgeAnalyzer::Tool_MeasureCylindricity()
 {
     FitCloudDialog window(CloudMap, ColorMap);
@@ -133,7 +188,7 @@ void CloudForgeAnalyzer::Tool_MeasureCylindricity()
     double tolerance = QInputDialog::getDouble(this, "容差阈值", "请输入允许的最大偏差(mm):",
         25.0, 0.001, 100.0, 4, &ok2);
     int iters = QInputDialog::getDouble(this, "迭代次数", "请输入允许的最大迭代次数:",
-        2000, 50, 10000, 0, &ok3);
+        2000, 50, 1000000000, 0, &ok3);
 
     if (!ok1 || !ok2 || !ok3) {
         TeEDebug("圆柱度评估已取消");
@@ -156,14 +211,21 @@ void CloudForgeAnalyzer::Tool_MeasureCylindricity()
     // 执行评估
     auto result = evaluator.evaluateCylindricity();
 
+	// 获取热力图点云和距离范围
+    auto heatmap_cloud = evaluator.getHeatMapCloud();
+    double min_distance, max_distance;
+    evaluator.getDistanceRange(min_distance, max_distance);
+
+    visualizeCylindricityHeatMap(heatmap_cloud, min_distance, max_distance);
+
     qDebug() << result.assessment_message;
 
-    auto inliers = evaluator.get_inliers();    
+    /*auto inliers = evaluator.get_inliers();    
     auto outliers = evaluator.get_outliers();  
     ColorManager c1(255, 0, 0);
     ColorManager c2(0, 255, 0);
 	AddPointCloud("Cylindricity_Inliers", inliers, c1);
-	AddPointCloud("Cylindricity_Outliers", outliers, c2);
+	AddPointCloud("Cylindricity_Outliers", outliers, c2);*/
 
     // 获取优化后的轴线参数
     Eigen::Vector3f optimized_center = result.getCylinderAxisPoint();
@@ -195,13 +257,6 @@ void CloudForgeAnalyzer::Tool_MeasureCylindricity()
     ui->winOfAnalyzer->update();
 }
 
-void CloudForgeAnalyzer::visualizeCylindricityResult(
-    const MeasureCylindricity::AssessmentResult& result,
-    pcl::PointCloud<pcl::PointXYZ>::Ptr inliers,
-    pcl::PointCloud<pcl::PointXYZ>::Ptr outliers)
-{
-  
-}
 void CloudForgeAnalyzer::Tool_MeasureHeight() {
     ChoseCloudDialog dialogMeasure(CloudMap, ColorMap);
     if (dialogMeasure.getSelectedList().empty()) {

@@ -28,9 +28,11 @@ public:
 
     struct AssessmentResult {
         double outlier_ratio;           // 不贴合点比例 (0.0-1.0)
+        double min_deviation;
         double max_deviation;           // 最大偏差距离
         double mean_deviation;          // 平均偏差距离
         double rms_error;               // 均方根误差
+        double uniformity_rms;         // 新增：均匀性RMSE（标准差）
         LineParams best_fit_line;       // 最优拟合直线参数
         bool is_acceptable;             // 是否在容差范围内
         std::string assessment_message; // 评估结果消息
@@ -43,8 +45,8 @@ public:
         // 获取轴线系数
         std::vector<float> getAxisCoeffs() const { return best_fit_line.toCoeffs(); }
 
-        AssessmentResult() : outlier_ratio(0.0), max_deviation(0.0),
-            mean_deviation(0.0), rms_error(0.0),
+        AssessmentResult() : outlier_ratio(0.0), min_deviation(0.0),max_deviation(0.0),
+            mean_deviation(0.0), rms_error(0.0), uniformity_rms(0.0),
             design_radius(0.0), is_acceptable(false) {
         }
 
@@ -52,6 +54,15 @@ public:
         double design_radius; // 设计半径（用于结果展示）
         friend class MeasureCylindricity;
     };
+
+    // 获取带热力图颜色的点云
+    pcl::PointCloud<pcl::PointXYZRGB>::Ptr getHeatMapCloud() const { return heatmap_cloud_; }
+
+    // 获取距离范围用于颜色映射
+    void getDistanceRange(double& min_distance, double& max_distance) const {
+        min_distance = min_distance_;
+        max_distance = max_distance_;
+    }
 
     MeasureCylindricity();
     ~MeasureCylindricity();
@@ -90,6 +101,8 @@ public:
     // 新增：获取最后一次评估结果
     AssessmentResult getLastAssessmentResult() const { return last_assessment_result_; }
 
+   
+
 private:
     // 核心算法函数
     LineParams optimizeLineParameters(); // 优化直线参数（4自由度）
@@ -113,6 +126,11 @@ private:
     LineParams initializeLineParameters(); // 初始化直线参数
     LineParams perturbLineParameters(const LineParams& line, float magnitude); // 参数扰动
 
+    // 新增：生成热力图点云
+    void generateHeatMapCloud(const LineParams& line);
+
+    // 新增：热力图颜色映射函数
+    void getColorForDistance(double distance, uint8_t& r, uint8_t& g, uint8_t& b) const;
 private:
     pcl::PointCloud<pcl::PointXYZ>::Ptr input_cloud_;
     pcl::PointCloud<pcl::PointXYZ>::Ptr inliers_;
@@ -131,4 +149,8 @@ private:
     // 新增：保存最后一次评估结果
     AssessmentResult last_assessment_result_;
     LineParams last_optimized_line_;
+
+    pcl::PointCloud<pcl::PointXYZRGB>::Ptr heatmap_cloud_;
+    double min_distance_;
+    double max_distance_;
 };

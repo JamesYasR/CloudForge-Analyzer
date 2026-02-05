@@ -12,6 +12,4 @@
 #include <Eigen/Core>
 #include <pcl/common/centroid.h>
 #include <pcl/common/pca.h>
-#include <pcl/filters/voxel_grid.h>
-#include <pcl/filters/statistical_outlier_removal.h>
-#include <pcl/features/normal_3d.h>
+#include <pcl/common/common.h>

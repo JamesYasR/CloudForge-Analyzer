@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>1195</width>
-    <height>817</height>
+    <height>818</height>
    </rect>
   </property>
   <property name="minimumSize">
@@ -490,6 +490,7 @@ background-color: rgb(247, 254, 236);</string>
    <addaction name="measure_parallel"/>
    <addaction name="measure_height"/>
    <addaction name="measure_Cylindricity"/>
+   <addaction name="measure_flatness"/>
    <addaction name="separator"/>
    <addaction name="action_Clip"/>
    <addaction name="separator"/>
@@ -923,6 +924,21 @@ QMenu::item:selected {
    </property>
    <property name="shortcut">
     <string>Ctrl+Y</string>
+   </property>
+   <property name="menuRole">
+    <enum>QAction::MenuRole::NoRole</enum>
+   </property>
+  </action>
+  <action name="measure_flatness">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="icon">
+    <iconset resource="CloudForgeAnalyzer.qrc">
+     <normaloff>:/CloudForgeAnalyzer/Icons/icon_rectangle.png</normaloff>:/CloudForgeAnalyzer/Icons/icon_rectangle.png</iconset>
+   </property>
+   <property name="text">
+    <string>平面度</string>
    </property>
    <property name="menuRole">
     <enum>QAction::MenuRole::NoRole</enum>

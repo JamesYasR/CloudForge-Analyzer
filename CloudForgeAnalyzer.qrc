@@ -10,5 +10,6 @@
         <file>Icons/icon_parallel.png</file>
         <file>Icons/height_icon.png</file>
         <file>Icons/icon_double.png</file>
+        <file>Icons/icon_rectangle.png</file>
     </qresource>
 </RCC>

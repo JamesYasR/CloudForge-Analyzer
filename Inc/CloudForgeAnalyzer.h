@@ -57,10 +57,6 @@ private slots:
     void Tool_MeasureParallel();
     void Tool_Clip();
     void Tool_MeasureCylindricity();
-    void visualizeCylindricityResult(
-        const MeasureCylindricity::AssessmentResult& result,
-        pcl::PointCloud<pcl::PointXYZ>::Ptr inliers,
-        pcl::PointCloud<pcl::PointXYZ>::Ptr outliers);
     void Update_PointCounts();
 private:
     //  
@@ -108,4 +104,8 @@ private:
     void addHeightLines(pcl::visualization::PCLVisualizer::Ptr viewer,
         pcl::PointCloud<pcl::PointXYZ>::Ptr cloud,
         pcl::ModelCoefficients::Ptr plane_coeffs);
+
+    void visualizeCylindricityHeatMap(
+        pcl::PointCloud<pcl::PointXYZRGB>::Ptr heatmap_cloud,
+        double min_distance, double max_distance);
 };
