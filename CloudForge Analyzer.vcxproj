@@ -114,6 +114,7 @@
     <QtUic Include="CloudForgeAnalyzer.ui" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="Src\Basic\CloudClipper.cpp" />
     <ClCompile Include="Src\Basic\ColorManager.cpp" />
     <ClCompile Include="Src\Basic\funcs.cpp" />
     <ClCompile Include="Src\Basic\Line.cpp" />
@@ -175,6 +176,7 @@
     <QtMoc Include="Inc\Dialog\ParamDialogMeaArc.h" />
     <QtMoc Include="Inc\Dialog\ParamDialogCurvSeg.h" />
     <ClInclude Include="Inc\Basic\Basic.h" />
+    <ClInclude Include="Inc\Basic\CloudClipper.h" />
     <ClInclude Include="Inc\Basic\ColorManager.h" />
     <QtMoc Include="Inc\Basic\ManualPolygonClipper.h" />
     <ClInclude Include="Inc\Basic\funcs.h" />

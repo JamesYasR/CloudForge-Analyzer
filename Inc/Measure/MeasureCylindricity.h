@@ -153,4 +153,5 @@ private:
     pcl::PointCloud<pcl::PointXYZRGB>::Ptr heatmap_cloud_;
     double min_distance_;
     double max_distance_;
+
 };

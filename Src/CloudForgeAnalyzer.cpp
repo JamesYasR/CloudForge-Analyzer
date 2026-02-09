@@ -313,58 +313,14 @@ void CloudForgeAnalyzer::Tool_MeasureParallel() {
 }
 
 void CloudForgeAnalyzer::Tool_Clip() {
-    ui->winOfAnalyzer->makeCurrent();
-    if (!ui->winOfAnalyzer->interactor()) {
-        qCritical() << "渲染窗口交互器未初始化!";
-        return;
-    }
     ChoseCloudDialog dialog(CloudMap, ColorMap);
     if (dialog.getSelectedList().empty()) {
         return;
     }
-    pcl::PointCloud<pcl::PointXYZ>::Ptr tempcloud = CloudMap[dialog.getSelectedList()[0]];
-
-    // 获取主窗口的渲染器和交互器
-    vtkRenderWindow* mainRenderWindow = ui->winOfAnalyzer->renderWindow();
-    vtkRenderWindowInteractor* mainInteractor = ui->winOfAnalyzer->interactor();
-
-    // 创建裁剪器
-    ManualPolygonClipper* clipper = new ManualPolygonClipper(
-        tempcloud,
-        mainRenderWindow,
-        mainInteractor,
-        viewer.get(),
-        this
-    );
-    //QObject::connect(clipper, &ManualPolygonClipper::destroyed, this, [this]() {
-    //    // 重置交互器以防止悬空指针
-    //    ui->winOfAnalyzer->interactor()->SetRenderWindow(nullptr);
-    //    ui->winOfAnalyzer->interactor()->SetInteractorStyle(nullptr);
-    //    });
-    // 连接裁剪完成信号
-    connect(clipper, &ManualPolygonClipper::clippingFinished, this,
-        [this, clipper]() {
-            // 先获取裁剪结果
-            pcl::PointCloud<pcl::PointXYZ>::Ptr clippedCloud = clipper->getClippedCloud();
-            pcl::PointCloud<pcl::PointXYZ>::Ptr remainCloud = clipper->getRemainCloud();
-            // 恢复交互器状态
-            clipper->cleanup();
-
-            // 处理结果
-            if (!clippedCloud->empty()) {
-                ColorManager color1(0, 255, 0);
-                ColorManager color2(255, 0, 0);
-                ClearAllPointCloud();
-                AddPointCloud("clipped", clippedCloud, color1);
-                AddPointCloud("remain", remainCloud, color2);
-            }
-			RestoreDefaultInteractor();
-            // 安全删除
-            clipper->deleteLater();
-        });
-
-    // 开始裁剪
-    clipper->startClipping();
+    pcl::PointCloud<pcl::PointXYZ>::Ptr tempcloud1(new pcl::PointCloud<pcl::PointXYZ>);
+    pcl::PointCloud<pcl::PointXYZ>::Ptr tempcloud2 = CloudMap[dialog.getSelectedList()[0]];
+    *tempcloud1 = *tempcloud2;
+	interactivePolygonCut(tempcloud1);
 }
 
 void CloudForgeAnalyzer::Slot_ph_ProtruSeg_Triggered() {

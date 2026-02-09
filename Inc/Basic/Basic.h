@@ -4,3 +4,5 @@
 #include "ManualPolygonClipper.h"
 #include "Line.h"
 #include "funcs.h"
+#include "CloudClipper.h"
+

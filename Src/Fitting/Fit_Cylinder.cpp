@@ -50,7 +50,7 @@ void Fit_Cylinder::Proc() {
 	model->setInputNormals(normals);
 
 	// 新增：设置初始半径猜测
-	model->setRadiusLimits(InitialRadius * 0.995, InitialRadius * 1.005);  // 设置半径搜索范围
+	model->setRadiusLimits(InitialRadius * 0.98, InitialRadius * 1.02);  // 设置半径搜索范围
 
 	pcl::RandomSampleConsensus<pcl::PointXYZ> ransac(model);	// 定义RANSAC算法对象
 

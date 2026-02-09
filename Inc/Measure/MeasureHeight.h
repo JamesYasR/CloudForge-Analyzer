@@ -30,7 +30,6 @@ private:
     pcl::PointCloud<pcl::PointXYZ>::Ptr measure_cloud_;
     pcl::PointCloud<pcl::PointXYZ>::Ptr reference_cloud_;
     pcl::ModelCoefficients::Ptr plane_coeffs_;
-
     bool measured_ = false;
 
     // 统计结果（基于绝对距离）
