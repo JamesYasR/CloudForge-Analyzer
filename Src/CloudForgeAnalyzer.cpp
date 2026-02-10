@@ -348,6 +348,9 @@ void CloudForgeAnalyzer::Tool_Clip() {
 		AddPointCloud(GenerateRandomName(dialog.getSelectedList()[0] + "_clippedin"), clipedin, color1);
         AddPointCloud(GenerateRandomName(dialog.getSelectedList()[0] + "_clippedout"), clipedout, color2);
     }
+    else {
+        TeEDebug(">>:操作取消");
+    }
     
 }
 
