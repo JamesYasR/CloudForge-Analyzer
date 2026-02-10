@@ -351,7 +351,7 @@ void interactivePolygonCut(PointCloudT::Ptr cloud) {
 
     // 创建可视化器 - 与原始代码相同
     state.viewer = pcl::visualization::PCLVisualizer::Ptr(
-        new pcl::visualization::PCLVisualizer("3D Point Cloud Polygon Cutting"));
+        new pcl::visualization::PCLVisualizer("3D Point Cloud Polygon Cutting 裁切后可直接关闭"));
     state.viewer->setBackgroundColor(0.1, 0.1, 0.1);
     state.viewer->addCoordinateSystem(1.0);
     state.viewer->initCameraParameters();

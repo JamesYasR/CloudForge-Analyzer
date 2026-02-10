@@ -67,12 +67,6 @@
     <ClCompile Include="Src\Linear_Depression_Plane.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="Src\PointCloudIncise.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="Src\Protrusion_Depression_Cylinder.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="Src\CloudForgeAnalyzer.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -151,9 +145,6 @@
     <ClCompile Include="Src\Dialog\ParamDialogProtrusion.cpp">
       <Filter>Source Files\Dialog</Filter>
     </ClCompile>
-    <ClCompile Include="Src\Basic\ManualPolygonClipper.cpp">
-      <Filter>Source Files\Basic</Filter>
-    </ClCompile>
     <ClCompile Include="Src\Dialog\ParamDialog_FittingLine.cpp">
       <Filter>Source Files\Dialog</Filter>
     </ClCompile>
@@ -193,9 +184,6 @@
   </ItemGroup>
   <ItemGroup>
     <QtMoc Include="Inc\CloudForgeAnalyzer.h">
-      <Filter>Header Files</Filter>
-    </QtMoc>
-    <QtMoc Include="Inc\PointCloudIncise.h">
       <Filter>Header Files</Filter>
     </QtMoc>
     <QtMoc Include="Inc\Dialog\ParamDialog_ec.h">
@@ -239,9 +227,6 @@
     </QtMoc>
     <QtMoc Include="Inc\Dialog\​​ParamDialogProtrusion.h">
       <Filter>Header Files\Dialog</Filter>
-    </QtMoc>
-    <QtMoc Include="Inc\Basic\ManualPolygonClipper.h">
-      <Filter>Header Files\Basic</Filter>
     </QtMoc>
     <QtMoc Include="Inc\Dialog\ParamDialog_FittingLine.h">
       <Filter>Header Files\Dialog</Filter>

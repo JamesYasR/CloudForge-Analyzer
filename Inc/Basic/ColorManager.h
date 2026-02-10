@@ -5,6 +5,7 @@
 class ColorManager {
 public:
     ColorManager(double R, double G, double B);
+    ColorManager();
     ~ColorManager();
     double r;
     double g;

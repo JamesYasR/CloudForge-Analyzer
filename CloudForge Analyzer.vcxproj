@@ -118,7 +118,6 @@
     <ClCompile Include="Src\Basic\ColorManager.cpp" />
     <ClCompile Include="Src\Basic\funcs.cpp" />
     <ClCompile Include="Src\Basic\Line.cpp" />
-    <ClCompile Include="Src\Basic\ManualPolygonClipper.cpp" />
     <ClCompile Include="Src\Basic\PointPicker.cpp" />
     <ClCompile Include="Src\Basic\PointPickerMgr.cpp" />
     <ClCompile Include="Src\CloudForgeAnalyzer.cpp" />
@@ -153,13 +152,11 @@
     <ClCompile Include="Src\Measure\MeasureCylindricity.cpp" />
     <ClCompile Include="Src\Measure\MeasureHeight.cpp" />
     <ClCompile Include="Src\Measure\MeasurePallel.cpp" />
-    <ClCompile Include="Src\PointCloudIncise.cpp" />
     <ClCompile Include="Src\PreProcessing\Cluster.cpp" />
     <ClCompile Include="Src\PreProcessing\CurvatureSegmentation.cpp" />
     <ClCompile Include="Src\PreProcessing\Filter_sor.cpp" />
     <ClCompile Include="Src\PreProcessing\Filter_voxel.cpp" />
     <ClCompile Include="Src\Preprocessing\ProtrusionSegmentation.cpp" />
-    <ClCompile Include="Src\Protrusion_Depression_Cylinder.cpp" />
     <ClCompile Include="Src\temp.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -178,7 +175,6 @@
     <ClInclude Include="Inc\Basic\Basic.h" />
     <ClInclude Include="Inc\Basic\CloudClipper.h" />
     <ClInclude Include="Inc\Basic\ColorManager.h" />
-    <QtMoc Include="Inc\Basic\ManualPolygonClipper.h" />
     <ClInclude Include="Inc\Basic\funcs.h" />
     <ClInclude Include="Inc\Basic\Line.h" />
     <ClInclude Include="Inc\config\pcl114.h" />
@@ -214,7 +210,6 @@
     <ClInclude Include="Inc\PreProcessing\PreProcessing.h" />
     <ClInclude Include="Inc\Preprocessing\ProtrusionSegmentation.h" />
     <ClInclude Include="Inc\Protrusion_Depression_Cylinder.h" />
-    <QtMoc Include="Inc\PointCloudIncise.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Condition="Exists('$(QtMsBuild)\qt.targets')">

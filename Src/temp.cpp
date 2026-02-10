@@ -1,3 +1,11 @@
+//#include "Basic/CloudClipper.h"
+//#include "config/pcl114.h"
+//int main() {
+//	pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
+//	pcl::io::loadPCDFile<pcl::PointXYZ>("PCDfiles/rabbit.pcd", *cloud);
+//	interactivePolygonCut(cloud);
+//}
+
 //#include <pcl/point_types.h>
 //#include <pcl/point_cloud.h>
 //#include <pcl/io/pcd_io.h>

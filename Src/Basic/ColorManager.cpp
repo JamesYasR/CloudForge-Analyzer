@@ -5,6 +5,11 @@ ColorManager::ColorManager(double R, double G, double B) {
 	g = G;
 	b = B;
 }
+ColorManager::ColorManager() {
+	r = rand() % 256;
+	g = rand() % 256;
+	b = rand() % 256;
+}
 ColorManager:: ~ColorManager() {
 	
 }

@@ -75,7 +75,6 @@ private:
     void InitializeProgressBar();
     void SetProgressBarValue(int percentage, const QString& message = "");
     void ResetProgressBar();
-    void RestoreDefaultInteractor();
 
     pcl::visualization::PCLVisualizer::Ptr viewer;
     pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZ>::Ptr renderer_custom;
@@ -108,4 +107,5 @@ private:
     void visualizeCylindricityHeatMap(
         pcl::PointCloud<pcl::PointXYZRGB>::Ptr heatmap_cloud,
         double min_distance, double max_distance);
+    bool showConfirmationDialog(const QString& title, const QString& message);
 };

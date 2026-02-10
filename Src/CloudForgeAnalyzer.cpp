@@ -90,6 +90,14 @@ void CloudForgeAnalyzer::mainLoop_Init() {
     timer->start(200); // 每隔1s 
 }
 
+
+bool CloudForgeAnalyzer::showConfirmationDialog(const QString& title, const QString& message){
+    QMessageBox::StandardButton reply;
+    reply = QMessageBox::question(nullptr, title, message,
+        QMessageBox::Yes | QMessageBox::No);
+    return (reply == QMessageBox::Yes);
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////*槽函数start*/
 void CloudForgeAnalyzer::visualizeCylindricityHeatMap(
     pcl::PointCloud<pcl::PointXYZRGB>::Ptr heatmap_cloud,
@@ -320,7 +328,27 @@ void CloudForgeAnalyzer::Tool_Clip() {
     pcl::PointCloud<pcl::PointXYZ>::Ptr tempcloud1(new pcl::PointCloud<pcl::PointXYZ>);
     pcl::PointCloud<pcl::PointXYZ>::Ptr tempcloud2 = CloudMap[dialog.getSelectedList()[0]];
     *tempcloud1 = *tempcloud2;
+    
 	interactivePolygonCut(tempcloud1);
+    bool result = showConfirmationDialog("确认裁切", "您确定要执行此操作吗？");
+    if (result) {
+		DelePointCloud(dialog.getSelectedList()[0]);
+        pcl::PointCloud<pcl::PointXYZ>::Ptr clipedin(new pcl::PointCloud<pcl::PointXYZ>);
+        pcl::PointCloud<pcl::PointXYZ>::Ptr clipedout(new pcl::PointCloud<pcl::PointXYZ>);
+        if (pcl::io::loadPCDFile("PCDfiles/temp/cut/inside_points.pcd", *clipedin) == -1) {
+            TeEDebug(">>:无法加载点云文件clipedin");
+            return;
+        }
+        if (pcl::io::loadPCDFile("PCDfiles/temp/cut/outside_points.pcd", *clipedout) == -1) {
+            TeEDebug(">>:无法加载点云文件clipedin");
+            return;
+        }
+        ColorManager color1;
+        ColorManager color2;
+		AddPointCloud(GenerateRandomName(dialog.getSelectedList()[0] + "_clippedin"), clipedin, color1);
+        AddPointCloud(GenerateRandomName(dialog.getSelectedList()[0] + "_clippedout"), clipedout, color2);
+    }
+    
 }
 
 void CloudForgeAnalyzer::Slot_ph_ProtruSeg_Triggered() {
@@ -577,14 +605,6 @@ void CloudForgeAnalyzer::Slot_fi_add_Triggered() {
     // 开始任务 - 显示进度
     SetProgressBarValue(0, "加载点云");
 
-    auto generateColor = []() -> ColorManager {
-        return ColorManager(
-            rand() % 256,
-            rand() % 256,
-            rand() % 256
-        );
-        };
-
     // 用于跟踪成功加载的文件数量
     int loadedCount = 0;
     int currentIndex = 0;
@@ -614,7 +634,7 @@ void CloudForgeAnalyzer::Slot_fi_add_Triggered() {
                 QString displayName = QFileInfo(file_name).completeBaseName();
 
                 // 生成颜色并添加点云
-                ColorManager color = generateColor();
+                ColorManager color;
                 AddPointCloud(displayName.toStdString(), cloud, color);
 
                 status = QString(">>已加载: %1").arg(displayName);
@@ -880,52 +900,6 @@ void CloudForgeAnalyzer::SetProgressBarValue(int percentage, const QString& mess
 void CloudForgeAnalyzer::ResetProgressBar() {
     // 重置为100%完成状态
     SetProgressBarValue(100, "就绪");
-}
-
-void CloudForgeAnalyzer::RestoreDefaultInteractor() {
-    ui->winOfAnalyzer->makeCurrent();
-    vtkRenderWindow* renderWindow = ui->winOfAnalyzer->renderWindow();
-    if (!renderWindow) {
-        qWarning() << "RestoreDefaultInteractor: renderWindow 为 nullptr";
-        return;
-    }
-
-    // 优先使用 QVTK widget 提供的 interactor
-    vtkRenderWindowInteractor* widgetInteractor = ui->winOfAnalyzer->interactor();
-    if (!widgetInteractor) {
-        // 退而求其次从 renderWindow 获取
-        widgetInteractor = renderWindow->GetInteractor();
-        if (!widgetInteractor) {
-            qWarning() << "RestoreDefaultInteractor: 无法获取交互器";
-            return;
-        }
-    }
-
-    // 重新绑定 PCLVisualizer 到已存在的 interactor（不要创建局部 vtkNew 导致被销毁）
-    viewer->setupInteractor(widgetInteractor, renderWindow);
-
-    // 确保交互器有合理的样式（若无则设置 trackball）
-    // 修复 E0144 错误：GetInteractorStyle() 返回 vtkInteractorObserver*，需要强制类型转换为 vtkInteractorStyle*
-    vtkInteractorStyle* curStyle = vtkInteractorStyle::SafeDownCast(widgetInteractor->GetInteractorStyle());
-    if (!curStyle) {
-        vtkNew<vtkInteractorStyleSwitch> styleSwitch;
-        styleSwitch->SetCurrentStyleToTrackballCamera();
-        widgetInteractor->SetInteractorStyle(styleSwitch);
-        // SetInteractorStyle 会增加引用计数，局部 styleSwitch 不会导致悬空
-    }
-    else {
-        if (auto switchStyle = vtkInteractorStyleSwitch::SafeDownCast(curStyle)) {
-            switchStyle->SetCurrentStyleToTrackballCamera();
-        }
-    }
-
-    // 确保 interactor 已启用并初始化（但不要 Start()，避免进入 VTK 事件循环）
-    if (!widgetInteractor->GetEnabled()) widgetInteractor->Enable();
-    widgetInteractor->Initialize();
-
-    // 刷新渲染
-    renderWindow->Render();
-    ui->winOfAnalyzer->update();
 }
 
 void CloudForgeAnalyzer::AddLine(const std::string& name,
