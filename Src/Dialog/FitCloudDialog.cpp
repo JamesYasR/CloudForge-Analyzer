@@ -5,8 +5,7 @@ FitCloudDialog::FitCloudDialog(std::map<std::string, pcl::PointCloud<pcl::PointX
 {
     InitializeButtonAndConnect();
     this->setWindowTitle("选择点云拟合");
-    this->exec();
-    
+    //this->exec();
 }
 FitCloudDialog::~FitCloudDialog() = default;
 
@@ -20,6 +19,11 @@ void FitCloudDialog::confirm()
         return;
     }
     this->accept();
+}
+
+void FitCloudDialog::cancel()
+{
+    this->reject();
 }
 
 

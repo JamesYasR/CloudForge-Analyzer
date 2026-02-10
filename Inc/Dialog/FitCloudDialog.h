@@ -7,6 +7,7 @@ public:
 	~FitCloudDialog();
 private slots:
 	void confirm();
+	void cancel();
 private:
 	void InitializeButtonAndConnect() override;
 

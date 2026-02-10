@@ -5,7 +5,7 @@ ChoseCloudDialog::ChoseCloudDialog(std::map<std::string, pcl::PointCloud<pcl::Po
 {
     InitializeButtonAndConnect();
     this->setWindowTitle("选择点云");
-    this->exec();
+    //this->exec();
 }
 
 ChoseCloudDialog::~ChoseCloudDialog() = default;

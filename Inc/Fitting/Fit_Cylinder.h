@@ -23,6 +23,8 @@ public:
 	float Get_Outliers_Percentage();  // 新增：获取外点百分比
 	Eigen::Vector3f get_center_point();
 	Eigen::Vector3f get_axis_direction();
+	bool isCancelled=false;
+
 private:
 	int KSearch;
 	float DistanceThreshold;

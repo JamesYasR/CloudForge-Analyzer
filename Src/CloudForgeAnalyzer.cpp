@@ -129,24 +129,24 @@ void CloudForgeAnalyzer::visualizeCylindricityHeatMap(
 
 
     // 添加标题
-    viewer->addText3D("圆柱度误差热力图",
+    viewer->addText3D("CylindricityHeatMap",
         pcl::PointXYZ(text_x, text_y, text_z), 0.5, 1.0, 1.0, 1.0, "heatmap_title");
 
     // 添加颜色条说明
     std::stringstream colorbar_info;
-    colorbar_info << "误差范围: " << std::fixed << std::setprecision(2)
+    colorbar_info << "range: " << std::fixed << std::setprecision(2)
         << min_distance << " - " << max_distance << " mm\n";
-    colorbar_info << "颜色: 绿色(小误差) → 红色(大误差)";
+    colorbar_info << " green(mini) → red(maxi)";
 
     viewer->addText3D(colorbar_info.str(),
         pcl::PointXYZ(text_x, text_y - 0.7, text_z), 0.3, 1.0, 1.0, 1.0, "heatmap_colorbar");
 
     // 在屏幕角落添加静态说明（不随相机移动）
     std::stringstream screen_text;
-    screen_text << "圆柱度热力图说明:\n";
-    screen_text << "• 绿色: 小误差 (" << min_distance << " mm)\n";
-    screen_text << "• 红色: 大误差 (" << max_distance << " mm)\n";
-    screen_text << "• 颜色渐变表示误差大小";
+    screen_text << "CylindricityHeatMap:\n";
+    screen_text << "green: low error (" << min_distance << " mm)\n";
+    screen_text << "red: high error (" << max_distance << " mm)\n";
+    screen_text << "Color gradient represents the magnitude of error";
 
     viewer->addText(screen_text.str(), 10, 100, 12, 1.0, 1.0, 1.0, "heatmap_screen_info");
 
@@ -157,12 +157,21 @@ void CloudForgeAnalyzer::visualizeCylindricityHeatMap(
 void CloudForgeAnalyzer::Tool_MeasureCylindricity()
 {
     FitCloudDialog window(CloudMap, ColorMap);
+    if (window.exec() != QDialog::Accepted) {
+        TeEDebug(">>:操作取消");
+        return;
+    }
     if (window.getSelectedList().empty()) {
+        TeEDebug(">>:未选择点云");
         return;
     }
     pcl::PointCloud<pcl::PointXYZ>::Ptr Cloud_Temp = CloudMap[window.getSelectedList()[0]];
 
     Fit_Cylinder fcy(Cloud_Temp);
+    if (fcy.isCancelled) {
+        TeEDebug(">>:操作取消");
+        return;
+    }
 
     Eigen::VectorXf coeff1;
 
@@ -178,6 +187,10 @@ void CloudForgeAnalyzer::Tool_MeasureCylindricity()
 	Eigen::Vector3f axis = fcy.get_axis_direction();
 
     ChoseCloudDialog dialog(CloudMap, ColorMap);
+    if (dialog.exec() != QDialog::Accepted) {
+        TeEDebug(">>:操作取消");
+        return;
+    }
     if (dialog.getSelectedList().empty()) {
         TeEDebug("圆柱度评估已取消：未选择点云");
         return;
@@ -322,7 +335,12 @@ void CloudForgeAnalyzer::Tool_MeasureParallel() {
 
 void CloudForgeAnalyzer::Tool_Clip() {
     ChoseCloudDialog dialog(CloudMap, ColorMap);
+    if (dialog.exec() != QDialog::Accepted) { 
+        TeEDebug(">>:操作取消");
+        return;  
+    }
     if (dialog.getSelectedList().empty()) {
+        TeEDebug(">>:没有点云被选中");
         return;
     }
     pcl::PointCloud<pcl::PointXYZ>::Ptr tempcloud1(new pcl::PointCloud<pcl::PointXYZ>);
@@ -356,6 +374,10 @@ void CloudForgeAnalyzer::Tool_Clip() {
 
 void CloudForgeAnalyzer::Slot_ph_ProtruSeg_Triggered() {
     ChoseCloudDialog dialog(CloudMap, ColorMap);
+    if (dialog.exec() != QDialog::Accepted) {
+        TeEDebug(">>:操作取消");
+        return;
+    }
     if (dialog.getSelectedList().empty()) {
         return;
     }
@@ -372,6 +394,10 @@ void CloudForgeAnalyzer::Slot_ph_ProtruSeg_Triggered() {
 
 void CloudForgeAnalyzer::Slot_ph_CurvSeg_Triggered() {
 	ChoseCloudDialog dialog(CloudMap, ColorMap);
+    if (dialog.exec() != QDialog::Accepted) {
+        TeEDebug(">>:操作取消");
+        return;
+    }
     if (dialog.getSelectedList().empty()) {
         return;
 	}
@@ -430,6 +456,10 @@ void CloudForgeAnalyzer::Tool_MeasureGeodisic() {
     TeEDebug(msg);
 
     ChoseCloudDialog dialog(CloudMap, ColorMap);
+    if (dialog.exec() != QDialog::Accepted) {
+        TeEDebug(">>:操作取消");
+        return;
+    }
     if (dialog.getSelectedList().empty()) {
         return;
     }
@@ -500,6 +530,10 @@ void CloudForgeAnalyzer::Tool_MeasureGeodisic() {
 
 void CloudForgeAnalyzer::Slot_fit_line_Triggered() {
     ChoseCloudDialog dialog(CloudMap, ColorMap);
+    if (dialog.exec() != QDialog::Accepted) {
+        TeEDebug(">>:操作取消");
+        return;
+    }
     if (dialog.getSelectedList().empty()) return;
 
     pcl::PointCloud<pcl::PointXYZ>::Ptr cloud = CloudMap[dialog.getSelectedList()[0]];
@@ -533,12 +567,20 @@ void CloudForgeAnalyzer::Slot_fit_line_Triggered() {
 
 void CloudForgeAnalyzer::Slot_fit_cy_Triggered() {
     FitCloudDialog window(CloudMap, ColorMap);
+    if (window.exec() != QDialog::Accepted) {
+        TeEDebug(">>:操作取消");
+        return;
+    }
     if (window.getSelectedList().empty()) {
         return;
     }
     pcl::PointCloud<pcl::PointXYZ>::Ptr Cloud_Temp = CloudMap[window.getSelectedList()[0]];
 
     Fit_Cylinder fcy(Cloud_Temp);
+    if (fcy.isCancelled) {
+        TeEDebug(">>:操作取消");
+        return;
+    }
     pcl::PointCloud<pcl::PointXYZ>::Ptr Cloud_Inliers, Cloud_Outliers;
     Cloud_Inliers = fcy.Get_Inliers();
     Cloud_Outliers = fcy.Get_Outliers();
@@ -755,6 +797,10 @@ void CloudForgeAnalyzer::Slot_fl_1_Triggered() {
 }
 void CloudForgeAnalyzer::Slot_ph_1_Triggered() {
     ChoseCloudDialog dialog(CloudMap, ColorMap);
+    if (dialog.exec() != QDialog::Accepted) {
+        TeEDebug(">>:操作取消");
+        return;
+    }
     if (dialog.getSelectedList().empty()) return;
     pcl::PointCloud<pcl::PointXYZ>::Ptr tempcloud = CloudMap[dialog.getSelectedList()[0]];
     Cluster cs(tempcloud);

@@ -7,8 +7,11 @@ Fit_Cylinder::Fit_Cylinder(pcl::PointCloud<pcl::PointXYZ>::Ptr InputC) :
 	, cloud_outliers(new pcl::PointCloud<pcl::PointXYZ>)
 {
 	bool ok1, ok2, ok3, ok4;  // 增加ok4用于初始半径验证
-
-	if (paramDialog->exec() == QDialog::Accepted) // 如果用户点击了"确定"
+	if (paramDialog->exec() != QDialog::Accepted) {
+		isCancelled = true;
+		return;
+	}
+	else // 如果用户点击了"确定"
 	{
 		QString param1 = paramDialog->getParams()[0];
 		QString param2 = paramDialog->getParams()[1];
@@ -22,11 +25,6 @@ Fit_Cylinder::Fit_Cylinder(pcl::PointCloud<pcl::PointXYZ>::Ptr InputC) :
 			qDebug() << "无效数字";
 			return;
 		}
-	}
-	else
-	{
-		qDebug() << "取消操作";
-		return;
 	}
 	*cloud_input = *InputC;
 	if (cloud_input->empty()) {
