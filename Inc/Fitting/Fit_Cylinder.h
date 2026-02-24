@@ -10,6 +10,7 @@
 #include <pcl/sample_consensus/model_types.h>
 #include "Dialog/Dialog.h"
 #include <unordered_set>
+#include <iostream>
 
 class Fit_Cylinder {
 public:
@@ -24,7 +25,7 @@ public:
 	Eigen::Vector3f get_center_point();
 	Eigen::Vector3f get_axis_direction();
 	bool isCancelled=false;
-
+	std::string message;
 private:
 	int KSearch;
 	float DistanceThreshold;
@@ -36,4 +37,5 @@ private:
 	pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_outliers;
 	ParamDialog_FittingCylinder* paramDialog;
 	void Proc();
+	float ComputeRMSE();
 };

@@ -13,3 +13,4 @@
 #include <pcl/common/centroid.h>
 #include <pcl/common/pca.h>
 #include <pcl/common/common.h>
+#include <pcl/features/normal_3d_omp.h>

@@ -4,6 +4,7 @@
 #include <pcl/segmentation/extract_clusters.h>
 #include <pcl/common/point_tests.h> // 用于pcl::isFinite检查
 #include <Eigen/Dense>
+#include <omp.h>
 
 ProtrusionSegmentation::ProtrusionSegmentation(pcl::PointCloud<pcl::PointXYZ>::Ptr& input_cloud)
     : input_cloud(input_cloud)
@@ -47,36 +48,61 @@ void ProtrusionSegmentation::segment() {
     // 局部拟合判断突起点
     pcl::KdTreeFLANN<pcl::PointXYZ> kdtree;
     kdtree.setInputCloud(input_cloud);
-    pcl::PointIndices::Ptr protrusion_indices(new pcl::PointIndices);
 
-    for (size_t i = 0; i < input_cloud->size(); ++i) {
-        const auto& query = input_cloud->points[i];
-        std::vector<int> indices;
-        std::vector<float> dists;
-        kdtree.radiusSearch(query, search_radius, indices, dists);
+    // 使用线程安全的容器存储结果
+    std::vector<std::vector<int>> thread_protrusion_indices(omp_get_max_threads());
 
-        if (indices.size() < 10) continue; // 邻域点太少跳过
+#pragma omp parallel
+    {
+        pcl::KdTreeFLANN<pcl::PointXYZ> local_kdtree = kdtree;  // 每个线程创建本地副本
+        int thread_id = omp_get_thread_num();
 
-        // 局部平面拟合 z = ax + by + c
-        Eigen::MatrixXf A(indices.size(), 3);
-        Eigen::VectorXf b(indices.size());
-        for (size_t j = 0; j < indices.size(); ++j) {
-            const auto& pt = input_cloud->points[indices[j]];
-            A(j, 0) = pt.x;
-            A(j, 1) = pt.y;
-            A(j, 2) = 1.0;
-            b(j) = pt.z;
-        }
-        Eigen::Vector3f coeff = A.colPivHouseholderQr().solve(b);
+#pragma omp for
+        for (int i = 0; i < static_cast<int>(input_cloud->size()); ++i) {
+            const auto& query = input_cloud->points[i];
+            std::vector<int> indices;
+            std::vector<float> dists;
 
-        float z_fit = coeff[0]*query.x + coeff[1]*query.y + coeff[2];
+            // 使用本地kdtree避免竞争
+            local_kdtree.radiusSearch(query, search_radius, indices, dists);
 
-        float dist = query.z - z_fit;
-        float abs_dist = std::abs(query.z - z_fit);
-        if (abs_dist > height_threshold) {
-            protrusion_indices->indices.push_back(i);
+            if (indices.size() < 10) continue; // 邻域点太少跳过
+
+            // 局部平面拟合 z = ax + by + c
+            Eigen::MatrixXf A(indices.size(), 3);
+            Eigen::VectorXf b(indices.size());
+            for (size_t j = 0; j < indices.size(); ++j) {
+                const auto& pt = input_cloud->points[indices[j]];
+                A(j, 0) = pt.x;
+                A(j, 1) = pt.y;
+                A(j, 2) = 1.0;
+                b(j) = pt.z;
+            }
+
+            Eigen::Vector3f coeff = A.colPivHouseholderQr().solve(b);
+            float z_fit = coeff[0] * query.x + coeff[1] * query.y + coeff[2];
+            float abs_dist = std::abs(query.z - z_fit);
+
+            if (abs_dist > height_threshold) {
+#pragma omp critical
+                {
+                    thread_protrusion_indices[thread_id].push_back(i);
+                }
+            }
         }
     }
+
+    // 合并所有线程的结果
+    pcl::PointIndices::Ptr protrusion_indices(new pcl::PointIndices);
+
+    for (const auto& thread_indices : thread_protrusion_indices) {
+        protrusion_indices->indices.insert(
+            protrusion_indices->indices.end(),
+            thread_indices.begin(),
+            thread_indices.end()
+        );
+    }
+
 
     // 3. 提取候选突起区域
     pcl::ExtractIndices<pcl::PointXYZ> extract;

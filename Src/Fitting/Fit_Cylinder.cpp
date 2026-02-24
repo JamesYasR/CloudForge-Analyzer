@@ -1,4 +1,5 @@
 #include "Fitting/Fit_Cylinder.h"
+#include <omp.h>
 
 Fit_Cylinder::Fit_Cylinder(pcl::PointCloud<pcl::PointXYZ>::Ptr InputC) :
 	paramDialog(new ParamDialog_FittingCylinder())
@@ -35,8 +36,8 @@ Fit_Cylinder::Fit_Cylinder(pcl::PointCloud<pcl::PointXYZ>::Ptr InputC) :
 Fit_Cylinder::~Fit_Cylinder() = default;
 
 void Fit_Cylinder::Proc() {
-
-	pcl::NormalEstimation<pcl::PointXYZ, pcl::Normal> n;
+	pcl::NormalEstimationOMP<pcl::PointXYZ, pcl::Normal> n;
+	n.setNumberOfThreads(omp_get_max_threads());
 	pcl::PointCloud<pcl::Normal>::Ptr normals(new pcl::PointCloud<pcl::Normal>);
 	pcl::search::KdTree<pcl::PointXYZ>::Ptr tree(new pcl::search::KdTree<pcl::PointXYZ>());
 	n.setInputCloud(cloud_input);
@@ -48,7 +49,10 @@ void Fit_Cylinder::Proc() {
 	model->setInputNormals(normals);
 
 	// 新增：设置初始半径猜测
-	model->setRadiusLimits(InitialRadius * 0.98, InitialRadius * 1.02);  // 设置半径搜索范围
+	if (InitialRadius > 0.0) {
+		model->setRadiusLimits(InitialRadius * 0.998, InitialRadius * 1.002);  // 设置半径搜索范围
+	}
+
 
 	pcl::RandomSampleConsensus<pcl::PointXYZ> ransac(model);	// 定义RANSAC算法对象
 
@@ -83,16 +87,36 @@ void Fit_Cylinder::Proc() {
 		<< "\n圆柱半径为：" << coeff_in[6];
 
 	cloud_outliers->clear();
-	std::unordered_set<int> inliers_set(ranSacInliers.begin(), ranSacInliers.end());
-	for (size_t i = 0; i < cloud_input->size(); ++i) {
-		if (!inliers_set.count(i)) {
-			cloud_outliers->push_back((*cloud_input)[i]);
+	int total_points = cloud_input->size();
+	cloud_outliers->reserve(total_points - ranSacInliers.size());
+
+#pragma omp parallel
+	{
+		std::vector<pcl::PointXYZ> local_outliers;
+#pragma omp for nowait
+		for (int i = 0; i < total_points; ++i) {
+			if (std::find(ranSacInliers.begin(), ranSacInliers.end(), i) == ranSacInliers.end()) {
+				local_outliers.push_back((*cloud_input)[i]);
+			}
+		}
+
+#pragma omp critical
+		{
+			cloud_outliers->insert(cloud_outliers->end(), local_outliers.begin(), local_outliers.end());
 		}
 	}
 
 	// 新增：输出百分比信息
 	qDebug() << "内点数量：" << cloud_inliers->size() << "，占总点数的：" << Get_Inliers_Percentage() << "%";
 	qDebug() << "外点数量：" << cloud_outliers->size() << "，占总点数的：" << Get_Outliers_Percentage() << "%";
+
+
+	message = "圆柱1轴上一点坐标为：" + std::to_string(coeff_in[0]) + ", " + std::to_string(coeff_in[1]) + ", " + std::to_string(coeff_in[2])
+		+ "\n圆柱轴方向为：" + std::to_string(coeff_in[3]) + "," + std::to_string(coeff_in[4]) + "," + std::to_string(coeff_in[5])
+		+ "\n圆柱半径为：" + std::to_string(coeff_in[6])
+		+ "\n内点比例为：" + std::to_string(Get_Inliers_Percentage())
+		+ "\nRMSE：" + std::to_string(ComputeRMSE());
+
 }
 
 pcl::PointCloud<pcl::PointXYZ>::Ptr Fit_Cylinder::Get_Inliers() {
@@ -154,4 +178,33 @@ Eigen::Vector3f Fit_Cylinder::get_center_point() {
 
 Eigen::Vector3f Fit_Cylinder::get_axis_direction() {
 	return Eigen::Vector3f(coeff_in[3], coeff_in[4], coeff_in[5]);
+}
+
+float Fit_Cylinder::ComputeRMSE() {
+	if (coeff_in.size() < 7 || cloud_inliers->empty()) {
+		return -1.0f;
+	}
+
+	Eigen::Vector3f axis(coeff_in[3], coeff_in[4], coeff_in[5]);
+	Eigen::Vector3f center(coeff_in[0], coeff_in[1], coeff_in[2]);
+	float radius = coeff_in[6];
+
+	float total_squared_error = 0.0f;
+	int num_points = cloud_inliers->size();
+
+#pragma omp parallel for reduction(+:total_squared_error)
+	for (int i = 0; i < num_points; ++i) {
+		const auto& point = cloud_inliers->points[i];
+		Eigen::Vector3f point_vec(point.x, point.y, point.z);
+
+		Eigen::Vector3f vec_to_center = point_vec - center;
+		float projection_length = vec_to_center.dot(axis.normalized());
+		Eigen::Vector3f projection_point = center + projection_length * axis.normalized();
+		float distance_to_axis = (point_vec - projection_point).norm();
+
+		float radial_error = std::abs(distance_to_axis - radius);
+		total_squared_error += radial_error * radial_error;
+	}
+
+	return std::sqrt(total_squared_error / num_points);
 }

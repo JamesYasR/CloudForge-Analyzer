@@ -6,7 +6,7 @@
 #include <cmath>
 #include <limits>
 #include <iomanip>
-
+#include <omp.h>
 
 MeasureCylindricity::MeasureCylindricity()
     : design_radius_(0.0)
@@ -91,8 +91,8 @@ void MeasureCylindricity::generateHeatMapCloud(const LineParams& line)
         max_distance_ = min_distance_ + 1e-5;
     }
 
-    // 为每个点分配颜色
-    for (size_t i = 0; i < input_cloud_->points.size(); ++i) {
+#pragma omp parallel for
+    for (int i = 0; i < static_cast<int>(input_cloud_->size()); ++i) {
         const auto& point = input_cloud_->points[i];
         heatmap_cloud_->points[i].x = point.x;
         heatmap_cloud_->points[i].y = point.y;
@@ -111,7 +111,7 @@ void MeasureCylindricity::generateHeatMapCloud(const LineParams& line)
             heatmap_cloud_->points[i].b = b;
         }
         else {
-            // 无效点显示为灰色
+            // 无效点处理
             heatmap_cloud_->points[i].r = 128;
             heatmap_cloud_->points[i].g = 128;
             heatmap_cloud_->points[i].b = 128;
@@ -239,8 +239,7 @@ double MeasureCylindricity::computeDistanceToLine(const Eigen::Vector3f& point,
     return cross_product.norm();
 }
 
-double MeasureCylindricity::objectiveFunction(const LineParams& line)
-{
+double MeasureCylindricity::objectiveFunction(const LineParams& line) {
     if (!input_cloud_ || input_cloud_->empty()) {
         return std::numeric_limits<double>::max();
     }
@@ -248,13 +247,16 @@ double MeasureCylindricity::objectiveFunction(const LineParams& line)
     double total_squared_error = 0.0;
     int valid_points = 0;
 
-    for (const auto& p : input_cloud_->points) {
+    //并行化
+#pragma omp parallel for reduction(+:total_squared_error, valid_points)
+    for (int i = 0; i < static_cast<int>(input_cloud_->size()); ++i) {
+        const auto& p = input_cloud_->points[i];
         if (!isPointValid(p)) continue;
 
         Eigen::Vector3f point(p.x, p.y, p.z);
         double distance = computeDistanceToLine(point, line);
-        double error = distance - design_radius_;  // 差值
-        total_squared_error += error * error;      // 平方和
+        double error = distance - design_radius_;
+        total_squared_error += error * error;
         valid_points++;
     }
 
@@ -469,62 +471,78 @@ MeasureCylindricity::AssessmentResult MeasureCylindricity::computeAssessmentMetr
         return result;
     }
 
+    int num_points = static_cast<int>(input_cloud_->size());
     double sum_distance = 0.0;
     double sum_squared_distance = 0.0;
     double sum_squared_deviation = 0.0;
     int outlier_count = 0;
     int valid_points = 0;
 
-    std::vector<double> deviations;
+    // 使用固定大小的vector存储偏差值
+    std::vector<double> deviations(num_points, std::numeric_limits<double>::max());
+    std::vector<bool> is_valid_point(num_points, false);
 
-    // 新增：初始化最小偏差为最大值
-    result.min_deviation = std::numeric_limits<double>::max();
-    result.max_deviation = 0.0;
-
-
-    for (const auto& p : input_cloud_->points) {
+    // 第一阶段：并行计算所有点的距离
+#pragma omp parallel for
+    for (int i = 0; i < num_points; ++i) {
+        const auto& p = input_cloud_->points[i];
         if (!isPointValid(p)) continue;
 
         Eigen::Vector3f point(p.x, p.y, p.z);
         double distance_to_axis = computeDistanceToLine(point, line);
-        double deviation = std::abs(distance_to_axis - design_radius_);
+        deviations[i] = std::abs(distance_to_axis - design_radius_);
+        is_valid_point[i] = true;
+    }
 
+    // 第二阶段：串行统计（避免竞争）
+    result.min_deviation = std::numeric_limits<double>::max();
+    result.max_deviation = 0.0;
+
+    for (int i = 0; i < num_points; ++i) {
+        if (!is_valid_point[i]) continue;
+
+        double deviation = deviations[i];
         distance_map_.push_back(deviation);
-        deviations.push_back(deviation);
         sum_distance += deviation;
         sum_squared_distance += deviation * deviation;
         valid_points++;
 
         if (deviation > tolerance_) {
             outlier_count++;
-            outliers_->push_back(p);
+            outliers_->push_back(input_cloud_->points[i]);
         }
         else {
-            inliers_->push_back(p);
+            inliers_->push_back(input_cloud_->points[i]);
         }
-        // 更新最小偏差
+
+        // 更新最小最大偏差
         if (deviation < result.min_deviation) {
             result.min_deviation = deviation;
         }
-
         if (deviation > result.max_deviation) {
             result.max_deviation = deviation;
         }
     }
 
+    // 第三阶段：计算统计指标
     if (valid_points > 0) {
         result.outlier_ratio = static_cast<double>(outlier_count) / valid_points;
         result.mean_deviation = sum_distance / valid_points;
         result.rms_error = std::sqrt(sum_squared_distance / valid_points);
-        for (double dev : deviations) {
+
+        // 计算均匀性（标准差）
+        for (int i = 0; i < num_points; ++i) {
+            if (!is_valid_point[i]) continue;
+            double dev = deviations[i];
             sum_squared_deviation += std::pow(dev - result.mean_deviation, 2);
         }
         result.uniformity_rms = std::sqrt(sum_squared_deviation / valid_points);
+
         result.is_acceptable = (result.outlier_ratio < 0.1);
         result.best_fit_line = line;
     }
     else {
-        result.min_deviation = 0.0;  // 新增：无有效点时的默认值
+        result.min_deviation = 0.0;
         result.outlier_ratio = 1.0;
         result.mean_deviation = tolerance_ * 2;
         result.rms_error = tolerance_ * 2;

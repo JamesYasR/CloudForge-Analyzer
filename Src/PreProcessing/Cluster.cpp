@@ -1,5 +1,5 @@
 #include "PreProcessing/Cluster.h"
-
+#include <omp.h>
 
 Cluster::Cluster(pcl::PointCloud<pcl::PointXYZ>::Ptr Input_c) :
 	Input_cloud(new pcl::PointCloud<pcl::PointXYZ>)
@@ -39,35 +39,40 @@ void Cluster::Proc() {
 	//聚类抽取结果保存在一个数组中，数组中每个元素代表抽取的一个组件点云的下标
 	ec.extract(cluster_indices);
 
-	int cluster_id = 0;
-	for (const auto& indices : cluster_indices) {
+	int num_clusters = cluster_indices.size();
+	std::vector<pcl::PointCloud<pcl::PointXYZ>::Ptr> temp_clusters(num_clusters);
+	std::vector<ColorManager> temp_colors(num_clusters);
+
+#pragma omp parallel for
+	for (int cluster_id = 0; cluster_id < num_clusters; ++cluster_id) {
+		const auto& indices = cluster_indices[cluster_id];
 		pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_cluster(new pcl::PointCloud<pcl::PointXYZ>);
+
+		// 提取点云
+		cloud_cluster->reserve(indices.indices.size());
 		for (const auto& idx : indices.indices) {
-			cloud_cluster->points.push_back((*Input_cloud)[idx]); // 添加点
+			cloud_cluster->points.push_back((*Input_cloud)[idx]);
 		}
 		cloud_cluster->width = cloud_cluster->points.size();
 		cloud_cluster->height = 1;
 		cloud_cluster->is_dense = true;
 
-		// 生成随机颜色
-		int r = rand() % 256;
-		int g = rand() % 256;
-		int b = rand() % 256;
-		qDebug() << r << g << b;
-		ColorManager color(r,g,b);
-		// 创建颜色处理器
-		color_map.emplace(
-			cluster_id,color
-		);
+		// 生成颜色（使用线程安全的方式）
+		int r = (cluster_id * 137) % 256;  // 使用确定性颜色，避免rand()竞争
+		int g = (cluster_id * 193) % 256;
+		int b = (cluster_id * 257) % 256;
 
-		// 存储点云（同理处理cluster_map，若需要）
-		cluster_map.emplace(cluster_id, cloud_cluster);
-
-
-		cluster_id++;
+		temp_clusters[cluster_id] = cloud_cluster;
+		temp_colors[cluster_id] = ColorManager(r, g, b);
 	}
 
-	//qDebug() << "总聚类数：" << cluster_id;
+	// 串行写入结果（避免map竞争）
+	for (int cluster_id = 0; cluster_id < num_clusters; ++cluster_id) {
+		cluster_map.emplace(cluster_id, temp_clusters[cluster_id]);
+		color_map.emplace(cluster_id, temp_colors[cluster_id]);
+	}
+
+	qDebug() << "总聚类数：" << num_clusters;
 
 }
 

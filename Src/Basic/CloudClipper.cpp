@@ -25,6 +25,7 @@
 #include <map>
 #include <vtkCamera.h>
 #include <vtkMatrix4x4.h>
+#include <omp.h>
 
 using namespace pcl;
 using namespace std;

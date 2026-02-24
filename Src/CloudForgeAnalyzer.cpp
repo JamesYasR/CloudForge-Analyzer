@@ -174,14 +174,8 @@ void CloudForgeAnalyzer::Tool_MeasureCylindricity()
     }
 
     Eigen::VectorXf coeff1;
-
     coeff1 = fcy.Get_Coeff_in();
-
-    float inerpercent = fcy.Get_Inliers_Percentage();
-    Update_CFmes("圆柱1轴上一点坐标为：" + std::to_string(coeff1[0]) + "," + std::to_string(coeff1[1]) + "," + std::to_string(coeff1[2])
-        + "\n圆柱轴方向为：" + std::to_string(coeff1[3]) + "," + std::to_string(coeff1[4]) + "," + std::to_string(coeff1[5])
-        + "\n圆柱半径为：" + std::to_string(coeff1[6])
-        + "\n内点比例：" + std::to_string(inerpercent)+"%");
+    Update_CFmes(fcy.message);
 
     Eigen::Vector3f center = fcy.get_center_point();
 	Eigen::Vector3f axis = fcy.get_axis_direction();
@@ -594,28 +588,17 @@ void CloudForgeAnalyzer::Slot_fit_cy_Triggered() {
     ColorManager color2(0, 0, 255);
     AddPointCloud("outofcylinder", Cloud_Outliers, color2);
 
-    //Fit_Cylinder fcy2(Cloud_Outliers);
     Eigen::VectorXf coeff1;//, coeff2;
 
     coeff1 = fcy.Get_Coeff_in();
-    //coeff2 = fcy2.Get_Coeff_in();
     pcl::ModelCoefficients::Ptr cylinder_coeff(new pcl::ModelCoefficients);
     cylinder_coeff->values.resize(7);
     for (std::size_t i = 0; i < 7; ++i)
         cylinder_coeff->values[i] = coeff1(i);
 	viewer->addCylinder(*cylinder_coeff, "fitted_cylinder");
-
-    Update_CFmes("圆柱1轴上一点坐标为：" + std::to_string(coeff1[0]) + "," + std::to_string(coeff1[1]) + "," + std::to_string(coeff1[2])
-        + "\n圆柱轴方向为：" + std::to_string(coeff1[3]) + "," + std::to_string(coeff1[4]) + "," + std::to_string(coeff1[5])
-        + "\n圆柱半径为：" + std::to_string(coeff1[6]));
-        //+ "\n圆柱轴上一点坐标为：" + std::to_string(coeff2[0]) + "," + std::to_string(coeff2[1]) + "," + std::to_string(coeff2[2])
-        //+ "\n圆柱轴方向的x为：" + std::to_string(coeff2[3]) + "," + std::to_string(coeff2[4]) + "," + std::to_string(coeff2[5])
-        //+ "\n圆柱半径为：" + std::to_string(coeff2[6])
-        //+ "\n半径差值："+ std::to_string(coeff1[6]- coeff2[6])
-        //+ "\n焊接区宽度：" + std::to_string(fcy2.ComputeCylinderHeight()));
-   //这部分比较临时，可以考虑去改一下
     ui->winOfAnalyzer->renderWindow()->Render();
     ui->winOfAnalyzer->update();
+    Update_CFmes(fcy.message);
 }
 void CloudForgeAnalyzer::Slot_fi_open_Triggered() {
     QString runPath = QDir::currentPath()+"/PCDfiles";//获取项目的根路径
