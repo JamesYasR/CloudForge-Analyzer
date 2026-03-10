@@ -62,6 +62,11 @@ private slots:
     void Update_PointCounts();
 private:
     //  
+    void addCylinderResult(const std::string& name, pcl::ModelCoefficients::Ptr coeff);
+    pcl::ModelCoefficients::Ptr getCylinderResult(const std::string& name);
+    bool removeCylinderResult(const std::string& name);
+    void clearAllCylinderResults();
+    std::vector<std::string> getAllCylinderNames();
 
     void AddPointCloud(std::string name, pcl::PointCloud<pcl::PointXYZ>::Ptr cloud, ColorManager color);
     void ClearAllPointCloud();
@@ -82,9 +87,11 @@ private:
     pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZ>::Ptr renderer_custom;
     std::map<std::string, pcl::PointCloud<pcl::PointXYZ>::Ptr> CloudMap;
     std::map<std::string, ColorManager> ColorMap;
-
     std::map<std::string, Line> LineMap;
     std::vector<vtkSmartPointer<vtkProp>> m_geodesicVisualizationActors;
+
+    std::map<std::string, pcl::ModelCoefficients::Ptr> cylinderResultsMap;
+
     void cleanGeodesicVisualization();
     void AddLine(const std::string& name,
         const pcl::PointXYZ& start,

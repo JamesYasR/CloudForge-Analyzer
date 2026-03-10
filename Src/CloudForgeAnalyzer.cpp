@@ -202,7 +202,7 @@ void CloudForgeAnalyzer::Tool_MeasureCylindricity()
         return;
     }
     pcl::PointCloud<pcl::PointXYZ>::Ptr Cloud_Temp = CloudMap[window.getSelectedList()[0]];
-    
+
     Fit_Cylinder fcy(Cloud_Temp);
     if (fcy.isCancelled) {
         TeEDebug(">>:操作取消");
@@ -222,7 +222,7 @@ void CloudForgeAnalyzer::Tool_MeasureCylindricity()
     Update_CFmes(fcy.message);
 
     Eigen::Vector3f center = fcy.get_center_point();
-	Eigen::Vector3f axis = fcy.get_axis_direction();
+    Eigen::Vector3f axis = fcy.get_axis_direction();
 
     ChoseCloudDialog dialog(CloudMap, ColorMap);
     if (dialog.exec() != QDialog::Accepted) {
@@ -241,14 +241,14 @@ void CloudForgeAnalyzer::Tool_MeasureCylindricity()
     }
 
     // 获取设计半径和容差
-    bool ok1, ok2,ok3;
+    bool ok1, ok2, ok3;
 
     ParamDialogMeausreCy pdialog;
     if (pdialog.exec() != QDialog::Accepted) {
         TeEDebug(">>:操作取消");
         return;
     }
-	double design_radius = pdialog.getParams()[0].toDouble(&ok1);
+    double design_radius = pdialog.getParams()[0].toDouble(&ok1);
     double tolerance = pdialog.getParams()[1].toDouble(&ok1);
     int iters = pdialog.getParams()[2].toInt(&ok1);
     if (!ok1 || !ok2 || !ok3) {
@@ -272,7 +272,7 @@ void CloudForgeAnalyzer::Tool_MeasureCylindricity()
     // 执行评估
     auto result = evaluator.evaluateCylindricity();
 
-	// 获取热力图点云和距离范围
+    // 获取热力图点云和距离范围
     auto heatmap_cloud = evaluator.getHeatMapCloud();
     double min_distance, max_distance;
     evaluator.getDistanceRange(min_distance, max_distance);
@@ -282,11 +282,11 @@ void CloudForgeAnalyzer::Tool_MeasureCylindricity()
     qDebug() << result.assessment_message;
 
     /*auto inliers = evaluator.get_inliers();
-    auto outliers = evaluator.get_outliers();  
+    auto outliers = evaluator.get_outliers();
     ColorManager c1(255, 0, 0);
     ColorManager c2(0, 255, 0);
-	AddPointCloud("Cylindricity_Inliers", inliers, c1);
-	AddPointCloud("Cylindricity_Outliers", outliers, c2);*/
+    AddPointCloud("Cylindricity_Inliers", inliers, c1);
+    AddPointCloud("Cylindricity_Outliers", outliers, c2);*/
 
     // 获取优化后的轴线参数
     Eigen::Vector3f optimized_center = result.getCylinderAxisPoint();
@@ -302,6 +302,7 @@ void CloudForgeAnalyzer::Tool_MeasureCylindricity()
     cycoeff2->values[5] = optimized_axis.z();    // 轴向 Z
     cycoeff2->values[6] = static_cast<float>(design_radius);  // 半径
 
+    addCylinderResult(GenerateRandomName("optimized_cylinder"), cycoeff2);
     viewer->addCylinder(*cycoeff2, "opted_cylinder2");
 
     qDebug() << "优化后轴线点: (" << optimized_center.x() << ", "
@@ -319,7 +320,7 @@ void CloudForgeAnalyzer::Tool_MeasureCylindricity()
 }
 
 void CloudForgeAnalyzer::Tool_MeasureHeight() {
-    ChoseCloudDialog dialogMeasure(CloudMap, ColorMap);
+    ChoseCloudDialog dialogMeasure(CloudMap, ColorMap,"选择-测量对象");
     if (dialogMeasure.exec() != QDialog::Accepted) {
         TeEDebug(">>:操作取消");
         return;
@@ -335,7 +336,7 @@ void CloudForgeAnalyzer::Tool_MeasureHeight() {
     }
 
     // 选择用于拟合参考平面的点云
-    ChoseCloudDialog dialogRef(CloudMap, ColorMap);
+    ChoseCloudDialog dialogRef(CloudMap, ColorMap,"选择-参考面");
     if (dialogRef.exec() != QDialog::Accepted) {
         TeEDebug(">>:操作取消");
         return;
@@ -1150,7 +1151,7 @@ void CloudForgeAnalyzer::visualizeMeasurementResults(MeasureHeight& measurer,
     results_text << "min: " << measurer.GetMinDistance() << " mm\n";
     results_text << "avr: " << measurer.GetMeanDistance() << " mm";
 
-    viewer->addText(results_text.str(), 10, 70, 14, 1.0, 1.0, 1.0, "results_text");
+    viewer->addText(results_text.str(), 10, 70, 24, 1.0, 1.0, 1.0, "results_text");
 
     // 6. 设置相机位置以获得更好的视角[6](@ref)
     viewer->initCameraParameters();
@@ -1258,4 +1259,59 @@ void CloudForgeAnalyzer::addHeightLines(pcl::visualization::PCLVisualizer::Ptr v
         viewer->addLine<pcl::PointXYZ>(p, proj_pt, 0.5, 0.5, 1.0, line_id);
         viewer->setShapeRenderingProperties(pcl::visualization::PCL_VISUALIZER_OPACITY, 0.3, line_id);
     }
+}
+
+void CloudForgeAnalyzer::addCylinderResult(const std::string& name,
+    pcl::ModelCoefficients::Ptr coeff){
+    if (!coeff) {
+        qDebug() << "错误：传入的圆柱系数指针为空";
+        return;
+    }
+
+    if (coeff->values.size() != 7) {
+        qDebug() << "错误：圆柱系数应为7个值，实际为" << coeff->values.size();
+        return;
+    }
+
+    // 检查名称是否已存在
+    if (cylinderResultsMap.find(name) != cylinderResultsMap.end()) {
+        TeEDebug("圆柱拟合结果 '" + name + "' 已存在，将被覆盖");
+    }
+
+    cylinderResultsMap[name] = coeff;
+    TeEDebug("已添加圆柱拟合结果: " + name);
+}
+
+pcl::ModelCoefficients::Ptr CloudForgeAnalyzer::getCylinderResult(const std::string& name){
+    auto it = cylinderResultsMap.find(name);
+    if (it != cylinderResultsMap.end()) {
+        return it->second;
+    }
+    else {
+        TeEDebug("未找到圆柱拟合结果: " + name);
+        return nullptr;
+    }
+}
+
+bool CloudForgeAnalyzer::removeCylinderResult(const std::string& name){
+    auto it = cylinderResultsMap.find(name);
+    if (it != cylinderResultsMap.end()) {
+        cylinderResultsMap.erase(it);
+        TeEDebug("已删除圆柱拟合结果: " + name);
+        return true;
+    }
+    return false;
+}
+
+std::vector<std::string> CloudForgeAnalyzer::getAllCylinderNames(){
+    std::vector<std::string> names;
+    for (const auto& pair : cylinderResultsMap) {
+        names.push_back(pair.first);
+    }
+    return names;
+}
+
+void CloudForgeAnalyzer::clearAllCylinderResults(){
+    cylinderResultsMap.clear();
+    TeEDebug("已清除所有圆柱拟合结果");
 }
