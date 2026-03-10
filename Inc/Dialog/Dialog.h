@@ -13,3 +13,4 @@
 #include "ParamDialog_FittingLine.h"
 #include "LineSelectionDialog.h"
 #include "ChoseLineDialog.h"
+#include "ParamDialogMeausreCy.h"

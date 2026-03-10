@@ -64,6 +64,8 @@ void CloudForgeAnalyzer::InitalizeConnects() {
     connect(ui->action_ed_dork, &QAction::triggered, this, &CloudForgeAnalyzer::Slot_ed_dork_Triggered);
     connect(ui->action_ed_cleangeo, &QAction::triggered, this, &CloudForgeAnalyzer::Slot_ed_cleangeo_Triggered);
     connect(ui->action_ed_cleangall, &QAction::triggered, this, &CloudForgeAnalyzer::Slot_ed_cleanall_Triggered);
+    connect(ui->action_ed_cleangeodetic, &QAction::triggered, this, &CloudForgeAnalyzer::Slot_ed_cleangeodetic_Triggered);
+    connect(ui->action_ed_clean2DActor, &QAction::triggered, this, &CloudForgeAnalyzer::Slot_ed_clean2DActor_Triggered);
     connect(ui->action_fi_open, &QAction::triggered, this, &CloudForgeAnalyzer::Slot_fi_open_Triggered);
     connect(ui->action_fi_save, &QAction::triggered, this, &CloudForgeAnalyzer::Slot_fi_save_Triggered);
     connect(ui->action_fi_saveas, &QAction::triggered, this, &CloudForgeAnalyzer::Slot_fi_saveas_Triggered);
@@ -108,9 +110,9 @@ void CloudForgeAnalyzer::visualizeCylindricityHeatMap(
         return;
     }
 
-    // 先清除可能存在的旧热力图
+    // 先清除可能存在的旧热力图及标注
     viewer->removePointCloud("cylindricity_heatmap");
-    viewer->removeShape("heatmap_colorbar");
+    viewer->removeShape("heatmap_colorbar"); // 清除旧的颜色条（如果存在）
     viewer->removeText3D("heatmap_title");
 
     // 添加热力图点云
@@ -118,40 +120,74 @@ void CloudForgeAnalyzer::visualizeCylindricityHeatMap(
     viewer->setPointCloudRenderingProperties(
         pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 3, "cylindricity_heatmap");
 
+    // === 新增：创建并添加固定颜色条 (Colorbar) ===
+    // 1. 获取当前渲染器
+    vtkRenderer* renderer = viewer->getRendererCollection()->GetFirstRenderer();
+    if (!renderer) {
+        TeEDebug("错误：无法获取渲染器，颜色条创建失败。");
+    }
+    else {
+        // 2. 创建颜色查找表 (Lookup Table)，映射从绿到红
+        vtkNew<vtkLookupTable> hueLut;
+        hueLut->SetTableRange(min_distance, max_distance); // 标量值范围对应误差范围
+        hueLut->SetHueRange(0.33, 0.0);      // 从绿色 (0.33) 到红色 (0.0)
+        hueLut->SetSaturationRange(1, 1);
+        hueLut->SetValueRange(1, 1);
+        hueLut->SetNanColor(1, 1, 1, 1);    // 无效值显示为白色
+        hueLut->SetNumberOfTableValues(256); // 颜色精度
+        hueLut->Build();
 
-    pcl::PointXYZRGB min_pt_rgb, max_pt_rgb;
-    pcl::getMinMax3D(*heatmap_cloud, min_pt_rgb, max_pt_rgb);
+        // 3. 创建颜色条 Actor
+        vtkNew<vtkScalarBarActor> scalarBar;
+        scalarBar->SetLookupTable(hueLut);
+        scalarBar->SetTitle(" ");
+        scalarBar->SetNumberOfLabels(5); // 主标签数量
+        scalarBar->SetMaximumNumberOfColors(256);
 
-    // 后续用 min_pt_rgb, max_pt_rgb 替换 min_pt, max_pt
-    double text_x = min_pt_rgb.x;
-    double text_y = max_pt_rgb.y + (max_pt_rgb.y - min_pt_rgb.y) * 0.1;
-    double text_z = max_pt_rgb.z + (max_pt_rgb.z - min_pt_rgb.z) * 0.1;
+
+        const int titleFontSize = 60;        // 颜色条标题文字大小
+        const int labelFontSize = 10;        // 颜色条标签文字大小
+        const double colorbarWidth = 0.05;   // 颜色条宽度 (占窗口宽度的比例，建议0.03-0.07)
+        const double colorbarHeight = 0.6;   // 颜色条高度 (占窗口高度的比例，建议0.4-0.7)
+        const double colorbarPosX = 0.92;    // 颜色条右侧位置 (范围0~1, 1为右边缘)
+        const double colorbarPosY = 0.2;     // 颜色条底部位置 (范围0~1, 1为上边缘)
+
+        // 设置颜色条文本属性（字号、颜色）
+        vtkNew<vtkTextProperty> titleProperty;
+        titleProperty->SetFontSize(titleFontSize);
+        titleProperty->BoldOn();
+        titleProperty->SetColor(1, 1, 1); // 白色
+        scalarBar->SetTitleTextProperty(titleProperty);
+
+        scalarBar->SetTitleRatio(0.6); // 增加标题区域所占的比例，例如从0.5调到0.6
+
+        vtkNew<vtkTextProperty> labelProperty;
+        labelProperty->SetFontSize(labelFontSize);
+        labelProperty->SetColor(0.9, 0.9, 0.9); // 浅灰色
+        scalarBar->SetLabelTextProperty(labelProperty);
+        // === 变量定义结束 ===
+
+        // 应用调整后的位置和大小
+        scalarBar->SetPosition(colorbarPosX - colorbarWidth, colorbarPosY);
+        scalarBar->SetWidth(colorbarWidth);
+        scalarBar->SetHeight(colorbarHeight);
 
 
-    // 添加标题
-    viewer->addText3D("CylindricityHeatMap",
-        pcl::PointXYZ(text_x, text_y, text_z), 0.5, 1.0, 1.0, 1.0, "heatmap_title");
+        scalarBar->SetPickable(0); // 禁止拾取，避免与点云交互冲突
 
-    // 添加颜色条说明
-    std::stringstream colorbar_info;
-    colorbar_info << "range: " << std::fixed << std::setprecision(2)
-        << min_distance << " - " << max_distance << " mm\n";
-    colorbar_info << " green(mini) → red(maxi)";
+        // 4. 将颜色条添加到渲染器，并赋予唯一名称以便管理
+        renderer->AddActor2D(scalarBar);
+        // 为了方便后续管理（如清除），可以将其存储在某个容器，但此处为最小修改，仅作添加。
+        // 注意：PCLVisualizer 的 removeShape 可能无法管理此Actor，需单独处理。
+    }
+    // === 颜色条添加结束 ===
 
-    viewer->addText3D(colorbar_info.str(),
-        pcl::PointXYZ(text_x, text_y - 0.7, text_z), 0.3, 1.0, 1.0, 1.0, "heatmap_colorbar");
-
-    // 在屏幕角落添加静态说明（不随相机移动）
-    std::stringstream screen_text;
-    screen_text << "CylindricityHeatMap:\n";
-    screen_text << "green: low error (" << min_distance << " mm)\n";
-    screen_text << "red: high error (" << max_distance << " mm)\n";
-    screen_text << "Color gradient represents the magnitude of error";
-
-    viewer->addText(screen_text.str(), 10, 100, 12, 1.0, 1.0, 1.0, "heatmap_screen_info");
-
-    TeEDebug("热力图可视化完成");
+    TeEDebug("热力图与颜色条可视化完成");
     TeEDebug("误差范围: " + std::to_string(min_distance) + " - " + std::to_string(max_distance) + " mm");
+
+    // 刷新渲染窗口
+    ui->winOfAnalyzer->renderWindow()->Render();
+    ui->winOfAnalyzer->update();
 }
 
 void CloudForgeAnalyzer::Tool_MeasureCylindricity()
@@ -166,7 +202,7 @@ void CloudForgeAnalyzer::Tool_MeasureCylindricity()
         return;
     }
     pcl::PointCloud<pcl::PointXYZ>::Ptr Cloud_Temp = CloudMap[window.getSelectedList()[0]];
-
+    
     Fit_Cylinder fcy(Cloud_Temp);
     if (fcy.isCancelled) {
         TeEDebug(">>:操作取消");
@@ -175,6 +211,14 @@ void CloudForgeAnalyzer::Tool_MeasureCylindricity()
 
     Eigen::VectorXf coeff1;
     coeff1 = fcy.Get_Coeff_in();
+
+    pcl::ModelCoefficients::Ptr cycoeff1(new pcl::ModelCoefficients);
+    cycoeff1->values.resize(7);
+    for (std::size_t i = 0; i < 7; ++i)
+        cycoeff1->values[i] = coeff1(i);
+    viewer->addCylinder(*cycoeff1, "opted_cylinder1");
+    ui->winOfAnalyzer->renderWindow()->Render();
+    ui->winOfAnalyzer->update();
     Update_CFmes(fcy.message);
 
     Eigen::Vector3f center = fcy.get_center_point();
@@ -198,13 +242,15 @@ void CloudForgeAnalyzer::Tool_MeasureCylindricity()
 
     // 获取设计半径和容差
     bool ok1, ok2,ok3;
-    double design_radius = QInputDialog::getDouble(this, "设计半径", "请输入圆筒设计半径(mm):",
-        1940.0, 0.1, 4000.0, 3, &ok1);
-    double tolerance = QInputDialog::getDouble(this, "容差阈值", "请输入允许的最大偏差(mm):",
-        25.0, 0.001, 100.0, 4, &ok2);
-    int iters = QInputDialog::getDouble(this, "迭代次数", "请输入允许的最大迭代次数:",
-        2000, 50, 1000000000, 0, &ok3);
 
+    ParamDialogMeausreCy pdialog;
+    if (pdialog.exec() != QDialog::Accepted) {
+        TeEDebug(">>:操作取消");
+        return;
+    }
+	double design_radius = pdialog.getParams()[0].toDouble(&ok1);
+    double tolerance = pdialog.getParams()[1].toDouble(&ok1);
+    int iters = pdialog.getParams()[2].toInt(&ok1);
     if (!ok1 || !ok2 || !ok3) {
         TeEDebug("圆柱度评估已取消");
         return;
@@ -235,7 +281,7 @@ void CloudForgeAnalyzer::Tool_MeasureCylindricity()
 
     qDebug() << result.assessment_message;
 
-    /*auto inliers = evaluator.get_inliers();    
+    /*auto inliers = evaluator.get_inliers();
     auto outliers = evaluator.get_outliers();  
     ColorManager c1(255, 0, 0);
     ColorManager c2(0, 255, 0);
@@ -246,17 +292,17 @@ void CloudForgeAnalyzer::Tool_MeasureCylindricity()
     Eigen::Vector3f optimized_center = result.getCylinderAxisPoint();
     Eigen::Vector3f optimized_axis = result.getCylinderAxisDirection();
 
-    pcl::ModelCoefficients::Ptr cylinder_coeff(new pcl::ModelCoefficients);
-    cylinder_coeff->values.resize(7);
-    cylinder_coeff->values[0] = optimized_center.x();  // 轴上一点 X
-    cylinder_coeff->values[1] = optimized_center.y();  // 轴上一点 Y
-    cylinder_coeff->values[2] = optimized_center.z();  // 轴上一点 Z
-    cylinder_coeff->values[3] = optimized_axis.x();    // 轴向 X
-    cylinder_coeff->values[4] = optimized_axis.y();    // 轴向 Y
-    cylinder_coeff->values[5] = optimized_axis.z();    // 轴向 Z
-    cylinder_coeff->values[6] = static_cast<float>(design_radius);  // 半径
+    pcl::ModelCoefficients::Ptr cycoeff2(new pcl::ModelCoefficients);
+    cycoeff2->values.resize(7);
+    cycoeff2->values[0] = optimized_center.x();  // 轴上一点 X
+    cycoeff2->values[1] = optimized_center.y();  // 轴上一点 Y
+    cycoeff2->values[2] = optimized_center.z();  // 轴上一点 Z
+    cycoeff2->values[3] = optimized_axis.x();    // 轴向 X
+    cycoeff2->values[4] = optimized_axis.y();    // 轴向 Y
+    cycoeff2->values[5] = optimized_axis.z();    // 轴向 Z
+    cycoeff2->values[6] = static_cast<float>(design_radius);  // 半径
 
-    viewer->addCylinder(*cylinder_coeff, "opted_cylinder");
+    viewer->addCylinder(*cycoeff2, "opted_cylinder2");
 
     qDebug() << "优化后轴线点: (" << optimized_center.x() << ", "
         << optimized_center.y() << ", " << optimized_center.z() << ")" ;
@@ -274,6 +320,10 @@ void CloudForgeAnalyzer::Tool_MeasureCylindricity()
 
 void CloudForgeAnalyzer::Tool_MeasureHeight() {
     ChoseCloudDialog dialogMeasure(CloudMap, ColorMap);
+    if (dialogMeasure.exec() != QDialog::Accepted) {
+        TeEDebug(">>:操作取消");
+        return;
+    }
     if (dialogMeasure.getSelectedList().empty()) {
         TeEDebug("测量已取消：未选择被测量点云");
         return;
@@ -286,6 +336,10 @@ void CloudForgeAnalyzer::Tool_MeasureHeight() {
 
     // 选择用于拟合参考平面的点云
     ChoseCloudDialog dialogRef(CloudMap, ColorMap);
+    if (dialogRef.exec() != QDialog::Accepted) {
+        TeEDebug(">>:操作取消");
+        return;
+    }
     if (dialogRef.getSelectedList().empty()) {
         TeEDebug("测量已取消：未选择参考平面点云");
         return;
@@ -496,19 +550,24 @@ void CloudForgeAnalyzer::Tool_MeasureGeodisic() {
             // 将actors添加到VTK渲染器...
             vtkRenderer* renderer = viewer->getRendererCollection()->GetFirstRenderer();
 
+            cleanGeodesicVisualization();
+            // 添加 3D actors（先设置不可拾取，避免干扰后续点拾取）
             // 添加 3D actors（先设置不可拾取，避免干扰后续点拾取）
             for (auto& actor : actors3D) {
                 if (actor) {
                     actor->PickableOff();
                     renderer->AddViewProp(actor);
+                    // 保存Actor指针，以便后续清除
+                    m_geodesicVisualizationActors.push_back(actor);
                 }
             }
-
             // 添加 2D 文本 actors（也设置不可拾取）
             for (auto& textActor : textActors) {
                 if (textActor) {
                     textActor->PickableOff();
                     renderer->AddViewProp(textActor);
+                    // 保存文本Actor指针
+                    m_geodesicVisualizationActors.push_back(textActor);
                 }
             }
 
@@ -752,15 +811,83 @@ void CloudForgeAnalyzer::Slot_ed_dork_Triggered() {
 void CloudForgeAnalyzer::Slot_ed_cleangeo_Triggered() {
     viewer->removeAllShapes();
     ui->winOfAnalyzer->renderWindow()->Render();
-    ui->winOfAnalyzer->update();
-}
-void CloudForgeAnalyzer::Slot_ed_cleanall_Triggered() {
-    viewer->removeAllShapes();
-    ClearAllPointCloud();
-    ui->winOfAnalyzer->renderWindow()->Render();
+
     ui->winOfAnalyzer->update();
 }
 
+void CloudForgeAnalyzer::cleanGeodesicVisualization() {
+    vtkRenderer* renderer = viewer->getRendererCollection()->GetFirstRenderer();
+    if (!renderer) {
+        return;
+    }
+
+    // 从渲染器中移除所有存储的Actor
+    for (auto& actor : m_geodesicVisualizationActors) {
+        if (actor) {
+            renderer->RemoveViewProp(actor);
+        }
+    }
+    // 清空容器
+    m_geodesicVisualizationActors.clear();
+
+    // 刷新渲染窗口
+    if (ui && ui->winOfAnalyzer) {
+        ui->winOfAnalyzer->renderWindow()->Render();
+        ui->winOfAnalyzer->update();
+    }
+    TeEDebug("已清除测地线可视化。");
+}
+
+
+void CloudForgeAnalyzer::Slot_ed_cleanall_Triggered() {
+    cleanGeodesicVisualization();
+    viewer->removeAllShapes();
+    ClearAllPointCloud();
+    vtkRenderer* renderer = viewer->getRendererCollection()->GetFirstRenderer();
+    if (renderer) {
+        vtkPropCollection* props = renderer->GetViewProps();
+        props->InitTraversal();
+        vtkProp* prop;
+        std::vector<vtkProp*> propsToRemove;
+        while ((prop = props->GetNextProp()) != nullptr) {
+            if (vtkScalarBarActor::SafeDownCast(prop)) {
+                propsToRemove.push_back(prop);
+            }
+        }
+        for (auto p : propsToRemove) {
+            renderer->RemoveActor2D(static_cast<vtkActor2D*>(p));
+        }
+    }
+    ui->winOfAnalyzer->renderWindow()->Render();
+    ui->winOfAnalyzer->update();
+    TeEDebug("已清除所有可视化");
+}
+
+void CloudForgeAnalyzer::Slot_ed_cleangeodetic_Triggered() {
+    cleanGeodesicVisualization();
+
+}
+
+void CloudForgeAnalyzer::Slot_ed_clean2DActor_Triggered() {
+    vtkRenderer* renderer = viewer->getRendererCollection()->GetFirstRenderer();
+    if (renderer) {
+        vtkPropCollection* props = renderer->GetViewProps();
+        props->InitTraversal();
+        vtkProp* prop;
+        std::vector<vtkProp*> propsToRemove;
+        while ((prop = props->GetNextProp()) != nullptr) {
+            if (vtkScalarBarActor::SafeDownCast(prop)) {
+                propsToRemove.push_back(prop);
+            }
+        }
+        for (auto p : propsToRemove) {
+            renderer->RemoveActor2D(static_cast<vtkActor2D*>(p));
+        }
+    }
+    ui->winOfAnalyzer->renderWindow()->Render();
+    ui->winOfAnalyzer->update();
+    TeEDebug("已清除二维演示");
+}
 
 void CloudForgeAnalyzer::Slot_fl_2_Triggered() {
     Filter_sor fs(cloud);
@@ -919,7 +1046,7 @@ void CloudForgeAnalyzer::SetProgressBarValue(int percentage, const QString& mess
 
     // 设置显示信息
     if (!message.isEmpty()) {
-        ui->progressBar->setFormat(message + " %p%");
+        ui->progressBar->setFormat(message + "%p%");
     }
     else {
         ui->progressBar->setFormat("%p%");
@@ -931,7 +1058,7 @@ void CloudForgeAnalyzer::SetProgressBarValue(int percentage, const QString& mess
 
 void CloudForgeAnalyzer::ResetProgressBar() {
     // 重置为100%完成状态
-    SetProgressBarValue(100, "就绪");
+    SetProgressBarValue(100, "");
 }
 
 void CloudForgeAnalyzer::AddLine(const std::string& name,
@@ -1018,10 +1145,10 @@ void CloudForgeAnalyzer::visualizeMeasurementResults(MeasureHeight& measurer,
 
     // 添加结果文本
     std::stringstream results_text;
-    results_text << "高度测量结果\n";
-    results_text << "最大高度: " << std::fixed << std::setprecision(3) << measurer.GetMaxDistance() << " m\n";
-    results_text << "最小高度: " << measurer.GetMinDistance() << " m\n";
-    results_text << "平均高度: " << measurer.GetMeanDistance() << " m";
+    results_text << "results:\n";
+    results_text << "max: " << std::fixed << std::setprecision(3) << measurer.GetMaxDistance() << " mm\n";
+    results_text << "min: " << measurer.GetMinDistance() << " mm\n";
+    results_text << "avr: " << measurer.GetMeanDistance() << " mm";
 
     viewer->addText(results_text.str(), 10, 70, 14, 1.0, 1.0, 1.0, "results_text");
 

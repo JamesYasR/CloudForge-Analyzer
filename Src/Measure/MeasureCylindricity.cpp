@@ -338,6 +338,58 @@ MeasureCylindricity::LineParams MeasureCylindricity::perturbLineParameters(
     return perturbed_line;
 }
 
+//MeasureCylindricity::LineParams MeasureCylindricity::levenbergMarquardtOptimization()
+//{
+//    LineParams current_line = initializeLineParameters();
+//    double current_error = objectiveFunction(current_line);
+//    double best_error = current_error;
+//    LineParams best_line = current_line;
+//
+//    double lambda = 0.001;
+//    int max_inner_iterations = 10;
+//
+//    for (int iter = 0; iter < max_iterations_; ++iter) {
+//        std::vector<LineParams> perturbations;
+//        std::vector<double> errors;
+//
+//        for (int i = 0; i < 8; ++i) {
+//            LineParams perturbed = perturbLineParameters(current_line, 0.01f);
+//            double error = objectiveFunction(perturbed);
+//            perturbations.push_back(perturbed);
+//            errors.push_back(error);
+//        }
+//
+//        int best_idx = -1;
+//        for (size_t i = 0; i < errors.size(); ++i) {
+//            if (errors[i] < current_error) {
+//                current_error = errors[i];
+//                best_idx = i;
+//            }
+//        }
+//
+//        if (best_idx >= 0) {
+//            current_line = perturbations[best_idx];
+//            if (current_error < best_error) {
+//                best_error = current_error;
+//                best_line = current_line;
+//            }
+//        }
+//        else {
+//            lambda *= 2.0;
+//        }
+//
+//        if (iter % 20 == 0 && verbose_) {
+//            printDebugInfo("LM优化迭代 " + std::to_string(iter) +
+//                ", 误差: " + std::to_string(best_error));
+//        }
+//
+//        if (iter > 10 && best_error < tolerance_ * 0.1) {
+//            break;
+//        }
+//    }
+//
+//    return best_line;
+//}
 MeasureCylindricity::LineParams MeasureCylindricity::levenbergMarquardtOptimization()
 {
     LineParams current_line = initializeLineParameters();
@@ -345,17 +397,46 @@ MeasureCylindricity::LineParams MeasureCylindricity::levenbergMarquardtOptimizat
     double best_error = current_error;
     LineParams best_line = current_line;
 
-    double lambda = 0.001;
-    int max_inner_iterations = 10;
+    // 动态步长参数
+    std::vector<float> step_sizes = { 0.1f, 0.05f, 0.01f, 0.005f };  // 多尺度步长
+    int current_step_idx = 0;
+
+    int stuck_counter = 0;
+    const int max_stuck_iterations = 5;
 
     for (int iter = 0; iter < max_iterations_; ++iter) {
+        float current_step = step_sizes[current_step_idx];
+
+        // 生成更多样化的扰动
         std::vector<LineParams> perturbations;
         std::vector<double> errors;
 
-        for (int i = 0; i < 8; ++i) {
-            LineParams perturbed = perturbLineParameters(current_line, 0.01f);
+        // 生成不同类型的扰动
+        for (int i = 0; i < 12; ++i) {  // 增加扰动数量
+            float perturbation_factor = 1.0f;
+
+            if (i < 4) {  // 小步长精确搜索
+                perturbation_factor = 0.5f;
+            }
+            else if (i < 8) {  // 中步长探索
+                perturbation_factor = 1.0f;
+            }
+            else {  // 大步长探索
+                perturbation_factor = 2.0f;
+            }
+
+            LineParams perturbed = perturbLineParameters(current_line,
+                current_step * perturbation_factor);
             double error = objectiveFunction(perturbed);
             perturbations.push_back(perturbed);
+            errors.push_back(error);
+        }
+
+        // 添加一个随机重启
+        if (iter % 10 == 0 && stuck_counter >= 2) {
+            LineParams random_restart = perturbLineParameters(current_line, current_step * 5.0f);
+            double error = objectiveFunction(random_restart);
+            perturbations.push_back(random_restart);
             errors.push_back(error);
         }
 
@@ -372,18 +453,35 @@ MeasureCylindricity::LineParams MeasureCylindricity::levenbergMarquardtOptimizat
             if (current_error < best_error) {
                 best_error = current_error;
                 best_line = current_line;
+                stuck_counter = 0;  // 重置停滞计数器
+
+                // 成功改进，减小步长以精细调整
+                if (current_step_idx < step_sizes.size() - 1) {
+                    current_step_idx++;
+                }
             }
         }
         else {
-            lambda *= 2.0;
+            stuck_counter++;
+
+            if (stuck_counter > max_stuck_iterations) {
+                // 多次停滞，增加步长以跳出局部最优
+                if (current_step_idx > 0) {
+                    current_step_idx--;
+                }
+                stuck_counter = 0;
+            }
         }
 
-        if (iter % 20 == 0 && verbose_) {
+        if (iter % 10 == 0 && verbose_) {
             printDebugInfo("LM优化迭代 " + std::to_string(iter) +
-                ", 误差: " + std::to_string(best_error));
+                ", 误差: " + std::to_string(best_error) +
+                ", 当前步长: " + std::to_string(current_step) +
+                ", 停滞计数: " + std::to_string(stuck_counter));
         }
 
-        if (iter > 10 && best_error < tolerance_ * 0.1) {
+        // 放宽收敛条件
+        if (iter > 20 && best_error < tolerance_ * 2.0) {
             break;
         }
     }
@@ -398,39 +496,131 @@ MeasureCylindricity::LineParams MeasureCylindricity::randomSearchOptimization()
 
     std::random_device rd;
     std::mt19937 gen(rd());
+
+    // 使用多种分布的随机扰动
     std::uniform_real_distribution<float> angle_dist(-1.0f, 1.0f);
     std::normal_distribution<float> pos_dist(0.0f, 0.1f);
+    std::cauchy_distribution<float> cauchy_dist(0.0f, 0.5f);  // 柯西分布，更容易跳出局部最优
 
     int search_iterations = std::min(max_iterations_, 200);
 
+    // 动态调整的步长因子
+    float global_step_size = 1.0f;  // 全局步长
+    float direction_mix_factor = 0.5f;  // 方向混合因子
+    float position_step_factor = 0.1f;  // 位置步长因子
+
     for (int i = 0; i < search_iterations; ++i) {
-        LineParams test_line = best_line;
+        // 动态调整步长：早期大范围搜索，后期精细调整
+        float iteration_factor = 1.0f - static_cast<float>(i) / search_iterations;
+        float current_global_step = global_step_size * iteration_factor;
 
-        Eigen::Vector3f random_vec(angle_dist(gen), angle_dist(gen), angle_dist(gen));
-        random_vec.normalize();
+        // 生成三种不同策略的候选解
+        std::vector<LineParams> candidates;
+        std::vector<double> candidate_errors;
 
-        float mix_factor = 0.3f;
-        test_line.direction = (best_line.direction * (1.0f - mix_factor) +
-            random_vec * mix_factor).normalized();
+        // 策略1: 全局大范围随机搜索（使用均匀分布）
+        LineParams candidate1 = best_line;
+        Eigen::Vector3f random_dir1(angle_dist(gen), angle_dist(gen), angle_dist(gen));
+        random_dir1.normalize();
+        candidate1.direction = (best_line.direction * (1.0f - direction_mix_factor) +
+            random_dir1 * direction_mix_factor).normalized();
+        candidate1.point = best_line.point +
+            Eigen::Vector3f(pos_dist(gen), pos_dist(gen), pos_dist(gen)) *
+            (position_step_factor * current_global_step);
+        candidates.push_back(candidate1);
 
-        test_line.point = best_line.point +
-            Eigen::Vector3f(pos_dist(gen), pos_dist(gen), pos_dist(gen)) * 0.01f;
+        // 策略2: 中范围搜索（使用正态分布）
+        LineParams candidate2 = best_line;
+        Eigen::Vector3f random_dir2(pos_dist(gen), pos_dist(gen), pos_dist(gen));
+        random_dir2.normalize();
+        candidate2.direction = (best_line.direction * 0.7f + random_dir2 * 0.3f).normalized();
+        candidate2.point = best_line.point + random_dir2 * (0.05f * current_global_step);
+        candidates.push_back(candidate2);
 
-        double error = objectiveFunction(test_line);
-
-        if (error < best_error) {
-            best_error = error;
-            best_line = test_line;
+        // 策略3: 使用柯西分布的大步长扰动
+        if (i < search_iterations / 2) {  // 前一半迭代使用大步长探索
+            LineParams candidate3 = best_line;
+            Eigen::Vector3f cauchy_perturb(cauchy_dist(gen), cauchy_dist(gen), cauchy_dist(gen));
+            candidate3.direction = (best_line.direction + cauchy_perturb * 0.1f).normalized();
+            candidate3.point = best_line.point + cauchy_perturb * (0.2f * current_global_step);
+            candidates.push_back(candidate3);
         }
 
-        if (i % 40 == 0 && verbose_) {
+        // 评估所有候选解
+        for (auto& candidate : candidates) {
+            double error = objectiveFunction(candidate);
+
+            // 使用模拟退火思想，以一定概率接受稍差的解
+            if (error < best_error) {
+                best_error = error;
+                best_line = candidate;
+            }
+            else if (i < search_iterations / 4) {  // 前1/4迭代以概率接受较差解
+                float temperature = 1.0f - static_cast<float>(i) / (search_iterations / 4);
+                float accept_prob = std::exp(-(error - best_error) / (temperature + 1e-6));
+
+                std::uniform_real_distribution<float> prob_dist(0.0f, 1.0f);
+                if (prob_dist(gen) < accept_prob) {
+                    best_error = error;
+                    best_line = candidate;
+                }
+            }
+        }
+
+        if (i % 20 == 0 && verbose_) {
             printDebugInfo("随机搜索迭代 " + std::to_string(i) +
-                ", 最佳误差: " + std::to_string(best_error));
+                ", 最佳误差: " + std::to_string(best_error) +
+                ", 当前步长因子: " + std::to_string(current_global_step));
+        }
+
+        // 提前终止条件放宽
+        if (i > 50 && best_error < tolerance_ * 5.0) {
+            break;
         }
     }
 
     return best_line;
 }
+//MeasureCylindricity::LineParams MeasureCylindricity::randomSearchOptimization()
+//{
+//    LineParams best_line = initializeLineParameters();
+//    double best_error = objectiveFunction(best_line);
+//
+//    std::random_device rd;
+//    std::mt19937 gen(rd());
+//    std::uniform_real_distribution<float> angle_dist(-1.0f, 1.0f);
+//    std::normal_distribution<float> pos_dist(0.0f, 0.1f);
+//
+//    int search_iterations = std::min(max_iterations_, 200);
+//
+//    for (int i = 0; i < search_iterations; ++i) {
+//        LineParams test_line = best_line;
+//
+//        Eigen::Vector3f random_vec(angle_dist(gen), angle_dist(gen), angle_dist(gen));
+//        random_vec.normalize();
+//
+//        float mix_factor = 0.3f;
+//        test_line.direction = (best_line.direction * (1.0f - mix_factor) +
+//            random_vec * mix_factor).normalized();
+//
+//        test_line.point = best_line.point +
+//            Eigen::Vector3f(pos_dist(gen), pos_dist(gen), pos_dist(gen)) * 0.01f;
+//
+//        double error = objectiveFunction(test_line);
+//
+//        if (error < best_error) {
+//            best_error = error;
+//            best_line = test_line;
+//        }
+//
+//        if (i % 40 == 0 && verbose_) {
+//            printDebugInfo("随机搜索迭代 " + std::to_string(i) +
+//                ", 最佳误差: " + std::to_string(best_error));
+//        }
+//    }
+//
+//    return best_line;
+//}
 
 MeasureCylindricity::LineParams MeasureCylindricity::optimizeLineParameters()
 {

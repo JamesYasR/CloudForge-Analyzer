@@ -181,6 +181,9 @@
     <ClCompile Include="Src\Basic\CloudClipper.cpp">
       <Filter>Source Files\Basic</Filter>
     </ClCompile>
+    <ClCompile Include="Src\Dialog\ParamDialogMeasureCy.cpp">
+      <Filter>Source Files\Dialog</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <QtMoc Include="Inc\CloudForgeAnalyzer.h">
@@ -235,6 +238,9 @@
       <Filter>Header Files\Dialog</Filter>
     </QtMoc>
     <QtMoc Include="Inc\Dialog\ChoseLineDialog.h">
+      <Filter>Header Files\Dialog</Filter>
+    </QtMoc>
+    <QtMoc Include="Inc\Dialog\ParamDialogMeausreCy.h">
       <Filter>Header Files\Dialog</Filter>
     </QtMoc>
   </ItemGroup>

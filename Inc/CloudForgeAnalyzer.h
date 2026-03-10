@@ -46,6 +46,8 @@ private slots:
     void Slot_ed_dork_Triggered();
     void Slot_ed_cleangeo_Triggered();
     void Slot_ed_cleanall_Triggered();
+    void Slot_ed_cleangeodetic_Triggered();
+    void Slot_ed_clean2DActor_Triggered();
     void Slot_fit_cy_Triggered();
     void Slot_fit_line_Triggered();
     void Slot_ph_CurvSeg_Triggered();
@@ -82,6 +84,8 @@ private:
     std::map<std::string, ColorManager> ColorMap;
 
     std::map<std::string, Line> LineMap;
+    std::vector<vtkSmartPointer<vtkProp>> m_geodesicVisualizationActors;
+    void cleanGeodesicVisualization();
     void AddLine(const std::string& name,
         const pcl::PointXYZ& start,
         const pcl::PointXYZ& end,

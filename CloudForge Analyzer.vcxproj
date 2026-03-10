@@ -132,6 +132,7 @@
     <ClCompile Include="Src\Dialog\ChoseLineDialog.cpp" />
     <ClCompile Include="Src\Dialog\LineSelectionDialog.cpp" />
     <ClCompile Include="Src\Dialog\ParamDialogCurvSeg.cpp" />
+    <ClCompile Include="Src\Dialog\ParamDialogMeasureCy.cpp" />
     <ClCompile Include="Src\Dialog\ParamDialogProtrusion.cpp" />
     <ClCompile Include="Src\Dialog\ParamDialog_FittingLine.cpp" />
     <ClCompile Include="Src\Dialog\ParamDialog_measureArc.cpp" />
@@ -185,6 +186,7 @@
     <QtMoc Include="Inc\Dialog\ParamDialog_FittingLine.h" />
     <QtMoc Include="Inc\Dialog\ChoseLineDialog.h" />
     <QtMoc Include="Inc\Dialog\LineSelectionDialog.h" />
+    <QtMoc Include="Inc\Dialog\ParamDialogMeausreCy.h" />
     <ClInclude Include="Inc\Dialog\RmCloudDialog.h" />
     <QtMoc Include="Inc\Dialog\SaveCloudDialog.h" />
     <ClInclude Include="Inc\Dialog\Dialog.h" />

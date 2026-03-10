@@ -42,8 +42,19 @@
         <verstretch>5</verstretch>
        </sizepolicy>
       </property>
+      <property name="font">
+       <font>
+        <family>Microsoft YaHei UI</family>
+        <pointsize>9</pointsize>
+        <italic>false</italic>
+        <bold>false</bold>
+       </font>
+      </property>
+      <property name="cursor">
+       <cursorShape>ArrowCursor</cursorShape>
+      </property>
       <property name="styleSheet">
-       <string notr="true"/>
+       <string notr="true">font: 9pt &quot;Microsoft YaHei UI&quot;;</string>
       </property>
       <property name="tabPosition">
        <enum>QTabWidget::TabPosition::East</enum>
@@ -411,19 +422,36 @@ QTextEdit {
               <height>10</height>
              </size>
             </property>
+            <property name="font">
+             <font>
+              <family>Microsoft YaHei UI</family>
+              <pointsize>8</pointsize>
+              <italic>false</italic>
+              <bold>true</bold>
+             </font>
+            </property>
+            <property name="cursor">
+             <cursorShape>WaitCursor</cursorShape>
+            </property>
+            <property name="styleSheet">
+             <string notr="true">color: rgb(0, 0, 255);
+font: 700 8pt &quot;Microsoft YaHei UI&quot;;</string>
+            </property>
             <property name="value">
-             <number>24</number>
+             <number>100</number>
             </property>
             <property name="alignment">
-             <set>Qt::AlignmentFlag::AlignLeading|Qt::AlignmentFlag::AlignLeft|Qt::AlignmentFlag::AlignTop</set>
+             <set>Qt::AlignmentFlag::AlignCenter</set>
+            </property>
+            <property name="textVisible">
+             <bool>true</bool>
             </property>
            </widget>
           </item>
           <item row="6" column="1">
            <widget class="QLabel" name="label_countpoints">
             <property name="styleSheet">
-             <string notr="true">background-color: rgb(191, 178, 178);
-background-color: rgb(247, 254, 236);</string>
+             <string notr="true">background-color: rgb(255, 255, 255);</string>
             </property>
             <property name="text">
              <string>TextLabel</string>
@@ -704,6 +732,8 @@ QMenu::item:selected {
     </property>
     <addaction name="action_ed_dork"/>
     <addaction name="action_ed_cleangeo"/>
+    <addaction name="action_ed_cleangeodetic"/>
+    <addaction name="action_ed_clean2DActor"/>
     <addaction name="action_ed_cleangall"/>
    </widget>
    <addaction name="menu_file"/>
@@ -797,7 +827,7 @@ QMenu::item:selected {
      <normaloff>:/CloudForgeAnalyzer/Icons/icons-cylinder.png</normaloff>:/CloudForgeAnalyzer/Icons/icons-cylinder.png</iconset>
    </property>
    <property name="text">
-    <string>圆柱</string>
+    <string>弧长</string>
    </property>
    <property name="toolTip">
     <string>测量圆柱</string>
@@ -825,6 +855,9 @@ QMenu::item:selected {
    <property name="text">
     <string>清除几何体</string>
    </property>
+   <property name="toolTip">
+    <string>清除几何体（包括文本）</string>
+   </property>
   </action>
   <action name="action_ed_cleangall">
    <property name="text">
@@ -845,7 +878,7 @@ QMenu::item:selected {
      <normaloff>:/CloudForgeAnalyzer/Icons/icons_measureArc.png</normaloff>:/CloudForgeAnalyzer/Icons/icons_measureArc.png</iconset>
    </property>
    <property name="text">
-    <string>弧长</string>
+    <string>测地线</string>
    </property>
    <property name="toolTip">
     <string>测地线积分方法测量弧长</string>
@@ -939,6 +972,28 @@ QMenu::item:selected {
    </property>
    <property name="text">
     <string>平面度</string>
+   </property>
+   <property name="menuRole">
+    <enum>QAction::MenuRole::NoRole</enum>
+   </property>
+  </action>
+  <action name="action_ed_cleangeodetic">
+   <property name="text">
+    <string>清除测地线</string>
+   </property>
+   <property name="toolTip">
+    <string>清除测地线</string>
+   </property>
+   <property name="menuRole">
+    <enum>QAction::MenuRole::NoRole</enum>
+   </property>
+  </action>
+  <action name="action_ed_clean2DActor">
+   <property name="text">
+    <string>清除2D演示</string>
+   </property>
+   <property name="toolTip">
+    <string>清除2D演示</string>
    </property>
    <property name="menuRole">
     <enum>QAction::MenuRole::NoRole</enum>

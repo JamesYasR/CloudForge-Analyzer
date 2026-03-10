@@ -2,22 +2,22 @@
 #include <omp.h>
 
 Fit_Cylinder::Fit_Cylinder(pcl::PointCloud<pcl::PointXYZ>::Ptr InputC) :
-	paramDialog(new ParamDialog_FittingCylinder())
+	dialog(new ParamDialog_FittingCylinder())
 	, cloud_input(new pcl::PointCloud<pcl::PointXYZ>)
 	, cloud_inliers(new pcl::PointCloud<pcl::PointXYZ>)
 	, cloud_outliers(new pcl::PointCloud<pcl::PointXYZ>)
 {
 	bool ok1, ok2, ok3, ok4;  // 增加ok4用于初始半径验证
-	if (paramDialog->exec() != QDialog::Accepted) {
+	if (dialog->exec() != QDialog::Accepted) {
 		isCancelled = true;
 		return;
 	}
 	else // 如果用户点击了"确定"
 	{
-		QString param1 = paramDialog->getParams()[0];
-		QString param2 = paramDialog->getParams()[1];
-		QString param3 = paramDialog->getParams()[2];
-		QString param4 = paramDialog->getParams()[3];  // 新增：获取初始半径参数
+		QString param1 = dialog->getParams()[0];
+		QString param2 = dialog->getParams()[1];
+		QString param3 = dialog->getParams()[2];
+		QString param4 = dialog->getParams()[3];  // 新增：获取初始半径参数
 		KSearch = param1.toInt(&ok1);
 		DistanceThreshold = param2.toFloat(&ok2);
 		MaxIterations = param3.toInt(&ok3);

@@ -11,3 +11,7 @@
 #include <vtkOutputWindow.h>
 #include <vtkGenericOpenGLRenderWindow.h>
 #include <vtkInteractorStyleSwitch.h>
+#include <vtkColorTransferFunction.h>
+#include <vtkScalarBarActor.h>
+#include <vtkLookupTable.h>
+#include <vtkTextProperty.h>

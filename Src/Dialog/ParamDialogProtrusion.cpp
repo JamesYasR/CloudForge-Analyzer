@@ -4,8 +4,8 @@ ParamDialogProtrusion::ParamDialogProtrusion(QWidget* parent)
     : ParamDialogBase(parent)
 {
     QVector<QString> labels = {
-        "高度阈值 (m)",
-        "搜索半径 (m)",
+        "高度阈值 (mm)",
+        "搜索半径 (mm)",
         "最小聚类点数"
     };
 

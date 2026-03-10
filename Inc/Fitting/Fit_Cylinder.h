@@ -35,7 +35,7 @@ private:
 	pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_input;
 	pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_inliers;
 	pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_outliers;
-	ParamDialog_FittingCylinder* paramDialog;
+	ParamDialog_FittingCylinder* dialog;
 	void Proc();
 	float ComputeRMSE();
 };
