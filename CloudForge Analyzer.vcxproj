@@ -129,20 +129,22 @@
       <DynamicSource Condition="'$(Configuration)|$(Platform)'=='Release|x64'">input</DynamicSource>
       <QtMocFileName Condition="'$(Configuration)|$(Platform)'=='Release|x64'">%(Filename).moc</QtMocFileName>
     </ClCompile>
+    <ClCompile Include="Src\Dialog\ChoseCyDialog.cpp" />
     <ClCompile Include="Src\Dialog\ChoseLineDialog.cpp" />
+    <ClCompile Include="Src\Dialog\CySelectionDialog.cpp" />
     <ClCompile Include="Src\Dialog\LineSelectionDialog.cpp" />
     <ClCompile Include="Src\Dialog\ParamDialogCurvSeg.cpp" />
+    <ClCompile Include="Src\Dialog\ParamDialogMeaArc.cpp" />
     <ClCompile Include="Src\Dialog\ParamDialogMeasureCy.cpp" />
     <ClCompile Include="Src\Dialog\ParamDialogProtrusion.cpp" />
     <ClCompile Include="Src\Dialog\ParamDialog_FittingLine.cpp" />
     <ClCompile Include="Src\Dialog\ParamDialog_measureArc.cpp" />
-    <ClCompile Include="Src\Dialog\ParamDialogMeaArc.cpp" />
+    <ClCompile Include="Src\Dialog\ParamDialogMeaGeodetic.cpp" />
     <ClCompile Include="Src\Dialog\RmCloudDialog.cpp" />
     <ClCompile Include="Src\Dialog\SaveCloudDialog.cpp" />
     <ClCompile Include="Src\Dialog\CloudSelectionDialog.cpp" />
     <ClCompile Include="Src\Dialog\ParamDialogBase.cpp" />
     <ClCompile Include="Src\Dialog\ParamDialog_ec.cpp" />
-    <ClCompile Include="Src\Dialog\FitCloudDialog.cpp" />
     <ClCompile Include="Src\Dialog\ParamDialog_FittingCylinder.cpp" />
     <ClCompile Include="Src\Dialog\ParamDialog_sor.cpp" />
     <ClCompile Include="Src\Dialog\ParamDialog_vg.cpp" />
@@ -173,7 +175,7 @@
     <QtMoc Include="Inc\Basic\PointPicker.h" />
     <QtMoc Include="Inc\Dialog\ChoseCloudDialog.h" />
     <QtMoc Include="Inc\Basic\PointPickerMgr.h" />
-    <QtMoc Include="Inc\Dialog\ParamDialogMeaArc.h" />
+    <QtMoc Include="Inc\Dialog\ParamDialogMeaGeodetic.h" />
     <QtMoc Include="Inc\Dialog\ParamDialogCurvSeg.h" />
     <ClInclude Include="Inc\Basic\Basic.h" />
     <ClInclude Include="Inc\Basic\CloudClipper.h" />
@@ -187,12 +189,14 @@
     <QtMoc Include="Inc\Dialog\ChoseLineDialog.h" />
     <QtMoc Include="Inc\Dialog\LineSelectionDialog.h" />
     <QtMoc Include="Inc\Dialog\ParamDialogMeausreCy.h" />
+    <QtMoc Include="Inc\Dialog\CySelectionDialog.h" />
+    <QtMoc Include="Inc\Dialog\ChoseCyDialog.h" />
+    <QtMoc Include="Inc\Dialog\ParamDialogMeaArc.h" />
     <ClInclude Include="Inc\Dialog\RmCloudDialog.h" />
     <QtMoc Include="Inc\Dialog\SaveCloudDialog.h" />
     <ClInclude Include="Inc\Dialog\Dialog.h" />
     <QtMoc Include="Inc\Dialog\CloudSelectionDialog.h" />
     <ClInclude Include="Inc\Dialog\headers.h" />
-    <ClInclude Include="Inc\Dialog\FitCloudDialog.h" />
     <QtMoc Include="Inc\Dialog\ParamDialog_FittingCylinder.h" />
     <QtMoc Include="Inc\Dialog\ParamDialogBase.h" />
     <QtMoc Include="Inc\Dialog\​​ParamDialogProtrusion.h" />

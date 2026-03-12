@@ -64,6 +64,7 @@ void CloudForgeAnalyzer::InitalizeConnects() {
     connect(ui->action_ed_dork, &QAction::triggered, this, &CloudForgeAnalyzer::Slot_ed_dork_Triggered);
     connect(ui->action_ed_cleangeo, &QAction::triggered, this, &CloudForgeAnalyzer::Slot_ed_cleangeo_Triggered);
     connect(ui->action_ed_cleangall, &QAction::triggered, this, &CloudForgeAnalyzer::Slot_ed_cleanall_Triggered);
+    connect(ui->action_ed_cleanRGB, &QAction::triggered, this, &CloudForgeAnalyzer::Slot_ed_cleanRGB_Triggered);
     connect(ui->action_ed_cleangeodetic, &QAction::triggered, this, &CloudForgeAnalyzer::Slot_ed_cleangeodetic_Triggered);
     connect(ui->action_ed_clean2DActor, &QAction::triggered, this, &CloudForgeAnalyzer::Slot_ed_clean2DActor_Triggered);
     connect(ui->action_fi_open, &QAction::triggered, this, &CloudForgeAnalyzer::Slot_fi_open_Triggered);
@@ -77,7 +78,7 @@ void CloudForgeAnalyzer::InitalizeConnects() {
     connect(ui->action_fl_2, &QAction::triggered, this, &CloudForgeAnalyzer::Slot_fl_2_Triggered);
     connect(ui->action_fit_cy, &QAction::triggered, this, &CloudForgeAnalyzer::Slot_fit_cy_Triggered);
     connect(ui->action_fit_line, &QAction::triggered, this, &CloudForgeAnalyzer::Slot_fit_line_Triggered);
-    connect(ui->measure_cylinder, &QAction::triggered,this, &CloudForgeAnalyzer::Tool_SetMeasureCylinder);
+    connect(ui->measure_cylinder, &QAction::triggered,this, &CloudForgeAnalyzer::Tool_MeasureArc);
     connect(ui->measure_geodisic, &QAction::triggered, this, &CloudForgeAnalyzer::Tool_MeasureGeodisic);
     connect(ui->measure_parallel, &QAction::triggered, this, &CloudForgeAnalyzer::Tool_MeasureParallel);
     connect(ui->measure_height, &QAction::triggered, this, &CloudForgeAnalyzer::Tool_MeasureHeight);
@@ -101,6 +102,84 @@ bool CloudForgeAnalyzer::showConfirmationDialog(const QString& title, const QStr
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////*槽函数start*/
+void CloudForgeAnalyzer::Tool_MeasureArc() {
+    ChoseCloudDialog dialog(CloudMap, ColorMap, "选择被测点云");
+    if (dialog.exec() != QDialog::Accepted) {
+        TeEDebug(">>:操作取消");
+        return;
+    }
+    if (dialog.getSelectedList().empty()) {
+        TeEDebug(">>:未选择点云");
+        return;
+    }
+    pcl::PointCloud<pcl::PointXYZ>::Ptr Cloud_Temp = CloudMap[dialog.getSelectedList()[0]];
+
+    ChoseCyDialog dialog1(cylinderResultsMap);
+    if (dialog1.getSelectedList().empty()) {
+        return;
+    }
+    pcl::ModelCoefficients::Ptr cy_Temp = cylinderResultsMap[dialog1.getSelectedList()[0]];
+
+    qDebug() << "===== 圆柱参数验证 =====";
+    qDebug() << QString("轴线点: (%1, %2, %3)")
+        .arg(cy_Temp->values[0])
+        .arg(cy_Temp->values[1])
+        .arg(cy_Temp->values[2]);
+
+    Eigen::Vector3f axis_dir(cy_Temp->values[3], cy_Temp->values[4], cy_Temp->values[5]);
+    float norm = axis_dir.norm();
+    qDebug() << "轴线方向向量模长:" << norm;
+
+    if (norm < 0.001f) {
+        TeEDebug("Error: 圆柱轴线方向向量模长过小，拟合可能有问题");
+        return;
+    }
+
+    qDebug() << "圆柱半径:" << cy_Temp->values[6];
+    qDebug() << "点云点数:" << Cloud_Temp->size();
+
+   TeEDebug("请选择高度");
+    PointPickerMgr mgr(ui->winOfAnalyzer->interactor(), 1);
+    auto pts_pcl = mgr.GetPickedPCLPoints();
+
+    if (pts_pcl.size() < 1) {
+        TeEDebug("点选择已取消或不足一个点");
+        return;
+    }
+
+    MeasureArc measurer(Cloud_Temp, cy_Temp,&pts_pcl[0]);
+    if (measurer.isCancelled) {
+        TeEDebug(">>: 操作取消");
+        return;
+    }
+
+    if (measurer.success && (!measurer.isCancelled)) {
+        // 1. 获取计算生成的曲线Actor
+        vtkSmartPointer<vtkActor> splineActor = measurer.getVisualizationActor();
+
+        if (splineActor) {
+            // 2. 生成一个唯一的ID用于管理
+            std::string actorId = GenerateRandomName("arc_spline_");
+
+            addArcSplineActor(actorId, splineActor);
+
+            TeEDebug(">>: 弧长曲线已成功添加到3D视图。");
+
+            std::string resultMsg = "截面弧长: " + std::to_string(measurer.arcLength) + " 单位";
+            Update_CFmes(resultMsg);
+        }
+        else {
+            TeEDebug(">>: 警告：未能获取到有效的曲线可视化对象。");
+        }
+    }
+    else {
+        TeEDebug(">>: 弧长计算失败，无法生成可视化曲线。");
+    }
+
+    TeEDebug(measurer.message);
+}
+
+
 void CloudForgeAnalyzer::visualizeCylindricityHeatMap(
     pcl::PointCloud<pcl::PointXYZRGB>::Ptr heatmap_cloud,
     double min_distance, double max_distance)
@@ -119,9 +198,9 @@ void CloudForgeAnalyzer::visualizeCylindricityHeatMap(
     viewer->addPointCloud<pcl::PointXYZRGB>(heatmap_cloud, "cylindricity_heatmap");
     viewer->setPointCloudRenderingProperties(
         pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 3, "cylindricity_heatmap");
-
     // === 新增：创建并添加固定颜色条 (Colorbar) ===
     // 1. 获取当前渲染器
+    RGBCloudMap.emplace("cylindricity_heatmap",heatmap_cloud);
     vtkRenderer* renderer = viewer->getRendererCollection()->GetFirstRenderer();
     if (!renderer) {
         TeEDebug("错误：无法获取渲染器，颜色条创建失败。");
@@ -192,16 +271,16 @@ void CloudForgeAnalyzer::visualizeCylindricityHeatMap(
 
 void CloudForgeAnalyzer::Tool_MeasureCylindricity()
 {
-    FitCloudDialog window(CloudMap, ColorMap);
-    if (window.exec() != QDialog::Accepted) {
+    ChoseCloudDialog dialog(CloudMap, ColorMap);
+    if (dialog.exec() != QDialog::Accepted) {
         TeEDebug(">>:操作取消");
         return;
     }
-    if (window.getSelectedList().empty()) {
+    if (dialog.getSelectedList().empty()) {
         TeEDebug(">>:未选择点云");
         return;
     }
-    pcl::PointCloud<pcl::PointXYZ>::Ptr Cloud_Temp = CloudMap[window.getSelectedList()[0]];
+    pcl::PointCloud<pcl::PointXYZ>::Ptr Cloud_Temp = CloudMap[dialog.getSelectedList()[0]];
 
     Fit_Cylinder fcy(Cloud_Temp);
     if (fcy.isCancelled) {
@@ -224,17 +303,17 @@ void CloudForgeAnalyzer::Tool_MeasureCylindricity()
     Eigen::Vector3f center = fcy.get_center_point();
     Eigen::Vector3f axis = fcy.get_axis_direction();
 
-    ChoseCloudDialog dialog(CloudMap, ColorMap);
-    if (dialog.exec() != QDialog::Accepted) {
+    ChoseCloudDialog dialog1(CloudMap, ColorMap);
+    if (dialog1.exec() != QDialog::Accepted) {
         TeEDebug(">>:操作取消");
         return;
     }
-    if (dialog.getSelectedList().empty()) {
+    if (dialog1.getSelectedList().empty()) {
         TeEDebug("圆柱度评估已取消：未选择点云");
         return;
     }
 
-    pcl::PointCloud<pcl::PointXYZ>::Ptr target_cloud = CloudMap[dialog.getSelectedList()[0]];
+    pcl::PointCloud<pcl::PointXYZ>::Ptr target_cloud = CloudMap[dialog1.getSelectedList()[0]];
     if (!target_cloud || target_cloud->empty()) {
         TeEDebug("错误: 选择的点云为空或无效");
         return;
@@ -471,17 +550,7 @@ void CloudForgeAnalyzer::Update_PointCounts() {
     ui->label_countpoints->setText(QString::fromStdString(countText));
 }
 
-void CloudForgeAnalyzer::Tool_SetMeasureCylinder() {
-    FitCloudDialog dialog(CloudMap, ColorMap);
-    if (dialog.getSelectedList().empty()) {
-        return;
-    }
-    pcl::PointCloud<pcl::PointXYZ>::Ptr Cloud_Temp = CloudMap[dialog.getSelectedList()[0]];
-	MeasureArc ma;
-    ma.FitCylinder(Cloud_Temp);
-    float arclength = ma.calculateArcLength();
-    TeEDebug("弧长为:"+std::to_string(arclength));
-}
+
 void CloudForgeAnalyzer::Tool_MeasureGeodisic() {
 
     TeEDebug("请选择点 (左键选点，Enter确认，ESC取消)");
@@ -513,12 +582,12 @@ void CloudForgeAnalyzer::Tool_MeasureGeodisic() {
         return;
     }
 	pcl::PointCloud<pcl::PointXYZ>::Ptr tempcloud = CloudMap[dialog.getSelectedList()[0]];
-    ParamDialogMeaArc* dialog2=new ParamDialogMeaArc();
+    ParamDialogMeaGeodetic dialog2;
     double base_radius = 0.05;
 	bool ok = false;
-    if (dialog2->exec() == QDialog::Accepted) // 如果用户点击了“确定”
+    if (dialog2.exec() == QDialog::Accepted) // 如果用户点击了“确定”
     {
-        QString param = dialog2->getParams()[0]; // 获取输入的参数
+        QString param = dialog2.getParams()[0]; // 获取输入的参数
         base_radius = param.toFloat(&ok);
         if (!ok) {
             qDebug() << "无效数字";
@@ -620,15 +689,15 @@ void CloudForgeAnalyzer::Slot_fit_line_Triggered() {
 }
 
 void CloudForgeAnalyzer::Slot_fit_cy_Triggered() {
-    FitCloudDialog window(CloudMap, ColorMap);
-    if (window.exec() != QDialog::Accepted) {
+    ChoseCloudDialog dialog(CloudMap, ColorMap);
+    if (dialog.exec() != QDialog::Accepted) {
         TeEDebug(">>:操作取消");
         return;
     }
-    if (window.getSelectedList().empty()) {
+    if (dialog.getSelectedList().empty()) {
         return;
     }
-    pcl::PointCloud<pcl::PointXYZ>::Ptr Cloud_Temp = CloudMap[window.getSelectedList()[0]];
+    pcl::PointCloud<pcl::PointXYZ>::Ptr Cloud_Temp = CloudMap[dialog.getSelectedList()[0]];
 
     Fit_Cylinder fcy(Cloud_Temp);
     if (fcy.isCancelled) {
@@ -859,9 +928,14 @@ void CloudForgeAnalyzer::Slot_ed_cleanall_Triggered() {
             renderer->RemoveActor2D(static_cast<vtkActor2D*>(p));
         }
     }
+    clearAllArcSplineActors();
     ui->winOfAnalyzer->renderWindow()->Render();
     ui->winOfAnalyzer->update();
     TeEDebug("已清除所有可视化");
+}
+
+void CloudForgeAnalyzer::Slot_ed_cleanRGB_Triggered() {
+    ClearAllPointCloudRGB();
 }
 
 void CloudForgeAnalyzer::Slot_ed_cleangeodetic_Triggered() {
@@ -1001,8 +1075,18 @@ void CloudForgeAnalyzer::AddPointCloud(std::string name, pcl::PointCloud<pcl::Po
     ui->winOfAnalyzer->renderWindow()->Render();
     ui->winOfAnalyzer->update();
     UpdateCamera(0, 0, 1);
-
 }
+
+void CloudForgeAnalyzer::ClearAllPointCloudRGB() {
+    for (auto& pair : RGBCloudMap) {
+        viewer->removePointCloud(pair.first);
+        pair.second.reset();
+    }
+    RGBCloudMap.clear();
+    ui->winOfAnalyzer->renderWindow()->Render();
+    ui->winOfAnalyzer->update();
+}
+
 
 void CloudForgeAnalyzer::ClearAllPointCloud() {
     for (auto& pair : CloudMap) {
@@ -1124,6 +1208,7 @@ void CloudForgeAnalyzer::visualizeMeasurementResults(MeasureHeight& measurer,
     colorPointCloudByHeight(measureCloud, plane_coeffs, colored_measure_cloud);
     viewer->addPointCloud<pcl::PointXYZRGB>(colored_measure_cloud, "measure_cloud");
     viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 3, "measure_cloud");
+
 
     // 3. 添加拟合的平面（半透明）[1,4](@ref)
     if (plane_coeffs->values.size() >= 4) {
@@ -1314,4 +1399,88 @@ std::vector<std::string> CloudForgeAnalyzer::getAllCylinderNames(){
 void CloudForgeAnalyzer::clearAllCylinderResults(){
     cylinderResultsMap.clear();
     TeEDebug("已清除所有圆柱拟合结果");
+}
+
+void CloudForgeAnalyzer::addArcSplineActor(const std::string& id, vtkSmartPointer<vtkActor> actor) {
+    if (!actor) {
+        qDebug() << "错误：尝试添加空的弧线Actor。ID:" << QString::fromStdString(id);
+        return;
+    }
+    // 检查ID是否已存在，若存在则先移除旧的
+    if (m_arcSplineMap.find(id) != m_arcSplineMap.end()) {
+        qDebug() << "警告：弧线ID'" << QString::fromStdString(id) << "'已存在，将被替换。";
+        removeArcSplineActor(id);
+    }
+    
+    m_arcSplineMap[id] = actor;
+    viewer->getRendererCollection()->GetFirstRenderer()->AddActor(actor);
+    qDebug() << "已添加弧线Actor，ID:" << QString::fromStdString(id);
+    ui->winOfAnalyzer->renderWindow()->Render();
+}
+
+bool CloudForgeAnalyzer::removeArcSplineActor(const std::string& id) {
+    auto it = m_arcSplineMap.find(id);
+    if (it != m_arcSplineMap.end()) {
+        vtkSmartPointer<vtkActor> actor = it->second;
+        // 从渲染器中移除
+        if (viewer && viewer->getRendererCollection()) {
+            viewer->getRendererCollection()->GetFirstRenderer()->RemoveActor(actor);
+        }
+        // 从映射中删除
+        m_arcSplineMap.erase(it);
+
+        // 刷新视图
+        if (ui && ui->winOfAnalyzer) {
+            ui->winOfAnalyzer->renderWindow()->Render();
+        }
+
+        qDebug() << "已移除弧线Actor，ID:" << QString::fromStdString(id);
+        return true;
+    }
+    qDebug() << "移除失败：未找到弧线Actor，ID:" << QString::fromStdString(id);
+    return false;
+}
+
+void CloudForgeAnalyzer::clearAllArcSplineActors() {
+    if (m_arcSplineMap.empty()) {
+        return;
+    }
+
+    vtkRenderer* renderer = viewer->getRendererCollection()->GetFirstRenderer();
+    if (!renderer) {
+        m_arcSplineMap.clear();
+        return;
+    }
+
+    // 从渲染器中移除所有弧线Actor
+    for (auto& pair : m_arcSplineMap) {
+        renderer->RemoveActor(pair.second);
+    }
+
+    // 清空映射
+    m_arcSplineMap.clear();
+
+    // 刷新视图
+    if (ui && ui->winOfAnalyzer) {
+        ui->winOfAnalyzer->renderWindow()->Render();
+    }
+
+    qDebug() << "已清除所有弧线可视化对象。";
+}
+
+std::vector<std::string> CloudForgeAnalyzer::getAllArcSplineIds() const {
+    std::vector<std::string> ids;
+    ids.reserve(m_arcSplineMap.size());
+    for (const auto& pair : m_arcSplineMap) {
+        ids.push_back(pair.first);
+    }
+    return ids;
+}
+
+vtkSmartPointer<vtkActor> CloudForgeAnalyzer::getArcSplineActor(const std::string& id) {
+    auto it = m_arcSplineMap.find(id);
+    if (it != m_arcSplineMap.end()) {
+        return it->second;
+    }
+    return nullptr;
 }

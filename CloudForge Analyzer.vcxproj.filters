@@ -97,9 +97,6 @@
     <ClCompile Include="Src\Fitting\Fit_Cylinder.cpp">
       <Filter>Source Files\Fitting</Filter>
     </ClCompile>
-    <ClCompile Include="Src\Dialog\FitCloudDialog.cpp">
-      <Filter>Source Files\Dialog</Filter>
-    </ClCompile>
     <ClCompile Include="Src\Dialog\CloudSelectionDialog.cpp">
       <Filter>Source Files\Dialog</Filter>
     </ClCompile>
@@ -127,7 +124,7 @@
     <ClCompile Include="Src\Basic\PointPickerMgr.cpp">
       <Filter>Source Files\Basic</Filter>
     </ClCompile>
-    <ClCompile Include="Src\Dialog\ParamDialogMeaArc.cpp">
+    <ClCompile Include="Src\Dialog\ParamDialogMeaGeodetic.cpp">
       <Filter>Source Files\Dialog</Filter>
     </ClCompile>
     <ClCompile Include="Src\Dialog\ParamDialogCurvSeg.cpp">
@@ -184,6 +181,15 @@
     <ClCompile Include="Src\Dialog\ParamDialogMeasureCy.cpp">
       <Filter>Source Files\Dialog</Filter>
     </ClCompile>
+    <ClCompile Include="Src\Dialog\CySelectionDialog.cpp">
+      <Filter>Source Files\Dialog</Filter>
+    </ClCompile>
+    <ClCompile Include="Src\Dialog\ChoseCyDialog.cpp">
+      <Filter>Source Files\Dialog</Filter>
+    </ClCompile>
+    <ClCompile Include="Src\Dialog\ParamDialogMeaArc.cpp">
+      <Filter>Source Files\Dialog</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <QtMoc Include="Inc\CloudForgeAnalyzer.h">
@@ -222,7 +228,7 @@
     <QtMoc Include="Inc\Basic\PointPickerMgr.h">
       <Filter>Header Files\Basic</Filter>
     </QtMoc>
-    <QtMoc Include="Inc\Dialog\ParamDialogMeaArc.h">
+    <QtMoc Include="Inc\Dialog\ParamDialogMeaGeodetic.h">
       <Filter>Header Files\Dialog</Filter>
     </QtMoc>
     <QtMoc Include="Inc\Dialog\ParamDialogCurvSeg.h">
@@ -241,6 +247,15 @@
       <Filter>Header Files\Dialog</Filter>
     </QtMoc>
     <QtMoc Include="Inc\Dialog\ParamDialogMeausreCy.h">
+      <Filter>Header Files\Dialog</Filter>
+    </QtMoc>
+    <QtMoc Include="Inc\Dialog\CySelectionDialog.h">
+      <Filter>Header Files\Dialog</Filter>
+    </QtMoc>
+    <QtMoc Include="Inc\Dialog\ChoseCyDialog.h">
+      <Filter>Header Files\Dialog</Filter>
+    </QtMoc>
+    <QtMoc Include="Inc\Dialog\ParamDialogMeaArc.h">
       <Filter>Header Files\Dialog</Filter>
     </QtMoc>
   </ItemGroup>
@@ -279,9 +294,6 @@
       <Filter>Header Files\Fitting</Filter>
     </ClInclude>
     <ClInclude Include="Inc\Dialog\RmCloudDialog.h">
-      <Filter>Header Files\Dialog</Filter>
-    </ClInclude>
-    <ClInclude Include="Inc\Dialog\FitCloudDialog.h">
       <Filter>Header Files\Dialog</Filter>
     </ClInclude>
     <ClInclude Include="Inc\Measure\MeasureArc.h">

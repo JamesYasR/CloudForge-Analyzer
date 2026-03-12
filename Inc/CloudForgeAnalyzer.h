@@ -46,6 +46,7 @@ private slots:
     void Slot_ed_dork_Triggered();
     void Slot_ed_cleangeo_Triggered();
     void Slot_ed_cleanall_Triggered();
+    void Slot_ed_cleanRGB_Triggered();
     void Slot_ed_cleangeodetic_Triggered();
     void Slot_ed_clean2DActor_Triggered();
     void Slot_fit_cy_Triggered();
@@ -53,7 +54,7 @@ private slots:
     void Slot_ph_CurvSeg_Triggered();
     void Slot_ph_ProtruSeg_Triggered();
 
-    void Tool_SetMeasureCylinder();
+    void Tool_MeasureArc();
     void Tool_MeasureGeodisic();
     void Tool_MeasureHeight();
     void Tool_MeasureParallel();
@@ -69,6 +70,7 @@ private:
     std::vector<std::string> getAllCylinderNames();
 
     void AddPointCloud(std::string name, pcl::PointCloud<pcl::PointXYZ>::Ptr cloud, ColorManager color);
+    void ClearAllPointCloudRGB();
     void ClearAllPointCloud();
     void DelePointCloud(std::string name);
     void InitalizeQWidgets();  
@@ -86,10 +88,11 @@ private:
     pcl::visualization::PCLVisualizer::Ptr viewer;
     pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZ>::Ptr renderer_custom;
     std::map<std::string, pcl::PointCloud<pcl::PointXYZ>::Ptr> CloudMap;
+    std::map<std::string, pcl::PointCloud<pcl::PointXYZRGB>::Ptr> RGBCloudMap;
     std::map<std::string, ColorManager> ColorMap;
     std::map<std::string, Line> LineMap;
     std::vector<vtkSmartPointer<vtkProp>> m_geodesicVisualizationActors;
-
+    std::map<std::string, vtkSmartPointer<vtkActor>> m_arcSplineMap;
     std::map<std::string, pcl::ModelCoefficients::Ptr> cylinderResultsMap;
 
     void cleanGeodesicVisualization();
@@ -119,4 +122,10 @@ private:
         pcl::PointCloud<pcl::PointXYZRGB>::Ptr heatmap_cloud,
         double min_distance, double max_distance);
     bool showConfirmationDialog(const QString& title, const QString& message);
+
+    void addArcSplineActor(const std::string& id, vtkSmartPointer<vtkActor> actor);
+    bool removeArcSplineActor(const std::string& id);
+    void clearAllArcSplineActors();
+    std::vector<std::string> getAllArcSplineIds() const;
+    vtkSmartPointer<vtkActor> getArcSplineActor(const std::string& id);
 };
