@@ -50,6 +50,7 @@ private slots:
     void Slot_ed_cleangeodetic_Triggered();
     void Slot_ed_clean2DActor_Triggered();
     void Slot_fit_cy_Triggered();
+    void Slot_fit_cy2_Triggered();
     void Slot_fit_line_Triggered();
     void Slot_ph_CurvSeg_Triggered();
     void Slot_ph_ProtruSeg_Triggered();

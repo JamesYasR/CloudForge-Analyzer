@@ -8,6 +8,7 @@
 #include "ChoseCloudDialog.h"
 #include "ParamDialogMeaGeodetic.h"
 #include "ParamDialogMeaArc.h"
+#include "ParamDialogMeaArcB.h"
 #include "ParamDialogCurvSeg.h"
 #include "​​ParamDialogProtrusion.h"
 #include "ParamDialog_FittingLine.h"
@@ -15,3 +16,4 @@
 #include "ChoseLineDialog.h"
 #include "ParamDialogMeausreCy.h"
 #include "ChoseCyDialog.h"
+#include "OptionBox.h"

@@ -133,8 +133,15 @@
     <ClCompile Include="Src\Dialog\ChoseLineDialog.cpp" />
     <ClCompile Include="Src\Dialog\CySelectionDialog.cpp" />
     <ClCompile Include="Src\Dialog\LineSelectionDialog.cpp" />
+    <ClCompile Include="Src\Dialog\OptionBox.cpp">
+      <DynamicSource Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">input</DynamicSource>
+      <QtMocFileName Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">%(Filename).moc</QtMocFileName>
+      <DynamicSource Condition="'$(Configuration)|$(Platform)'=='Release|x64'">input</DynamicSource>
+      <QtMocFileName Condition="'$(Configuration)|$(Platform)'=='Release|x64'">%(Filename).moc</QtMocFileName>
+    </ClCompile>
     <ClCompile Include="Src\Dialog\ParamDialogCurvSeg.cpp" />
     <ClCompile Include="Src\Dialog\ParamDialogMeaArc.cpp" />
+    <ClCompile Include="Src\Dialog\ParamDialogMeaArcB.cpp" />
     <ClCompile Include="Src\Dialog\ParamDialogMeasureCy.cpp" />
     <ClCompile Include="Src\Dialog\ParamDialogProtrusion.cpp" />
     <ClCompile Include="Src\Dialog\ParamDialog_FittingLine.cpp" />
@@ -192,6 +199,8 @@
     <QtMoc Include="Inc\Dialog\CySelectionDialog.h" />
     <QtMoc Include="Inc\Dialog\ChoseCyDialog.h" />
     <QtMoc Include="Inc\Dialog\ParamDialogMeaArc.h" />
+    <QtMoc Include="Inc\Dialog\ParamDialogMeaArcB.h" />
+    <QtMoc Include="Inc\Dialog\OptionBox.h" />
     <ClInclude Include="Inc\Dialog\RmCloudDialog.h" />
     <QtMoc Include="Inc\Dialog\SaveCloudDialog.h" />
     <ClInclude Include="Inc\Dialog\Dialog.h" />

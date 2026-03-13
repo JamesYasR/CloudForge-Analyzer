@@ -769,6 +769,10 @@ MeasureCylindricity::AssessmentResult MeasureCylindricity::evaluateGivenLine(
         LineParams given_line(center, axis);
         result = computeAssessmentMetrics(given_line);
 
+        // ============ 修复1: 生成热力图点云 ============
+        generateHeatMapCloud(given_line);
+        // =============================================
+
         std::stringstream message;
         message << "=== 圆柱度直接评估报告 ===\n";
         message << "点云点数: " << input_cloud_->size() << "\n";
@@ -784,8 +788,10 @@ MeasureCylindricity::AssessmentResult MeasureCylindricity::evaluateGivenLine(
         message << "不贴合点比例: " << std::setprecision(2) << result.outlier_ratio * 100 << "%\n";
         message << "最小偏差: " << std::setprecision(4) << result.min_deviation << " mm\n";
         message << "最大偏差: " << std::setprecision(4) << result.max_deviation << " mm\n";
-        message << "平均偏差: " << result.mean_deviation << " m\n";
-        message << "RMS偏差: " << result.rms_error << " m\n\n";
+        // ============ 修复2: 修正输出文本的单位笔误 (m -> mm) ============
+        message << "平均偏差: " << std::setprecision(4) << result.mean_deviation << " mm\n";
+        message << "RMS偏差: " << std::setprecision(4) << result.rms_error << " mm\n\n";
+        // ===============================================================
         message << "均匀性(标准差): " << result.uniformity_rms << " mm\n\n";
 
         message << (result.is_acceptable ? "✅ 圆柱度良好" : "❌ 圆柱度不佳");
@@ -793,8 +799,11 @@ MeasureCylindricity::AssessmentResult MeasureCylindricity::evaluateGivenLine(
 
         result.assessment_message = message.str();
 
-        // 保存最后一次评估结果（但不保存为优化结果）
+        // 保存最后一次评估结果
         last_assessment_result_ = result;
+        // ============ 修复3: 保存本次评估所使用的直线参数 ============
+        last_optimized_line_ = given_line; // 将“给定”的直线视为本次的“最优”结果进行保存
+        // ============================================================
 
     }
     catch (const std::exception& e) {

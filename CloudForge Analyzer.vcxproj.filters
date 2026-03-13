@@ -190,6 +190,12 @@
     <ClCompile Include="Src\Dialog\ParamDialogMeaArc.cpp">
       <Filter>Source Files\Dialog</Filter>
     </ClCompile>
+    <ClCompile Include="Src\Dialog\ParamDialogMeaArcB.cpp">
+      <Filter>Source Files\Dialog</Filter>
+    </ClCompile>
+    <ClCompile Include="Src\Dialog\OptionBox.cpp">
+      <Filter>Source Files\Dialog</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <QtMoc Include="Inc\CloudForgeAnalyzer.h">
@@ -256,6 +262,12 @@
       <Filter>Header Files\Dialog</Filter>
     </QtMoc>
     <QtMoc Include="Inc\Dialog\ParamDialogMeaArc.h">
+      <Filter>Header Files\Dialog</Filter>
+    </QtMoc>
+    <QtMoc Include="Inc\Dialog\ParamDialogMeaArcB.h">
+      <Filter>Header Files\Dialog</Filter>
+    </QtMoc>
+    <QtMoc Include="Inc\Dialog\OptionBox.h">
       <Filter>Header Files\Dialog</Filter>
     </QtMoc>
   </ItemGroup>

@@ -77,6 +77,7 @@ void CloudForgeAnalyzer::InitalizeConnects() {
     connect(ui->action_fl_1, &QAction::triggered, this, &CloudForgeAnalyzer::Slot_fl_1_Triggered);
     connect(ui->action_fl_2, &QAction::triggered, this, &CloudForgeAnalyzer::Slot_fl_2_Triggered);
     connect(ui->action_fit_cy, &QAction::triggered, this, &CloudForgeAnalyzer::Slot_fit_cy_Triggered);
+    connect(ui->action_fit_cy2, &QAction::triggered, this, &CloudForgeAnalyzer::Slot_fit_cy2_Triggered);
     connect(ui->action_fit_line, &QAction::triggered, this, &CloudForgeAnalyzer::Slot_fit_line_Triggered);
     connect(ui->measure_cylinder, &QAction::triggered,this, &CloudForgeAnalyzer::Tool_MeasureArc);
     connect(ui->measure_geodisic, &QAction::triggered, this, &CloudForgeAnalyzer::Tool_MeasureGeodisic);
@@ -102,6 +103,116 @@ bool CloudForgeAnalyzer::showConfirmationDialog(const QString& title, const QStr
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////*槽函数start*/
+void CloudForgeAnalyzer::Slot_fit_cy2_Triggered() {
+    // 1. 选择点云
+    ChoseCloudDialog dialog(CloudMap, ColorMap, "选择点云进行圆柱拟合与优化");
+    if (dialog.exec() != QDialog::Accepted) {
+        TeEDebug(">>: 操作取消");
+        return;
+    }
+    if (dialog.getSelectedList().empty()) {
+        TeEDebug(">>: 未选择点云");
+        return;
+    }
+    pcl::PointCloud<pcl::PointXYZ>::Ptr Cloud_Temp = CloudMap[dialog.getSelectedList()[0]];
+
+    // 2. 第一步：使用Fit_Cylinder进行初次圆柱拟合
+    Fit_Cylinder fcy(Cloud_Temp);
+    if (fcy.isCancelled) {
+        TeEDebug(">>: 圆柱拟合操作取消");
+        return;
+    }
+
+    // 获取初次拟合结果
+    Eigen::VectorXf coeff1 = fcy.Get_Coeff_in();
+    pcl::ModelCoefficients::Ptr cycoeff1(new pcl::ModelCoefficients);
+    cycoeff1->values.resize(7);
+    for (std::size_t i = 0; i < 7; ++i)
+        cycoeff1->values[i] = coeff1(i);
+
+    // 2.1 可视化初次拟合的内点与外点
+    pcl::PointCloud<pcl::PointXYZ>::Ptr Cloud_Inliers = fcy.Get_Inliers();
+    pcl::PointCloud<pcl::PointXYZ>::Ptr Cloud_Outliers = fcy.Get_Outliers();
+    ColorManager color_inliers(0, 255, 0);   // 绿色-内点
+    ColorManager color_outliers(255, 0, 0);  // 红色-外点
+    AddPointCloud("initial_fit_inliers", Cloud_Inliers, color_inliers);
+    AddPointCloud("initial_fit_outliers", Cloud_Outliers, color_outliers);
+
+    // 2.2 添加初次拟合的圆柱体可视化
+    viewer->addCylinder(*cycoeff1, "initial_fit_cylinder");
+    ui->winOfAnalyzer->renderWindow()->Render();
+    ui->winOfAnalyzer->update();
+
+    // 输出初次拟合信息
+    Update_CFmes(fcy.message);
+    TeEDebug(">>: 初次圆柱拟合完成。内点(绿)/外点(红)与圆柱体(initial_fit_cylinder)已可视化。");
+
+    Eigen::Vector3f initial_center = fcy.get_center_point();
+    Eigen::Vector3f initial_axis = fcy.get_axis_direction();
+    float initial_radius = coeff1(6); // 从拟合结果中获取半径
+
+    // 3. 第二步：获取优化参数并使用MeasureCylindricity进行二次优化
+    ParamDialogMeausreCy pdialog;
+    if (pdialog.exec() != QDialog::Accepted) {
+        TeEDebug(">>: 参数设置取消，二次优化跳过。初次拟合结果已保存。");
+        addCylinderResult(GenerateRandomName("fitted_cylinder"), cycoeff1);
+        return;
+    }
+
+    double design_radius = pdialog.getParams()[0].toDouble();
+    double tolerance = pdialog.getParams()[1].toDouble();
+    int iters = pdialog.getParams()[2].toInt();
+
+    // 创建圆柱度评估器，并以初次拟合结果为初始值
+    MeasureCylindricity evaluator;
+    evaluator.setInputCloud(Cloud_Temp);
+    evaluator.setDesignRadius(design_radius);
+    evaluator.setTolerance(tolerance);
+    evaluator.setMaxIterations(iters);
+    evaluator.setVerbose(true);
+    evaluator.setInitialLine(initial_center, initial_axis); // 设置初始值
+
+    // 执行二次优化（此处调用evaluateCylindricity是为了其内部的优化流程，但我们将忽略其评估结果，专注于获取优化后的轴线）
+    auto result = evaluator.evaluateCylindricity(); // 此函数执行优化并返回评估结果
+
+    // 4. 获取二次优化后的轴线参数
+    Eigen::Vector3f optimized_center = result.getCylinderAxisPoint();
+    Eigen::Vector3f optimized_axis = result.getCylinderAxisDirection();
+
+    pcl::ModelCoefficients::Ptr cycoeff2(new pcl::ModelCoefficients);
+    cycoeff2->values.resize(7);
+    cycoeff2->values[0] = optimized_center.x();
+    cycoeff2->values[1] = optimized_center.y();
+    cycoeff2->values[2] = optimized_center.z();
+    cycoeff2->values[3] = optimized_axis.x();
+    cycoeff2->values[4] = optimized_axis.y();
+    cycoeff2->values[5] = optimized_axis.z();
+    cycoeff2->values[6] = static_cast<float>(design_radius); // 使用设定的设计半径
+
+    // 添加二次优化后的圆柱体可视化（用于对比）
+    viewer->addCylinder(*cycoeff2, "optimized_fit_cylinder");
+    ui->winOfAnalyzer->renderWindow()->Render();
+    ui->winOfAnalyzer->update();
+
+    // 5. 存储最终优化结果
+    std::string storedName = GenerateRandomName("optimized_cylinder");
+    addCylinderResult(storedName, cycoeff2);
+
+    // 6. 输出最终信息（注意：此处显示的是优化过程产生的评估信息，仅为参考。正式的评估应由Tool_MeasureCylindricity完成）
+    qDebug() << "初次拟合轴线点: (" << initial_center.x() << ", "
+             << initial_center.y() << ", " << initial_center.z() << ")";
+    qDebug() << "二次优化后轴线点: (" << optimized_center.x() << ", "
+             << optimized_center.y() << ", " << optimized_center.z() << ")";
+
+    std::string finalMsg = "圆柱拟合与优化完成。\n";
+    finalMsg += "初次拟合：内点(绿)/外点(红)，圆柱体 'initial_fit_cylinder'\n";
+    finalMsg += "二次优化：圆柱体 'optimized_fit_cylinder'\n";
+
+
+    TeEDebug(">>: 二次优化完成，几何体已更新。");
+    Update_CFmes(finalMsg);
+}
+
 void CloudForgeAnalyzer::Tool_MeasureArc() {
     ChoseCloudDialog dialog(CloudMap, ColorMap, "选择被测点云");
     if (dialog.exec() != QDialog::Accepted) {
@@ -138,16 +249,69 @@ void CloudForgeAnalyzer::Tool_MeasureArc() {
     qDebug() << "圆柱半径:" << cy_Temp->values[6];
     qDebug() << "点云点数:" << Cloud_Temp->size();
 
-   TeEDebug("请选择高度");
-    PointPickerMgr mgr(ui->winOfAnalyzer->interactor(), 1);
-    auto pts_pcl = mgr.GetPickedPCLPoints();
+	MeasureArc::FitMethod fitMethod = MeasureArc::BSPLINE_LSQ;
+    pcl::PointXYZ* interest_point = nullptr;
 
-    if (pts_pcl.size() < 1) {
-        TeEDebug("点选择已取消或不足一个点");
+    OptionBox box({ "Cardinal样条(插值)", "B样条逼近(平滑)" }, nullptr);
+    box.setTitle("选择拟合方法");
+    box.setMessage("请选择曲线拟合方法:");
+    box.setDefaultOption(1); // 默认选中第一个选项
+
+    if (box.exec() == QDialog::Accepted) {
+        int index = box.getSelectedIndex();
+        QString text = box.getSelectedText();
+
+        if (index == 0) {
+			fitMethod = MeasureArc::CARDINAL_SPLINE;
+            qDebug() << "选择了Cardinal样条";
+            TeEDebug("选择了Cardinal样条");
+        }
+        else if (index == 1) {
+			fitMethod = MeasureArc::BSPLINE_LSQ;
+            qDebug() << "选择了B样条逼近";
+            TeEDebug("选择了B样条逼近");
+        }
+    }
+    else {
+        qDebug() << "操作取消";
+    }
+
+    
+    OptionBox box1({ "测量中线", "手动选择" }, nullptr);
+    box.setTitle("选择测量位置");
+    box.setMessage("请选择选择测量位置:");
+    box.setDefaultOption(0);
+
+    if (box1.exec() == QDialog::Accepted) {
+        int index = box1.getSelectedIndex();
+        QString text = box1.getSelectedText();
+
+        if (index == 0) {
+            pcl::PointXYZ* interest_point = nullptr;
+            qDebug() << "测量中线";
+            TeEDebug("测量中线");
+        }
+        else if (index == 1) {
+            PointPickerMgr mgr(ui->winOfAnalyzer->interactor(), 1);
+            auto pts_pcl = mgr.GetPickedPCLPoints();
+            if (pts_pcl.size() < 1) {
+                TeEDebug("点选择已取消或不足一个点");
+                return;
+            }
+            pcl::PointXYZ* interest_point = &pts_pcl[0];
+            qDebug() << "手动选择测量位置";
+            TeEDebug("手动选择测量位置");
+            TeEDebug("请选择高度");
+        }
+    }
+    else {
+        qDebug() << "操作取消";
+		TeEDebug("操作取消");
         return;
     }
 
-    MeasureArc measurer(Cloud_Temp, cy_Temp,&pts_pcl[0]);
+
+    MeasureArc measurer(Cloud_Temp, cy_Temp, nullptr, fitMethod);
     if (measurer.isCancelled) {
         TeEDebug(">>: 操作取消");
         return;
@@ -184,6 +348,7 @@ void CloudForgeAnalyzer::visualizeCylindricityHeatMap(
     pcl::PointCloud<pcl::PointXYZRGB>::Ptr heatmap_cloud,
     double min_distance, double max_distance)
 {
+	TeEDebug("开始可视化圆柱度热力图...");
     if (!heatmap_cloud || heatmap_cloud->empty()) {
         TeEDebug("热力图点云为空，无法可视化");
         return;
@@ -271,129 +436,83 @@ void CloudForgeAnalyzer::visualizeCylindricityHeatMap(
 
 void CloudForgeAnalyzer::Tool_MeasureCylindricity()
 {
-    ChoseCloudDialog dialog(CloudMap, ColorMap);
+    // 1. 选择待评估的点云
+    ChoseCloudDialog dialog(CloudMap, ColorMap, "选择待评估圆柱度的点云");
     if (dialog.exec() != QDialog::Accepted) {
-        TeEDebug(">>:操作取消");
+        TeEDebug(">>: 操作取消");
         return;
     }
     if (dialog.getSelectedList().empty()) {
-        TeEDebug(">>:未选择点云");
+        TeEDebug(">>: 未选择点云");
         return;
     }
-    pcl::PointCloud<pcl::PointXYZ>::Ptr Cloud_Temp = CloudMap[dialog.getSelectedList()[0]];
+    pcl::PointCloud<pcl::PointXYZ>::Ptr target_cloud = CloudMap[dialog.getSelectedList()[0]];
 
-    Fit_Cylinder fcy(Cloud_Temp);
-    if (fcy.isCancelled) {
-        TeEDebug(">>:操作取消");
-        return;
-    }
-
-    Eigen::VectorXf coeff1;
-    coeff1 = fcy.Get_Coeff_in();
-
-    pcl::ModelCoefficients::Ptr cycoeff1(new pcl::ModelCoefficients);
-    cycoeff1->values.resize(7);
-    for (std::size_t i = 0; i < 7; ++i)
-        cycoeff1->values[i] = coeff1(i);
-    viewer->addCylinder(*cycoeff1, "opted_cylinder1");
-    ui->winOfAnalyzer->renderWindow()->Render();
-    ui->winOfAnalyzer->update();
-    Update_CFmes(fcy.message);
-
-    Eigen::Vector3f center = fcy.get_center_point();
-    Eigen::Vector3f axis = fcy.get_axis_direction();
-
-    ChoseCloudDialog dialog1(CloudMap, ColorMap);
-    if (dialog1.exec() != QDialog::Accepted) {
-        TeEDebug(">>:操作取消");
-        return;
-    }
+    // 2. 选择已有的圆柱拟合结果作为评估基准
+    ChoseCyDialog dialog1(cylinderResultsMap);
     if (dialog1.getSelectedList().empty()) {
-        TeEDebug("圆柱度评估已取消：未选择点云");
+        TeEDebug(">>: 未选择圆柱拟合结果");
         return;
     }
 
-    pcl::PointCloud<pcl::PointXYZ>::Ptr target_cloud = CloudMap[dialog1.getSelectedList()[0]];
-    if (!target_cloud || target_cloud->empty()) {
-        TeEDebug("错误: 选择的点云为空或无效");
-        return;
-    }
+    std::string selectedCylinderName = dialog1.getSelectedList()[0];
+    pcl::ModelCoefficients::Ptr selected_cylinder = cylinderResultsMap[selectedCylinderName];
+    std::string visualization_id = "measurement_ref_" + selectedCylinderName;
+    viewer->addCylinder(*selected_cylinder, visualization_id);
+    viewer->setShapeRenderingProperties(pcl::visualization::PCL_VISUALIZER_COLOR,
+        0.0, 1.0, 1.0, // 青色，以示区别
+        visualization_id);
+    TeEDebug(">>: 参考圆柱几何体 '" + selectedCylinderName + "' 已可视化(青色)。");
 
-    // 获取设计半径和容差
-    bool ok1, ok2, ok3;
+    // 3. 从选择的圆柱结果中提取轴线参数
+    std::vector<float> axis_coeffs = {
+        selected_cylinder->values[0], // center.x
+        selected_cylinder->values[1], // center.y
+        selected_cylinder->values[2], // center.z
+        selected_cylinder->values[3], // axis.x
+        selected_cylinder->values[4], // axis.y
+        selected_cylinder->values[5]  // axis.z
+    };
+    double cylinder_design_radius = selected_cylinder->values[6];
 
+    // 4. 获取评估参数（容差、迭代次数等）
     ParamDialogMeausreCy pdialog;
     if (pdialog.exec() != QDialog::Accepted) {
-        TeEDebug(">>:操作取消");
+        TeEDebug(">>: 操作取消");
         return;
     }
-    double design_radius = pdialog.getParams()[0].toDouble(&ok1);
-    double tolerance = pdialog.getParams()[1].toDouble(&ok1);
-    int iters = pdialog.getParams()[2].toInt(&ok1);
-    if (!ok1 || !ok2 || !ok3) {
-        TeEDebug("圆柱度评估已取消");
-        return;
-    }
+    double tolerance = pdialog.getParams()[1].toDouble();
+    int iters = pdialog.getParams()[2].toInt(); // 此处的迭代次数对直接评估影响有限，可保留
 
-    // 创建圆柱度评估器
+    // 5. 创建评估器并设置参数
     MeasureCylindricity evaluator;
     evaluator.setInputCloud(target_cloud);
-    evaluator.setDesignRadius(design_radius);
+    evaluator.setDesignRadius(cylinder_design_radius);
     evaluator.setTolerance(tolerance);
-
-
-    evaluator.setInitialLine(center, axis);
-
-
     evaluator.setMaxIterations(iters);
     evaluator.setVerbose(true);
 
-    // 执行评估
-    auto result = evaluator.evaluateCylindricity();
+    // 关键步骤：直接传入圆柱轴线参数，跳过优化阶段的参数寻优
+    evaluator.setInitialLineFromCoeffs(axis_coeffs);
 
-    // 获取热力图点云和距离范围
+    // 6. 执行评估。这里需要调用一个不进行优化、仅基于给定直线评估的函数。
+    Eigen::Vector3f center(axis_coeffs[0], axis_coeffs[1], axis_coeffs[2]);
+    Eigen::Vector3f axis(axis_coeffs[3], axis_coeffs[4], axis_coeffs[5]);
+    auto result = evaluator.evaluateGivenLine(center, axis); // 使用此函数直接评估，不优化
+
+    // 7. 生成并可视化热力图 (即使不优化，也需要基于给定直线生成热力图)
     auto heatmap_cloud = evaluator.getHeatMapCloud();
     double min_distance, max_distance;
     evaluator.getDistanceRange(min_distance, max_distance);
 
     visualizeCylindricityHeatMap(heatmap_cloud, min_distance, max_distance);
 
+    // 8. 显示评估结果
     qDebug() << result.assessment_message;
-
-    /*auto inliers = evaluator.get_inliers();
-    auto outliers = evaluator.get_outliers();
-    ColorManager c1(255, 0, 0);
-    ColorManager c2(0, 255, 0);
-    AddPointCloud("Cylindricity_Inliers", inliers, c1);
-    AddPointCloud("Cylindricity_Outliers", outliers, c2);*/
-
-    // 获取优化后的轴线参数
-    Eigen::Vector3f optimized_center = result.getCylinderAxisPoint();
-    Eigen::Vector3f optimized_axis = result.getCylinderAxisDirection();
-
-    pcl::ModelCoefficients::Ptr cycoeff2(new pcl::ModelCoefficients);
-    cycoeff2->values.resize(7);
-    cycoeff2->values[0] = optimized_center.x();  // 轴上一点 X
-    cycoeff2->values[1] = optimized_center.y();  // 轴上一点 Y
-    cycoeff2->values[2] = optimized_center.z();  // 轴上一点 Z
-    cycoeff2->values[3] = optimized_axis.x();    // 轴向 X
-    cycoeff2->values[4] = optimized_axis.y();    // 轴向 Y
-    cycoeff2->values[5] = optimized_axis.z();    // 轴向 Z
-    cycoeff2->values[6] = static_cast<float>(design_radius);  // 半径
-
-    addCylinderResult(GenerateRandomName("optimized_cylinder"), cycoeff2);
-    viewer->addCylinder(*cycoeff2, "opted_cylinder2");
-
-    qDebug() << "优化后轴线点: (" << optimized_center.x() << ", "
-        << optimized_center.y() << ", " << optimized_center.z() << ")" ;
-    qDebug() << "优化后轴线方向: (" << optimized_axis.x() << ", "
-        << optimized_axis.y() << ", " << optimized_axis.z() << ")" ;
-    // 显示结果
     TeEDebug(result.assessment_message);
     Update_CFmes(result.assessment_message);
 
-    // 可视化结果
-   // visualizeCylindricityResult(result, evaluator.getInliers(), evaluator.getOutliers());
+    // 9. 刷新视图
     ui->winOfAnalyzer->renderWindow()->Render();
     ui->winOfAnalyzer->update();
 }

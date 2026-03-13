@@ -701,6 +701,7 @@ QMenu::item:selected {
      <string>拟合</string>
     </property>
     <addaction name="action_fit_cy"/>
+    <addaction name="action_fit_cy2"/>
     <addaction name="action_fit_line"/>
    </widget>
    <widget class="QMenu" name="menu_edit">
@@ -1006,6 +1007,17 @@ QMenu::item:selected {
    </property>
    <property name="toolTip">
     <string>清除RGB点云（热力图）</string>
+   </property>
+   <property name="menuRole">
+    <enum>QAction::MenuRole::NoRole</enum>
+   </property>
+  </action>
+  <action name="action_fit_cy2">
+   <property name="text">
+    <string>二次优化圆柱</string>
+   </property>
+   <property name="toolTip">
+    <string>RANSAC+轴线优化</string>
    </property>
    <property name="menuRole">
     <enum>QAction::MenuRole::NoRole</enum>
