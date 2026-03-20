@@ -79,10 +79,12 @@ void CloudForgeAnalyzer::InitalizeConnects() {
     connect(ui->action_fit_cy, &QAction::triggered, this, &CloudForgeAnalyzer::Slot_fit_cy_Triggered);
     connect(ui->action_fit_cy2, &QAction::triggered, this, &CloudForgeAnalyzer::Slot_fit_cy2_Triggered);
     connect(ui->action_fit_line, &QAction::triggered, this, &CloudForgeAnalyzer::Slot_fit_line_Triggered);
+    connect(ui->action_fit_plane, &QAction::triggered, this, &CloudForgeAnalyzer::Slot_fit_plane_Triggered);
     connect(ui->measure_cylinder, &QAction::triggered,this, &CloudForgeAnalyzer::Tool_MeasureArc);
     connect(ui->measure_geodisic, &QAction::triggered, this, &CloudForgeAnalyzer::Tool_MeasureGeodisic);
     connect(ui->measure_parallel, &QAction::triggered, this, &CloudForgeAnalyzer::Tool_MeasureParallel);
     connect(ui->measure_height, &QAction::triggered, this, &CloudForgeAnalyzer::Tool_MeasureHeight);
+    connect(ui->measure_planarity, &QAction::triggered, this, &CloudForgeAnalyzer::Tool_MeasurePlanarity);
     connect(ui->measure_Cylindricity, &QAction::triggered, this, &CloudForgeAnalyzer::Tool_MeasureCylindricity);
     connect(ui->action_Clip, &QAction::triggered, this, &CloudForgeAnalyzer::Tool_Clip);
 
@@ -103,6 +105,215 @@ bool CloudForgeAnalyzer::showConfirmationDialog(const QString& title, const QStr
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////*槽函数start*/
+void CloudForgeAnalyzer::Slot_fit_plane_Triggered() {
+    ChoseCloudDialog dialog(CloudMap, ColorMap, "选择点云进行平面拟合");
+    if (dialog.exec() != QDialog::Accepted) {
+        TeEDebug(">>: 操作取消");
+        return;
+    }
+    if (dialog.getSelectedList().empty()) {
+        TeEDebug(">>: 未选择点云");
+        return;
+    }
+    pcl::PointCloud<pcl::PointXYZ>::Ptr Cloud_Temp = CloudMap[dialog.getSelectedList()[0]];
+	Fit_Plane fp(Cloud_Temp);
+    if (fp.isCancelled) {
+        TeEDebug(">>: 平面拟合操作取消");
+        return;
+    }
+	pcl::PointCloud<pcl::PointXYZ>::Ptr Cloud_inliers = fp.Get_Inliers();
+	pcl::PointCloud<pcl::PointXYZ>::Ptr Cloud_outliers = fp.Get_Outliers();
+	pcl::PointCloud<pcl::PointXYZ>::Ptr Cloud_anomaly = fp.Get_AnomalyPoints();
+
+	ColorManager color_inliers(0, 255, 0);   // 绿色-内点
+	ColorManager color_outliers(255, 0, 0);  // 红色-外点
+	ColorManager color_anomaly(255, 255, 0); // 黄色-异常点
+
+	AddPointCloud("plane_fit_inliers", Cloud_inliers, color_inliers);
+	AddPointCloud("plane_fit_outliers", Cloud_outliers, color_outliers);
+    AddPointCloud("plane_fit_anomaly", Cloud_anomaly, color_anomaly);
+
+	std::string message = fp.message;
+    Eigen::Vector4f coeff_vec = fp.Get_Coeff_in(); // [A, B, C, D]
+
+    // 3. 直接转换为 pcl::ModelCoefficients::Ptr 并存储
+    pcl::ModelCoefficients::Ptr plane_coeff(new pcl::ModelCoefficients());
+    plane_coeff->values.push_back(coeff_vec[0]);
+    plane_coeff->values.push_back(coeff_vec[1]);
+    plane_coeff->values.push_back(coeff_vec[2]);
+    plane_coeff->values.push_back(coeff_vec[3]);
+	addPlaneResult(GenerateRandomName("fitted_plane"), plane_coeff);
+	Update_CFmes(message);
+	TeEDebug(">>: 平面拟合完成。内点(绿)/外点(红)已可视化。");
+}
+
+void CloudForgeAnalyzer::Tool_MeasurePlanarity() {
+    // 1. 选择待评估的点云
+    ChoseCloudDialog dialog(CloudMap, ColorMap, "选择待评估平面度的点云");
+    if (dialog.exec() != QDialog::Accepted) {
+        TeEDebug(">>: 操作取消");
+        return;
+    }
+    if (dialog.getSelectedList().empty()) {
+        TeEDebug(">>: 未选择点云");
+        return;
+    }
+    pcl::PointCloud<pcl::PointXYZ>::Ptr target_cloud = CloudMap[dialog.getSelectedList()[0]];
+
+    // 2. 选择已有的平面拟合结果作为评估基准
+    if (planeResultsMap.empty()) {
+        TeEDebug(">>: 没有可用的平面拟合结果，请先进行平面拟合");
+        return;
+    }
+
+    ChosePlaneDialog dialog1(planeResultsMap);
+    if (dialog1.getSelectedList().empty()) {
+        TeEDebug(">>: 未选择平面拟合结果");
+        return;
+    }
+
+    std::string selectedPlaneName = dialog1.getSelectedList()[0];
+    pcl::ModelCoefficients::Ptr selected_plane = planeResultsMap[selectedPlaneName];
+
+    // 可视化参考平面
+    std::string visualization_id = "measurement_ref_" + selectedPlaneName;
+    viewer->addPlane(*selected_plane, visualization_id);
+    viewer->setShapeRenderingProperties(pcl::visualization::PCL_VISUALIZER_COLOR,
+        0.0, 1.0, 1.0, // 青色，以示区别
+        visualization_id);
+    viewer->setShapeRenderingProperties(pcl::visualization::PCL_VISUALIZER_OPACITY,
+        0.3, // 半透明
+        visualization_id);
+    TeEDebug(">>: 参考平面 '" + selectedPlaneName + "' 已可视化(青色半透明)。");
+
+    // 3. 从选择的平面结果中提取平面参数
+    std::vector<float> plane_coeffs = {
+        selected_plane->values[0], // A
+        selected_plane->values[1], // B
+        selected_plane->values[2], // C
+        selected_plane->values[3]  // D
+    };
+
+
+    // 5. 创建评估器并设置参数
+    MeasurePlanarity evaluator;
+    evaluator.setInputCloud(target_cloud);
+    evaluator.setPlaneParameters(selected_plane);
+
+    // 6. 执行评估
+    auto result = evaluator.evaluatePlanarity();
+
+    // 7. 生成并可视化热力图
+    auto heatmap_cloud = evaluator.getHeatMapCloud();
+    double min_distance, max_distance;
+    evaluator.getDistanceRange(min_distance, max_distance);
+
+    // 调用自定义热力图可视化函数
+    visualizePlanarityHeatMap(heatmap_cloud, min_distance, max_distance, selectedPlaneName);
+
+    // 8. 显示评估结果
+    qDebug() << result.assessment_message;
+    TeEDebug(result.assessment_message);
+    Update_CFmes(result.assessment_message);
+
+    // 9. 刷新视图
+    ui->winOfAnalyzer->renderWindow()->Render();
+    ui->winOfAnalyzer->update();
+}
+
+void CloudForgeAnalyzer::visualizePlanarityHeatMap(
+    pcl::PointCloud<pcl::PointXYZRGB>::Ptr heatmap_cloud,
+    double min_distance, double max_distance,
+    const std::string& plane_name)
+{
+    TeEDebug("开始可视化平面度热力图...");
+    if (!heatmap_cloud || heatmap_cloud->empty()) {
+        TeEDebug("热力图点云为空，无法可视化");
+        return;
+    }
+
+    std::string heatmap_id = "planarity_heatmap_" + plane_name;
+    std::string colorbar_id = "planarity_colorbar_" + plane_name;
+
+    // 先清除可能存在的旧热力图及标注
+    viewer->removePointCloud(heatmap_id);
+    viewer->removeShape(colorbar_id);
+    viewer->removeText3D(heatmap_id + "_title");
+
+    // 添加热力图点云
+    pcl::visualization::PointCloudColorHandlerRGBField<pcl::PointXYZRGB> rgb(heatmap_cloud);
+    viewer->addPointCloud<pcl::PointXYZRGB>(heatmap_cloud, rgb, heatmap_id);
+    viewer->setPointCloudRenderingProperties(
+        pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 3, heatmap_id);
+
+    // 添加到统一管理变量（参照visualizeCylindricityHeatMap）
+    RGBCloudMap.emplace(heatmap_id, heatmap_cloud);
+
+    // === 创建并添加固定颜色条 (Colorbar) ===
+    // 1. 获取当前渲染器
+    vtkRenderer* renderer = viewer->getRendererCollection()->GetFirstRenderer();
+    if (!renderer) {
+        TeEDebug("错误：无法获取渲染器，颜色条创建失败。");
+    }
+    else {
+        // 2. 创建颜色查找表 (Lookup Table)，映射从绿到红
+        vtkNew<vtkLookupTable> hueLut;
+        hueLut->SetTableRange(min_distance, max_distance); // 标量值范围对应距离范围
+        hueLut->SetHueRange(0.33, 0.0);      // 从绿色 (0.33) 到红色 (0.0)
+        hueLut->SetSaturationRange(1, 1);
+        hueLut->SetValueRange(1, 1);
+        hueLut->SetNanColor(1, 1, 1, 1);    // 无效值显示为白色
+        hueLut->SetNumberOfTableValues(256); // 颜色精度
+        hueLut->Build();
+
+        // 3. 创建颜色条 Actor
+        vtkNew<vtkScalarBarActor> scalarBar;
+        scalarBar->SetLookupTable(hueLut);
+        scalarBar->SetTitle("");
+        scalarBar->SetNumberOfLabels(5); // 主标签数量
+        scalarBar->SetMaximumNumberOfColors(256);
+
+        const int titleFontSize = 12;        // 颜色条标题文字大小
+        const int labelFontSize = 15;        // 颜色条标签文字大小
+        const double colorbarWidth = 0.05;   // 颜色条宽度 (占窗口宽度的比例)
+        const double colorbarHeight = 0.6;   // 颜色条高度 (占窗口高度的比例)
+        const double colorbarPosX = 0.92;    // 颜色条右侧位置
+        const double colorbarPosY = 0.2;     // 颜色条底部位置
+
+        // 设置颜色条文本属性
+        vtkNew<vtkTextProperty> titleProperty;
+        titleProperty->SetFontSize(titleFontSize);
+        titleProperty->BoldOn();
+        titleProperty->SetColor(1, 1, 1); // 白色
+        scalarBar->SetTitleTextProperty(titleProperty);
+        scalarBar->SetTitleRatio(0.6);
+
+        vtkNew<vtkTextProperty> labelProperty;
+        labelProperty->SetFontSize(labelFontSize);
+        labelProperty->SetColor(0.9, 0.9, 0.9); // 浅灰色
+        scalarBar->SetLabelTextProperty(labelProperty);
+
+        // 应用位置和大小
+        scalarBar->SetPosition(colorbarPosX - colorbarWidth, colorbarPosY);
+        scalarBar->SetWidth(colorbarWidth);
+        scalarBar->SetHeight(colorbarHeight);
+        scalarBar->SetPickable(0); // 禁止拾取，避免与点云交互冲突
+
+        // 4. 将颜色条添加到渲染器
+        renderer->AddActor2D(scalarBar);
+
+    }
+    // === 颜色条添加结束 ===
+
+    TeEDebug("平面度热力图与颜色条可视化完成");
+    TeEDebug("距离范围: " + std::to_string(min_distance) + " - " + std::to_string(max_distance) + " mm");
+
+    // 刷新渲染窗口
+    ui->winOfAnalyzer->renderWindow()->Render();
+    ui->winOfAnalyzer->update();
+}
+
+
 void CloudForgeAnalyzer::Slot_fit_cy2_Triggered() {
     // 1. 选择点云
     ChoseCloudDialog dialog(CloudMap, ColorMap, "选择点云进行圆柱拟合与优化");
@@ -1465,8 +1676,7 @@ void CloudForgeAnalyzer::addHeightLines(pcl::visualization::PCLVisualizer::Ptr v
     }
 }
 
-void CloudForgeAnalyzer::addCylinderResult(const std::string& name,
-    pcl::ModelCoefficients::Ptr coeff){
+void CloudForgeAnalyzer::addCylinderResult(const std::string& name,pcl::ModelCoefficients::Ptr coeff){
     if (!coeff) {
         qDebug() << "错误：传入的圆柱系数指针为空";
         return;
@@ -1484,6 +1694,27 @@ void CloudForgeAnalyzer::addCylinderResult(const std::string& name,
 
     cylinderResultsMap[name] = coeff;
     TeEDebug("已添加圆柱拟合结果: " + name);
+}
+
+void CloudForgeAnalyzer::addPlaneResult(const std::string& name, pcl::ModelCoefficients::Ptr coeff) {
+    if (!coeff) {
+        qDebug() << "错误：传入的平面系数指针为空";
+        return;
+    }
+
+    if (coeff->values.size() != 4) {
+        qDebug() << "错误：平面系数应为4个值，实际为" << coeff->values.size();
+        return;
+    }
+
+    // 检查名称是否已存在
+    if (planeResultsMap.find(name) != planeResultsMap.end()) {
+        TeEDebug("平面拟合结果 '" + name + "' 已存在，将被覆盖");
+    }
+
+    planeResultsMap[name] = coeff;
+    TeEDebug("已添加平面拟合结果: " + name);
+    
 }
 
 pcl::ModelCoefficients::Ptr CloudForgeAnalyzer::getCylinderResult(const std::string& name){

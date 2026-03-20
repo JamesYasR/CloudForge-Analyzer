@@ -51,6 +51,7 @@ private slots:
     void Slot_ed_clean2DActor_Triggered();
     void Slot_fit_cy_Triggered();
     void Slot_fit_cy2_Triggered();
+    void Slot_fit_plane_Triggered();
     void Slot_fit_line_Triggered();
     void Slot_ph_CurvSeg_Triggered();
     void Slot_ph_ProtruSeg_Triggered();
@@ -59,12 +60,14 @@ private slots:
     void Tool_MeasureGeodisic();
     void Tool_MeasureHeight();
     void Tool_MeasureParallel();
+    void Tool_MeasurePlanarity();
     void Tool_Clip();
     void Tool_MeasureCylindricity();
     void Update_PointCounts();
 private:
     //  
     void addCylinderResult(const std::string& name, pcl::ModelCoefficients::Ptr coeff);
+    void addPlaneResult(const std::string& name, pcl::ModelCoefficients::Ptr coeff);
     pcl::ModelCoefficients::Ptr getCylinderResult(const std::string& name);
     bool removeCylinderResult(const std::string& name);
     void clearAllCylinderResults();
@@ -95,6 +98,7 @@ private:
     std::vector<vtkSmartPointer<vtkProp>> m_geodesicVisualizationActors;
     std::map<std::string, vtkSmartPointer<vtkActor>> m_arcSplineMap;
     std::map<std::string, pcl::ModelCoefficients::Ptr> cylinderResultsMap;
+    std::map<std::string, pcl::ModelCoefficients::Ptr> planeResultsMap;
 
     void cleanGeodesicVisualization();
     void AddLine(const std::string& name,
@@ -122,6 +126,10 @@ private:
     void visualizeCylindricityHeatMap(
         pcl::PointCloud<pcl::PointXYZRGB>::Ptr heatmap_cloud,
         double min_distance, double max_distance);
+    void visualizePlanarityHeatMap(
+        pcl::PointCloud<pcl::PointXYZRGB>::Ptr heatmap_cloud,
+        double min_distance, double max_distance,
+        const std::string& plane_name);
     bool showConfirmationDialog(const QString& title, const QString& message);
 
     void addArcSplineActor(const std::string& id, vtkSmartPointer<vtkActor> actor);

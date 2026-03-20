@@ -1,6 +1,6 @@
 #pragma once
 #include "Dialog/headers.h"
-#include "Dialog/CySelectionDialog.h"
+#include "Dialog/SelectionDialog.h"
 #include "Basic/Basic.h"
 
 class ChoseCyDialog : public CySelectionDialog {

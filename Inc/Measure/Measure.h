@@ -3,3 +3,4 @@
 #include "MeasurePallel.h"
 #include "MeasureHeight.h"
 #include "MeasureCylindricity.h"
+#include "MeasurePlanarity.h"

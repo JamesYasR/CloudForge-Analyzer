@@ -1,6 +1,6 @@
 #pragma once
 #include "Dialog/headers.h"
-#include "Dialog/CloudSelectionDialog.h"
+#include "Dialog/SelectionDialog.h"
 #include <iostream>
 class ChoseCloudDialog : public CloudSelectionDialog {
     Q_OBJECT

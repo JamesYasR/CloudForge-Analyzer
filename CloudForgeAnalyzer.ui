@@ -518,7 +518,7 @@ font: 700 8pt &quot;Microsoft YaHei UI&quot;;</string>
    <addaction name="measure_parallel"/>
    <addaction name="measure_height"/>
    <addaction name="measure_Cylindricity"/>
-   <addaction name="measure_flatness"/>
+   <addaction name="measure_planarity"/>
    <addaction name="separator"/>
    <addaction name="action_Clip"/>
    <addaction name="separator"/>
@@ -703,6 +703,7 @@ QMenu::item:selected {
     <addaction name="action_fit_cy"/>
     <addaction name="action_fit_cy2"/>
     <addaction name="action_fit_line"/>
+    <addaction name="action_fit_plane"/>
    </widget>
    <widget class="QMenu" name="menu_edit">
     <property name="styleSheet">
@@ -964,7 +965,7 @@ QMenu::item:selected {
     <enum>QAction::MenuRole::NoRole</enum>
    </property>
   </action>
-  <action name="measure_flatness">
+  <action name="measure_planarity">
    <property name="checkable">
     <bool>true</bool>
    </property>
@@ -1021,6 +1022,11 @@ QMenu::item:selected {
    </property>
    <property name="menuRole">
     <enum>QAction::MenuRole::NoRole</enum>
+   </property>
+  </action>
+  <action name="action_fit_plane">
+   <property name="text">
+    <string>拟合平面</string>
    </property>
   </action>
  </widget>

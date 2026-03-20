@@ -97,7 +97,7 @@
     <ClCompile Include="Src\Fitting\Fit_Cylinder.cpp">
       <Filter>Source Files\Fitting</Filter>
     </ClCompile>
-    <ClCompile Include="Src\Dialog\CloudSelectionDialog.cpp">
+    <ClCompile Include="Src\Dialog\SelectionDialog.cpp">
       <Filter>Source Files\Dialog</Filter>
     </ClCompile>
     <ClCompile Include="Src\Dialog\ParamDialog_FittingCylinder.cpp">
@@ -154,9 +154,6 @@
     <ClCompile Include="Src\Basic\funcs.cpp">
       <Filter>Source Files\Basic</Filter>
     </ClCompile>
-    <ClCompile Include="Src\Dialog\LineSelectionDialog.cpp">
-      <Filter>Source Files\Dialog</Filter>
-    </ClCompile>
     <ClCompile Include="Src\Dialog\ChoseLineDialog.cpp">
       <Filter>Source Files\Dialog</Filter>
     </ClCompile>
@@ -181,9 +178,6 @@
     <ClCompile Include="Src\Dialog\ParamDialogMeasureCy.cpp">
       <Filter>Source Files\Dialog</Filter>
     </ClCompile>
-    <ClCompile Include="Src\Dialog\CySelectionDialog.cpp">
-      <Filter>Source Files\Dialog</Filter>
-    </ClCompile>
     <ClCompile Include="Src\Dialog\ChoseCyDialog.cpp">
       <Filter>Source Files\Dialog</Filter>
     </ClCompile>
@@ -194,6 +188,18 @@
       <Filter>Source Files\Dialog</Filter>
     </ClCompile>
     <ClCompile Include="Src\Dialog\OptionBox.cpp">
+      <Filter>Source Files\Dialog</Filter>
+    </ClCompile>
+    <ClCompile Include="Src\Dialog\ParamDialog_FittingPlane.cpp">
+      <Filter>Source Files\Dialog</Filter>
+    </ClCompile>
+    <ClCompile Include="Src\Fitting\Fit_Plane.cpp">
+      <Filter>Source Files\Fitting</Filter>
+    </ClCompile>
+    <ClCompile Include="Src\Measure\MeasurePlanarity.cpp">
+      <Filter>Source Files\Measure</Filter>
+    </ClCompile>
+    <ClCompile Include="Src\Dialog\ChosePlaneDialog.cpp">
       <Filter>Source Files\Dialog</Filter>
     </ClCompile>
   </ItemGroup>
@@ -216,7 +222,7 @@
     <QtMoc Include="Inc\Dialog\ParamDialog_FittingCylinder.h">
       <Filter>Header Files\Dialog</Filter>
     </QtMoc>
-    <QtMoc Include="Inc\Dialog\CloudSelectionDialog.h">
+    <QtMoc Include="Inc\Dialog\SelectionDialog.h">
       <Filter>Header Files\Dialog</Filter>
     </QtMoc>
     <QtMoc Include="Inc\Dialog\ParamDialogBase.h">
@@ -246,16 +252,10 @@
     <QtMoc Include="Inc\Dialog\ParamDialog_FittingLine.h">
       <Filter>Header Files\Dialog</Filter>
     </QtMoc>
-    <QtMoc Include="Inc\Dialog\LineSelectionDialog.h">
-      <Filter>Header Files\Dialog</Filter>
-    </QtMoc>
     <QtMoc Include="Inc\Dialog\ChoseLineDialog.h">
       <Filter>Header Files\Dialog</Filter>
     </QtMoc>
     <QtMoc Include="Inc\Dialog\ParamDialogMeausreCy.h">
-      <Filter>Header Files\Dialog</Filter>
-    </QtMoc>
-    <QtMoc Include="Inc\Dialog\CySelectionDialog.h">
       <Filter>Header Files\Dialog</Filter>
     </QtMoc>
     <QtMoc Include="Inc\Dialog\ChoseCyDialog.h">
@@ -268,6 +268,12 @@
       <Filter>Header Files\Dialog</Filter>
     </QtMoc>
     <QtMoc Include="Inc\Dialog\OptionBox.h">
+      <Filter>Header Files\Dialog</Filter>
+    </QtMoc>
+    <QtMoc Include="Inc\Dialog\ParamDialog_FittingPlane.h">
+      <Filter>Header Files\Dialog</Filter>
+    </QtMoc>
+    <QtMoc Include="Inc\Dialog\ChosePlaneDialog.h">
       <Filter>Header Files\Dialog</Filter>
     </QtMoc>
   </ItemGroup>
@@ -358,6 +364,12 @@
     </ClInclude>
     <ClInclude Include="Inc\Basic\CloudClipper.h">
       <Filter>Header Files\Basic</Filter>
+    </ClInclude>
+    <ClInclude Include="Inc\Fitting\Fit_Plane.h">
+      <Filter>Header Files\Fitting</Filter>
+    </ClInclude>
+    <ClInclude Include="Inc\Measure\MeasurePlanarity.h">
+      <Filter>Header Files\Measure</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

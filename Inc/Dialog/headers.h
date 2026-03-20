@@ -23,6 +23,6 @@
 #include <vtkPointData.h>
 #include <vtkCellArray.h>
 #include "Basic/Basic.h"
-#include "Dialog/CloudSelectionDialog.h"
+#include "Dialog/SelectionDialog.h"
 
 //vs git test

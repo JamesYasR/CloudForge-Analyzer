@@ -3,14 +3,14 @@
 #include "Dialog/SelectionDialog.h"
 #include "Basic/Basic.h"
 
-class ChoseLineDialog : public LineSelectionDialog {
+class ChosePlaneDialog : public PlaneSelectionDialog {
     Q_OBJECT
 
 public:
-    using PCLVisualizerPtr = pcl::visualization::PCLVisualizer::Ptr;
+    explicit ChosePlaneDialog(std::map<std::string, pcl::ModelCoefficients::Ptr> planeMap,
+        QWidget* parent = nullptr);
+    ~ChosePlaneDialog();
 
-    explicit ChoseLineDialog(std::map<std::string, Line> Linem,QWidget* parent = nullptr);
-    ~ChoseLineDialog();
 private slots:
     void Confirm();
     void Cancel();
