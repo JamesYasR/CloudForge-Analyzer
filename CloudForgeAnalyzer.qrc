@@ -11,5 +11,7 @@
         <file>Icons/height_icon.png</file>
         <file>Icons/icon_double.png</file>
         <file>Icons/icon_rectangle.png</file>
+        <file>Icons/icons_geodetic.png</file>
+        <file>Icons/icons_arc.png</file>
     </qresource>
 </RCC>

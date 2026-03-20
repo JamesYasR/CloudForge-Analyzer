@@ -259,7 +259,7 @@
              </sizepolicy>
             </property>
             <property name="text">
-             <string>拟合结果</string>
+             <string>计算结果</string>
             </property>
            </widget>
           </item>
@@ -826,13 +826,13 @@ QMenu::item:selected {
    </property>
    <property name="icon">
     <iconset resource="CloudForgeAnalyzer.qrc">
-     <normaloff>:/CloudForgeAnalyzer/Icons/icons-cylinder.png</normaloff>:/CloudForgeAnalyzer/Icons/icons-cylinder.png</iconset>
+     <normaloff>:/CloudForgeAnalyzer/Icons/icons_arc.png</normaloff>:/CloudForgeAnalyzer/Icons/icons_arc.png</iconset>
    </property>
    <property name="text">
     <string>弧长</string>
    </property>
    <property name="toolTip">
-    <string>测量圆柱</string>
+    <string>测量圆柱面弧长</string>
    </property>
    <property name="menuRole">
     <enum>QAction::MenuRole::NoRole</enum>
@@ -877,7 +877,7 @@ QMenu::item:selected {
   <action name="measure_geodisic">
    <property name="icon">
     <iconset resource="CloudForgeAnalyzer.qrc">
-     <normaloff>:/CloudForgeAnalyzer/Icons/icons_measureArc.png</normaloff>:/CloudForgeAnalyzer/Icons/icons_measureArc.png</iconset>
+     <normaloff>:/CloudForgeAnalyzer/Icons/icons_geodetic.png</normaloff>:/CloudForgeAnalyzer/Icons/icons_geodetic.png</iconset>
    </property>
    <property name="text">
     <string>测地线</string>
