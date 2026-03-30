@@ -205,7 +205,7 @@ void Fit_Plane::Proc() {
     msg << "法向量: (" << coeff_in[0] << ", " << coeff_in[1] << ", " << coeff_in[2] << ")\n";
     msg << "\n质量指标:\n";
     msg << "RMS误差: " << std::setprecision(4) << rmse << " mm\n";
-    msg << "平面度评分: " << std::setprecision(2) << planarity_score << "/100\n";
+    //msg << "平面度评分: " << std::setprecision(2) << planarity_score << "/100\n";
 
     message = msg.str();
     qDebug() << QString::fromStdString(message);

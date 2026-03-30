@@ -66,11 +66,18 @@ private slots:
     void Update_PointCounts();
 private:
     //  
+    void visualizeFittedPlane(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud,
+        const pcl::ModelCoefficients::Ptr& plane_coeffs,
+        const std::string& plane_id,
+        double r = 0.0, double g = 1.0, double b = 1.0, // Ĭ    ɫ
+        double opacity = 0.3);
+
     void addCylinderResult(const std::string& name, pcl::ModelCoefficients::Ptr coeff);
     void addPlaneResult(const std::string& name, pcl::ModelCoefficients::Ptr coeff);
     pcl::ModelCoefficients::Ptr getCylinderResult(const std::string& name);
     bool removeCylinderResult(const std::string& name);
     void clearAllCylinderResults();
+    void clearAllPlaneActors();
     std::vector<std::string> getAllCylinderNames();
 
     void AddPointCloud(std::string name, pcl::PointCloud<pcl::PointXYZ>::Ptr cloud, ColorManager color);
@@ -99,6 +106,7 @@ private:
     std::map<std::string, vtkSmartPointer<vtkActor>> m_arcSplineMap;
     std::map<std::string, pcl::ModelCoefficients::Ptr> cylinderResultsMap;
     std::map<std::string, pcl::ModelCoefficients::Ptr> planeResultsMap;
+    std::map<std::string, vtkSmartPointer<vtkActor>> m_planeActorMap;
 
     void cleanGeodesicVisualization();
     void AddLine(const std::string& name,

@@ -142,7 +142,9 @@ void CloudForgeAnalyzer::Slot_fit_plane_Triggered() {
     plane_coeff->values.push_back(coeff_vec[1]);
     plane_coeff->values.push_back(coeff_vec[2]);
     plane_coeff->values.push_back(coeff_vec[3]);
-	addPlaneResult(GenerateRandomName("fitted_plane"), plane_coeff);
+	std::string planeName = GenerateRandomName("fitted_plane");
+	addPlaneResult(planeName, plane_coeff);
+    visualizeFittedPlane(Cloud_Temp,plane_coeff, planeName);
 	Update_CFmes(message);
 	TeEDebug(">>: 平面拟合完成。内点(绿)/外点(红)已可视化。");
 }
@@ -174,6 +176,9 @@ void CloudForgeAnalyzer::Tool_MeasurePlanarity() {
 
     std::string selectedPlaneName = dialog1.getSelectedList()[0];
     pcl::ModelCoefficients::Ptr selected_plane = planeResultsMap[selectedPlaneName];
+    std::string planeName = GenerateRandomName("chosen_plane");
+    addPlaneResult(planeName, selected_plane);
+    visualizeFittedPlane(target_cloud, selected_plane, planeName);
 
     // 可视化参考平面
     std::string visualization_id = "measurement_ref_" + selectedPlaneName;
@@ -269,7 +274,7 @@ void CloudForgeAnalyzer::visualizePlanarityHeatMap(
         // 3. 创建颜色条 Actor
         vtkNew<vtkScalarBarActor> scalarBar;
         scalarBar->SetLookupTable(hueLut);
-        scalarBar->SetTitle("");
+        scalarBar->SetTitle("mm");
         scalarBar->SetNumberOfLabels(5); // 主标签数量
         scalarBar->SetMaximumNumberOfColors(256);
 
@@ -492,27 +497,27 @@ void CloudForgeAnalyzer::Tool_MeasureArc() {
     box.setTitle("选择测量位置");
     box.setMessage("请选择选择测量位置:");
     box.setDefaultOption(0);
-
     if (box1.exec() == QDialog::Accepted) {
         int index = box1.getSelectedIndex();
         QString text = box1.getSelectedText();
 
         if (index == 0) {
-            pcl::PointXYZ* interest_point = nullptr;
+            interest_point = nullptr;
             qDebug() << "测量中线";
             TeEDebug("测量中线");
         }
         else if (index == 1) {
+
+            qDebug() << "手动选择测量位置";
+            TeEDebug("手动选择测量位置");
+            TeEDebug("请选择高度");
             PointPickerMgr mgr(ui->winOfAnalyzer->interactor(), 1);
             auto pts_pcl = mgr.GetPickedPCLPoints();
             if (pts_pcl.size() < 1) {
                 TeEDebug("点选择已取消或不足一个点");
                 return;
             }
-            pcl::PointXYZ* interest_point = &pts_pcl[0];
-            qDebug() << "手动选择测量位置";
-            TeEDebug("手动选择测量位置");
-            TeEDebug("请选择高度");
+            interest_point = new pcl::PointXYZ(pts_pcl[0]);//之前写法：interest_point = &pts_pcl[0]; mgr.GetPickedPCLPoints();返回的是临时变量，在此语块后被释放造成错误
         }
     }
     else {
@@ -522,7 +527,7 @@ void CloudForgeAnalyzer::Tool_MeasureArc() {
     }
 
 
-    MeasureArc measurer(Cloud_Temp, cy_Temp, nullptr, fitMethod);
+    MeasureArc measurer(Cloud_Temp, cy_Temp, interest_point, fitMethod);
     if (measurer.isCancelled) {
         TeEDebug(">>: 操作取消");
         return;
@@ -540,7 +545,7 @@ void CloudForgeAnalyzer::Tool_MeasureArc() {
 
             TeEDebug(">>: 弧长曲线已成功添加到3D视图。");
 
-            std::string resultMsg = "截面弧长: " + std::to_string(measurer.arcLength) + " 单位";
+            std::string resultMsg = "截面弧长: " + std::to_string(measurer.arcLength) + " mm";
             Update_CFmes(resultMsg);
         }
         else {
@@ -595,12 +600,12 @@ void CloudForgeAnalyzer::visualizeCylindricityHeatMap(
         // 3. 创建颜色条 Actor
         vtkNew<vtkScalarBarActor> scalarBar;
         scalarBar->SetLookupTable(hueLut);
-        scalarBar->SetTitle(" ");
+        scalarBar->SetTitle("mm");
         scalarBar->SetNumberOfLabels(5); // 主标签数量
         scalarBar->SetMaximumNumberOfColors(256);
 
 
-        const int titleFontSize = 60;        // 颜色条标题文字大小
+        const int titleFontSize = 12;        // 颜色条标题文字大小
         const int labelFontSize = 10;        // 颜色条标签文字大小
         const double colorbarWidth = 0.05;   // 颜色条宽度 (占窗口宽度的比例，建议0.03-0.07)
         const double colorbarHeight = 0.6;   // 颜色条高度 (占窗口高度的比例，建议0.4-0.7)
@@ -935,8 +940,9 @@ void CloudForgeAnalyzer::Tool_MeasureGeodisic() {
     //measurer.setGeodesicRadius(0.04);   // 测地线搜索半径
     auto result = measurer.measureArcLength(pointstart, pointend);
     if (result.success) {
-            std::string mesg2 = "测地线弧长: " + std::to_string(result.arc_length);
+            std::string mesg2 = "测地线弧长: " + std::to_string(result.arc_length)+" mm";
             TeEDebug(mesg2);
+            Update_CFmes(mesg2);
 
  //           4. 可视化
             auto [actors3D, textActors] = measurer.createVisualizationActors(
@@ -944,7 +950,7 @@ void CloudForgeAnalyzer::Tool_MeasureGeodisic() {
                 true,  // 显示曲面
                 true,  // 显示路径
                 false, // 不显示原始点云
-                true   // 显示长度标注
+                false   // 不显示长度标注
             );
 
             // 将actors添加到VTK渲染器...
@@ -1210,8 +1216,9 @@ void CloudForgeAnalyzer::Slot_ed_dork_Triggered() {
 }
 void CloudForgeAnalyzer::Slot_ed_cleangeo_Triggered() {
     viewer->removeAllShapes();
-    ui->winOfAnalyzer->renderWindow()->Render();
+    clearAllPlaneActors();
 
+    ui->winOfAnalyzer->renderWindow()->Render();
     ui->winOfAnalyzer->update();
 }
 
@@ -1259,6 +1266,7 @@ void CloudForgeAnalyzer::Slot_ed_cleanall_Triggered() {
         }
     }
     clearAllArcSplineActors();
+    clearAllPlaneActors();
     ui->winOfAnalyzer->renderWindow()->Render();
     ui->winOfAnalyzer->update();
     TeEDebug("已清除所有可视化");
@@ -1833,4 +1841,173 @@ vtkSmartPointer<vtkActor> CloudForgeAnalyzer::getArcSplineActor(const std::strin
         return it->second;
     }
     return nullptr;
+}
+
+// CloudForgeAnalyzer.cpp
+void CloudForgeAnalyzer::visualizeFittedPlane(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud,
+    const pcl::ModelCoefficients::Ptr& plane_coeffs,
+    const std::string& plane_id,
+    double r, double g, double b,
+    double opacity) {
+    if (!cloud || cloud->empty() || !plane_coeffs || plane_coeffs->values.size() < 4) {
+        TeEDebug("visualizeFittedPlane: 输入点云或平面参数无效。");
+        return;
+    }
+
+    // 1. 获取平面方程参数 Ax + By + Cz + D = 0
+    float A = plane_coeffs->values[0];
+    float B = plane_coeffs->values[1];
+    float C = plane_coeffs->values[2];
+    float D = plane_coeffs->values[3];
+    Eigen::Vector3f plane_normal(A, B, C);
+    float norm = plane_normal.norm();
+    if (norm < 1e-6f) {
+        TeEDebug("visualizeFittedPlane: 平面法向量无效。");
+        return;
+    }
+    plane_normal /= norm; // 归一化
+    A = plane_normal[0]; B = plane_normal[1]; C = plane_normal[2];
+    D /= norm; // 同时归一化 D
+
+    // 2. 将点云中所有点投影到该拟合平面上，并计算投影点的边界
+    double min_x = std::numeric_limits<double>::max();
+    double max_x = std::numeric_limits<double>::lowest();
+    double min_y = std::numeric_limits<double>::max();
+    double max_y = std::numeric_limits<double>::lowest();
+    Eigen::Vector3f plane_origin_point; // 平面上任意一点，用于构建局部坐标系
+
+    bool first_point = true;
+    for (const auto& point : cloud->points) {
+        if (!pcl::isFinite(point)) continue;
+
+        // 计算点到平面的有符号距离
+        float dist = A * point.x + B * point.y + C * point.z + D;
+        // 计算投影点坐标: P_proj = P - dist * N
+        Eigen::Vector3f proj_point;
+        proj_point[0] = point.x - dist * A;
+        proj_point[1] = point.y - dist * B;
+        proj_point[2] = point.z - dist * C;
+
+        if (first_point) {
+            plane_origin_point = proj_point;
+            min_x = max_x = 0.0;
+            min_y = max_y = 0.0;
+            first_point = false;
+            continue;
+        }
+
+        Eigen::Vector3f vec_in_plane = proj_point - plane_origin_point;
+        Eigen::Vector3f ref_vec(1.0f, 0.0f, 0.0f);
+        if (std::abs(plane_normal.dot(ref_vec)) > 0.9f) {
+            ref_vec = Eigen::Vector3f(0.0f, 1.0f, 0.0f);
+        }
+        Eigen::Vector3f local_x = ref_vec - plane_normal * plane_normal.dot(ref_vec);
+        local_x.normalize();
+        Eigen::Vector3f local_y = plane_normal.cross(local_x);
+        local_y.normalize();
+
+        float proj_x = vec_in_plane.dot(local_x);
+        float proj_y = vec_in_plane.dot(local_y);
+
+        if (proj_x < min_x) min_x = proj_x;
+        if (proj_x > max_x) max_x = proj_x;
+        if (proj_y < min_y) min_y = proj_y;
+        if (proj_y > max_y) max_y = proj_y;
+    }
+
+    if (first_point) {
+        TeEDebug("visualizeFittedPlane: 没有有效的点用于计算投影边界。");
+        return;
+    }
+
+
+    double center_local_x = (min_x + max_x) / 2.0;
+    double center_local_y = (min_y + max_y) / 2.0;
+    Eigen::Vector3f ref_vec(1.0f, 0.0f, 0.0f);
+    if (std::abs(plane_normal.dot(ref_vec)) > 0.9f) {
+        ref_vec = Eigen::Vector3f(0.0f, 1.0f, 0.0f);
+    }
+    Eigen::Vector3f local_x = ref_vec - plane_normal * plane_normal.dot(ref_vec);
+    local_x.normalize();
+    Eigen::Vector3f local_y = plane_normal.cross(local_x);
+    local_y.normalize();
+
+    Eigen::Vector3f plane_center_world = plane_origin_point + local_x * center_local_x + local_y * center_local_y;
+
+    double width = (max_x - min_x) * 1.05;
+    double height = (max_y - min_y) * 1.05;
+    if (width < 1e-6 || height < 1e-6) {
+        width = height = 1.0; // 防止过小
+    }
+
+    viewer->removeShape(plane_id);
+
+    vtkSmartPointer<vtkPlaneSource> planeSource = vtkSmartPointer<vtkPlaneSource>::New();
+    planeSource->SetOrigin(plane_center_world[0] - width/2*local_x[0] - height/2*local_y[0],
+                           plane_center_world[1] - width/2*local_x[1] - height/2*local_y[1],
+                           plane_center_world[2] - width/2*local_x[2] - height/2*local_y[2]);
+    planeSource->SetPoint1(plane_center_world[0] + width/2*local_x[0] - height/2*local_y[0],
+                           plane_center_world[1] + width/2*local_x[1] - height/2*local_y[1],
+                           plane_center_world[2] + width/2*local_x[2] - height/2*local_y[2]);
+    planeSource->SetPoint2(plane_center_world[0] - width/2*local_x[0] + height/2*local_y[0],
+                           plane_center_world[1] - width/2*local_x[1] + height/2*local_y[1],
+                           plane_center_world[2] - width/2*local_x[2] + height/2*local_y[2]);
+    planeSource->Update();
+
+    vtkSmartPointer<vtkPolyDataMapper> mapper = vtkSmartPointer<vtkPolyDataMapper>::New();
+    mapper->SetInputData(planeSource->GetOutput());
+    vtkSmartPointer<vtkActor> actor = vtkSmartPointer<vtkActor>::New();
+    actor->SetMapper(mapper);
+    actor->GetProperty()->SetColor(r, g, b);
+    actor->GetProperty()->SetOpacity(opacity);
+
+    // 将actor添加到渲染器
+    viewer->getRendererCollection()->GetFirstRenderer()->AddActor(actor);
+
+    auto it = m_planeActorMap.find(plane_id);
+    if (it != m_planeActorMap.end()) {
+        // 从渲染器中移除旧的Actor
+        viewer->getRendererCollection()->GetFirstRenderer()->RemoveActor(it->second);
+        m_planeActorMap.erase(it);
+        qDebug() << "visualizeFittedPlane: 替换已存在的平面Actor，ID:" << QString::fromStdString(plane_id);
+    }
+    // 存储新的Actor指针
+    m_planeActorMap[plane_id] = actor;
+
+
+    TeEDebug("可视化平面 '" + plane_id + "' 已完成。颜色(" +
+        std::to_string(r) + "," + std::to_string(g) + "," + std::to_string(b) +
+        "), 不透明度 " + std::to_string(opacity) + "。");
+
+    // 7. 刷新视图
+    ui->winOfAnalyzer->renderWindow()->Render();
+    ui->winOfAnalyzer->update();
+}
+
+void CloudForgeAnalyzer::clearAllPlaneActors() {
+    if (m_planeActorMap.empty()) {
+        return;
+    }
+
+    vtkRenderer* renderer = viewer->getRendererCollection()->GetFirstRenderer();
+    if (!renderer) {
+        m_planeActorMap.clear();
+        return;
+    }
+
+    // 从渲染器中移除所有在映射表中的平面Actor
+    for (auto& pair : m_planeActorMap) {
+        renderer->RemoveActor(pair.second);
+    }
+
+    // 清空管理映射表
+    m_planeActorMap.clear();
+
+    // 刷新视图
+    if (ui && ui->winOfAnalyzer) {
+        ui->winOfAnalyzer->renderWindow()->Render();
+    }
+
+    qDebug() << "已清除所有统一管理的平面可视化Actor。";
+    TeEDebug("已清除所有平面可视化。");
 }

@@ -818,7 +818,7 @@ QMenu::item:selected {
   </action>
   <action name="action_ed_dork">
    <property name="text">
-    <string>删除/保留点云簇</string>
+    <string>管理点云簇</string>
    </property>
   </action>
   <action name="measure_cylinder">
