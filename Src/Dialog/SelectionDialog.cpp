@@ -60,6 +60,10 @@ void CloudSelectionDialog::InitializeScrollArea() {
         cloudIds.append(QString::fromStdString(cloudId)); // 确保 m_cloudIds 和 m_checkBoxes 的大小一致
         checkBoxes.append(checkBox);
     }
+    if (checkBoxes.size() == 1) {
+        checkBoxes[0]->setChecked(true);
+    }
+
     scrollArea->setWidget(contentWidget);
     mainLayout->addWidget(scrollArea);
 }
@@ -159,7 +163,9 @@ void CySelectionDialog::InitializeScrollArea() {
         cloudIds.append(QString::fromStdString(id));
         checkBoxes.append(checkBox);
     }
-
+    if (checkBoxes.size() == 1) {
+        checkBoxes[0]->setChecked(true);
+    }
     scrollArea->setWidget(contentWidget);
     scrollArea->setWidgetResizable(true);
     mainLayout->addWidget(scrollArea);
@@ -255,7 +261,9 @@ void LineSelectionDialog::InitializeScrollArea() {
         cloudIds.append(QString::fromStdString(id));
         checkBoxes.append(checkBox);
     }
-
+    if (checkBoxes.size() == 1) {
+        checkBoxes[0]->setChecked(true);
+    }
     scrollArea->setWidget(contentWidget);
     scrollArea->setWidgetResizable(true);
     mainLayout->addWidget(scrollArea);
@@ -358,7 +366,9 @@ void PlaneSelectionDialog::InitializeScrollArea() {
             infoLabel->setStyleSheet("color: #666; font-size: 9pt;");
             rowLayout->addWidget(infoLabel);
         }
-
+        if (checkBoxes.size() == 1) {
+            checkBoxes[0]->setChecked(true);
+        }
         contentLayout->addLayout(rowLayout);
         planeIds.append(QString::fromStdString(id));
         checkBoxes.append(checkBox);

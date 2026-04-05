@@ -346,7 +346,6 @@ void CloudForgeAnalyzer::Slot_fit_cy2_Triggered() {
     for (std::size_t i = 0; i < 7; ++i)
         cycoeff1->values[i] = coeff1(i);
 
-    // 2.1 可视化初次拟合的内点与外点
     pcl::PointCloud<pcl::PointXYZ>::Ptr Cloud_Inliers = fcy.Get_Inliers();
     pcl::PointCloud<pcl::PointXYZ>::Ptr Cloud_Outliers = fcy.Get_Outliers();
     ColorManager color_inliers(0, 255, 0);   // 绿色-内点
@@ -354,8 +353,31 @@ void CloudForgeAnalyzer::Slot_fit_cy2_Triggered() {
     AddPointCloud("initial_fit_inliers", Cloud_Inliers, color_inliers);
     AddPointCloud("initial_fit_outliers", Cloud_Outliers, color_outliers);
 
-    // 2.2 添加初次拟合的圆柱体可视化
     viewer->addCylinder(*cycoeff1, "initial_fit_cylinder");
+    vtkSmartPointer<vtkLineSource> lineSource1 = vtkSmartPointer<vtkLineSource>::New();
+
+    Eigen::Vector3f axis_point(coeff1[0], coeff1[1], coeff1[2]);
+    Eigen::Vector3f axis_dir(coeff1[3], coeff1[4], coeff1[5]);
+    axis_dir.normalize(); // 确保方向向量是单位向量
+
+    float line_length = 1000.0f; 
+    Eigen::Vector3f p1 = axis_point - axis_dir * line_length;
+    Eigen::Vector3f p2 = axis_point + axis_dir * line_length;
+
+    lineSource1->SetPoint1(p1.x(), p1.y(), p1.z());
+    lineSource1->SetPoint2(p2.x(), p2.y(), p2.z());
+    lineSource1->Update();
+
+    vtkSmartPointer<vtkPolyDataMapper> mapper1 = vtkSmartPointer<vtkPolyDataMapper>::New();
+    mapper1->SetInputConnection(lineSource1->GetOutputPort());
+
+    vtkSmartPointer<vtkActor> lineActor1 = vtkSmartPointer<vtkActor>::New();
+    lineActor1->SetMapper(mapper1);
+    lineActor1->GetProperty()->SetColor(0.0, 1.0, 0.0); // 绿色
+    lineActor1->GetProperty()->SetLineWidth(3.0); // 设置线粗为3
+
+    AddActors(GenerateRandomName("axis"), lineActor1);
+
     ui->winOfAnalyzer->renderWindow()->Render();
     ui->winOfAnalyzer->update();
 
@@ -365,9 +387,8 @@ void CloudForgeAnalyzer::Slot_fit_cy2_Triggered() {
 
     Eigen::Vector3f initial_center = fcy.get_center_point();
     Eigen::Vector3f initial_axis = fcy.get_axis_direction();
-    float initial_radius = coeff1(6); // 从拟合结果中获取半径
+    float initial_radius = coeff1(6); 
 
-    // 3. 第二步：获取优化参数并使用MeasureCylindricity进行二次优化
     ParamDialogMeausreCy pdialog;
     if (pdialog.exec() != QDialog::Accepted) {
         TeEDebug(">>: 参数设置取消，二次优化跳过。初次拟合结果已保存。");
@@ -388,10 +409,8 @@ void CloudForgeAnalyzer::Slot_fit_cy2_Triggered() {
     evaluator.setVerbose(true);
     evaluator.setInitialLine(initial_center, initial_axis); // 设置初始值
 
-    // 执行二次优化（此处调用evaluateCylindricity是为了其内部的优化流程，但我们将忽略其评估结果，专注于获取优化后的轴线）
-    auto result = evaluator.evaluateCylindricity(); // 此函数执行优化并返回评估结果
+    auto result = evaluator.evaluateCylindricity(); 
 
-    // 4. 获取二次优化后的轴线参数
     Eigen::Vector3f optimized_center = result.getCylinderAxisPoint();
     Eigen::Vector3f optimized_axis = result.getCylinderAxisDirection();
 
@@ -405,8 +424,28 @@ void CloudForgeAnalyzer::Slot_fit_cy2_Triggered() {
     cycoeff2->values[5] = optimized_axis.z();
     cycoeff2->values[6] = static_cast<float>(design_radius); // 使用设定的设计半径
 
-    // 添加二次优化后的圆柱体可视化（用于对比）
     viewer->addCylinder(*cycoeff2, "optimized_fit_cylinder");
+    vtkSmartPointer<vtkLineSource> lineSource2 = vtkSmartPointer<vtkLineSource>::New();
+
+    optimized_axis.normalize(); 
+
+    Eigen::Vector3f p1_opt = optimized_center - optimized_axis * line_length;
+    Eigen::Vector3f p2_opt = optimized_center + optimized_axis * line_length;
+
+    lineSource2->SetPoint1(p1_opt.x(), p1_opt.y(), p1_opt.z());
+    lineSource2->SetPoint2(p2_opt.x(), p2_opt.y(), p2_opt.z());
+    lineSource2->Update();
+
+    vtkSmartPointer<vtkPolyDataMapper> mapper2 = vtkSmartPointer<vtkPolyDataMapper>::New();
+    mapper2->SetInputConnection(lineSource2->GetOutputPort());
+
+    vtkSmartPointer<vtkActor> lineActor2 = vtkSmartPointer<vtkActor>::New();
+    lineActor2->SetMapper(mapper2);
+    lineActor2->GetProperty()->SetColor(1.0, 0.0, 0.0); 
+    lineActor2->GetProperty()->SetLineWidth(3.0); 
+
+    AddActors(GenerateRandomName("axis"), lineActor2);
+
     ui->winOfAnalyzer->renderWindow()->Render();
     ui->winOfAnalyzer->update();
 
@@ -414,7 +453,7 @@ void CloudForgeAnalyzer::Slot_fit_cy2_Triggered() {
     std::string storedName = GenerateRandomName("optimized_cylinder");
     addCylinderResult(storedName, cycoeff2);
 
-    // 6. 输出最终信息（注意：此处显示的是优化过程产生的评估信息，仅为参考。正式的评估应由Tool_MeasureCylindricity完成）
+    // 此处显示的是优化过程产生的评估信息，仅为参考。正式的评估应由Tool_MeasureCylindricity完成
     qDebug() << "初次拟合轴线点: (" << initial_center.x() << ", "
              << initial_center.y() << ", " << initial_center.z() << ")";
     qDebug() << "二次优化后轴线点: (" << optimized_center.x() << ", "
@@ -541,7 +580,7 @@ void CloudForgeAnalyzer::Tool_MeasureArc() {
             // 2. 生成一个唯一的ID用于管理
             std::string actorId = GenerateRandomName("arc_spline_");
 
-            addArcSplineActor(actorId, splineActor);
+            AddActors(actorId, splineActor);
 
             TeEDebug(">>: 弧长曲线已成功添加到3D视图。");
 
@@ -1216,7 +1255,7 @@ void CloudForgeAnalyzer::Slot_ed_dork_Triggered() {
 }
 void CloudForgeAnalyzer::Slot_ed_cleangeo_Triggered() {
     viewer->removeAllShapes();
-    clearAllPlaneActors();
+    clearAllActors();
 
     ui->winOfAnalyzer->renderWindow()->Render();
     ui->winOfAnalyzer->update();
@@ -1266,7 +1305,7 @@ void CloudForgeAnalyzer::Slot_ed_cleanall_Triggered() {
         }
     }
     clearAllArcSplineActors();
-    clearAllPlaneActors();
+    clearAllActors();
     ui->winOfAnalyzer->renderWindow()->Render();
     ui->winOfAnalyzer->update();
     TeEDebug("已清除所有可视化");
@@ -1303,20 +1342,42 @@ void CloudForgeAnalyzer::Slot_ed_clean2DActor_Triggered() {
 }
 
 void CloudForgeAnalyzer::Slot_fl_2_Triggered() {
-    Filter_sor fs(cloud);
-    *cloud = *fs.Get_filtered();
+    ChoseCloudDialog dialog(CloudMap, ColorMap);
+    if (dialog.exec() != QDialog::Accepted) {
+        TeEDebug(">>:操作取消");
+        return;
+    }
+    if (dialog.getSelectedList().empty()) return;
+    pcl::PointCloud<pcl::PointXYZ>::Ptr tempcloud = CloudMap[dialog.getSelectedList()[0]];
+    Filter_sor fs(tempcloud);
+
+    *tempcloud = *fs.Get_filtered();
+    if (tempcloud->empty()) {
+        TeEDebug("操作无效");
+		return;
+    }
     ColorManager color(255, 255, 255);
     ClearAllPointCloud();
-    AddPointCloud("example", cloud, color);
-    UpdateCamera(0, 0, 1);
+    AddPointCloud("example", tempcloud, color);
 }
 void CloudForgeAnalyzer::Slot_fl_1_Triggered() {
-    Filter_voxel fv(cloud);
-    *cloud = *fv.Get_filtered();
+    ChoseCloudDialog dialog(CloudMap, ColorMap);
+    if (dialog.exec() != QDialog::Accepted) {
+        TeEDebug(">>:操作取消");
+        return;
+    }
+    if (dialog.getSelectedList().empty()) return;
+    pcl::PointCloud<pcl::PointXYZ>::Ptr tempcloud = CloudMap[dialog.getSelectedList()[0]];
+
+    Filter_voxel fv(tempcloud);
+    *tempcloud = *fv.Get_filtered();
+    if (tempcloud->empty()) {
+        TeEDebug("操作无效");
+        return;
+    }
     ColorManager color(255, 255, 255);
     ClearAllPointCloud();
     AddPointCloud("example", cloud, color);
-    UpdateCamera(0, 0, 1);
 }
 void CloudForgeAnalyzer::Slot_ph_1_Triggered() {
     ChoseCloudDialog dialog(CloudMap, ColorMap);
@@ -1961,18 +2022,7 @@ void CloudForgeAnalyzer::visualizeFittedPlane(pcl::PointCloud<pcl::PointXYZ>::Pt
     actor->GetProperty()->SetColor(r, g, b);
     actor->GetProperty()->SetOpacity(opacity);
 
-    // 将actor添加到渲染器
-    viewer->getRendererCollection()->GetFirstRenderer()->AddActor(actor);
-
-    auto it = m_planeActorMap.find(plane_id);
-    if (it != m_planeActorMap.end()) {
-        // 从渲染器中移除旧的Actor
-        viewer->getRendererCollection()->GetFirstRenderer()->RemoveActor(it->second);
-        m_planeActorMap.erase(it);
-        qDebug() << "visualizeFittedPlane: 替换已存在的平面Actor，ID:" << QString::fromStdString(plane_id);
-    }
-    // 存储新的Actor指针
-    m_planeActorMap[plane_id] = actor;
+    AddActors(plane_id,actor);
 
 
     TeEDebug("可视化平面 '" + plane_id + "' 已完成。颜色(" +
@@ -1984,24 +2034,24 @@ void CloudForgeAnalyzer::visualizeFittedPlane(pcl::PointCloud<pcl::PointXYZ>::Pt
     ui->winOfAnalyzer->update();
 }
 
-void CloudForgeAnalyzer::clearAllPlaneActors() {
-    if (m_planeActorMap.empty()) {
+void CloudForgeAnalyzer::clearAllActors() {
+    if (ActorMap.empty()) {
         return;
     }
 
     vtkRenderer* renderer = viewer->getRendererCollection()->GetFirstRenderer();
     if (!renderer) {
-        m_planeActorMap.clear();
+        ActorMap.clear();
         return;
     }
 
     // 从渲染器中移除所有在映射表中的平面Actor
-    for (auto& pair : m_planeActorMap) {
+    for (auto& pair : ActorMap) {
         renderer->RemoveActor(pair.second);
     }
 
     // 清空管理映射表
-    m_planeActorMap.clear();
+    ActorMap.clear();
 
     // 刷新视图
     if (ui && ui->winOfAnalyzer) {
@@ -2011,3 +2061,15 @@ void CloudForgeAnalyzer::clearAllPlaneActors() {
     qDebug() << "已清除所有统一管理的平面可视化Actor。";
     TeEDebug("已清除所有平面可视化。");
 }
+
+void CloudForgeAnalyzer::AddActors(std::string id, vtkSmartPointer<vtkActor> actor) {
+    viewer->getRendererCollection()->GetFirstRenderer()->AddActor(actor);
+    auto it = ActorMap.find(id);
+    if (it != ActorMap.end()) {
+        viewer->getRendererCollection()->GetFirstRenderer()->RemoveActor(it->second);
+        ActorMap.erase(it);
+        qDebug() << "visualizeFittedPlane: 替换已存在的平面Actor，ID:" << QString::fromStdString(id);
+    }
+    ActorMap[id] = actor;
+}
+

@@ -77,7 +77,8 @@ private:
     pcl::ModelCoefficients::Ptr getCylinderResult(const std::string& name);
     bool removeCylinderResult(const std::string& name);
     void clearAllCylinderResults();
-    void clearAllPlaneActors();
+    void clearAllActors();
+    void AddActors(std::string id, vtkSmartPointer<vtkActor> actor);
     std::vector<std::string> getAllCylinderNames();
 
     void AddPointCloud(std::string name, pcl::PointCloud<pcl::PointXYZ>::Ptr cloud, ColorManager color);
@@ -106,7 +107,7 @@ private:
     std::map<std::string, vtkSmartPointer<vtkActor>> m_arcSplineMap;
     std::map<std::string, pcl::ModelCoefficients::Ptr> cylinderResultsMap;
     std::map<std::string, pcl::ModelCoefficients::Ptr> planeResultsMap;
-    std::map<std::string, vtkSmartPointer<vtkActor>> m_planeActorMap;
+    std::map<std::string, vtkSmartPointer<vtkActor>> ActorMap;
 
     void cleanGeodesicVisualization();
     void AddLine(const std::string& name,
