@@ -3,8 +3,8 @@
 ParamDialogCurvSeg::ParamDialogCurvSeg(QWidget* parent)
     : ParamDialogBase(parent)
 {
-    QVector<QString> labels = { "curvature_threshold", "normal_radius", "min_cluster_size" };
-    QVector<QString> defaults = { "0.02", "0.03", "100" };
+    QVector<QString> labels = { "k邻近数","平滑度阈值", "曲率阈值", "最小聚类点数"};
+    QVector<QString> defaults = { "20", "1.0", "0.1", "300"};
     setupUI(labels, defaults);
     setWindowTitle("按曲率分割");
 }

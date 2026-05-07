@@ -13,5 +13,6 @@
         <file>Icons/icon_rectangle.png</file>
         <file>Icons/icons_geodetic.png</file>
         <file>Icons/icons_arc.png</file>
+        <file>Icons/icons_Vertical.png</file>
     </qresource>
 </RCC>

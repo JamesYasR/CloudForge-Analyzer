@@ -15,3 +15,5 @@
 #include <vtkScalarBarActor.h>
 #include <vtkLookupTable.h>
 #include <vtkTextProperty.h>
+#include <vtkSTLReader.h>
+#include <functional>

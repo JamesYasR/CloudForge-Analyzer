@@ -68,6 +68,7 @@ void CloudForgeAnalyzer::InitalizeConnects() {
     connect(ui->action_ed_cleangeodetic, &QAction::triggered, this, &CloudForgeAnalyzer::Slot_ed_cleangeodetic_Triggered);
     connect(ui->action_ed_clean2DActor, &QAction::triggered, this, &CloudForgeAnalyzer::Slot_ed_clean2DActor_Triggered);
     connect(ui->action_fi_open, &QAction::triggered, this, &CloudForgeAnalyzer::Slot_fi_open_Triggered);
+    connect(ui->action_fi_openSTL, &QAction::triggered, this, &CloudForgeAnalyzer::Slot_fi_openSTL_Triggered);
     connect(ui->action_fi_save, &QAction::triggered, this, &CloudForgeAnalyzer::Slot_fi_save_Triggered);
     connect(ui->action_fi_saveas, &QAction::triggered, this, &CloudForgeAnalyzer::Slot_fi_saveas_Triggered);
     connect(ui->action_fi_add, &QAction::triggered, this, &CloudForgeAnalyzer::Slot_fi_add_Triggered);
@@ -85,6 +86,7 @@ void CloudForgeAnalyzer::InitalizeConnects() {
     connect(ui->measure_parallel, &QAction::triggered, this, &CloudForgeAnalyzer::Tool_MeasureParallel);
     connect(ui->measure_height, &QAction::triggered, this, &CloudForgeAnalyzer::Tool_MeasureHeight);
     connect(ui->measure_planarity, &QAction::triggered, this, &CloudForgeAnalyzer::Tool_MeasurePlanarity);
+    connect(ui->measure_angleP2P, &QAction::triggered, this, &CloudForgeAnalyzer::Tool_MeasureAngleP2P);
     connect(ui->measure_Cylindricity, &QAction::triggered, this, &CloudForgeAnalyzer::Tool_MeasureCylindricity);
     connect(ui->action_Clip, &QAction::triggered, this, &CloudForgeAnalyzer::Tool_Clip);
 
@@ -354,32 +356,31 @@ void CloudForgeAnalyzer::Slot_fit_cy2_Triggered() {
     AddPointCloud("initial_fit_outliers", Cloud_Outliers, color_outliers);
 
     viewer->addCylinder(*cycoeff1, "initial_fit_cylinder");
-    vtkSmartPointer<vtkLineSource> lineSource1 = vtkSmartPointer<vtkLineSource>::New();
 
+    vtkSmartPointer<vtkLineSource> lineSource1 = vtkSmartPointer<vtkLineSource>::New();
     Eigen::Vector3f axis_point(coeff1[0], coeff1[1], coeff1[2]);
     Eigen::Vector3f axis_dir(coeff1[3], coeff1[4], coeff1[5]);
     axis_dir.normalize(); // 确保方向向量是单位向量
+    float line_length = 800.0f; 
+    //Eigen::Vector3f p1 = axis_point - axis_dir * line_length;
+    //Eigen::Vector3f p2 = axis_point + axis_dir * line_length;
 
-    float line_length = 1000.0f; 
-    Eigen::Vector3f p1 = axis_point - axis_dir * line_length;
-    Eigen::Vector3f p2 = axis_point + axis_dir * line_length;
+    //lineSource1->SetPoint1(p1.x(), p1.y(), p1.z());
+    //lineSource1->SetPoint2(p2.x(), p2.y(), p2.z());
+    //lineSource1->Update();
 
-    lineSource1->SetPoint1(p1.x(), p1.y(), p1.z());
-    lineSource1->SetPoint2(p2.x(), p2.y(), p2.z());
-    lineSource1->Update();
+    //vtkSmartPointer<vtkPolyDataMapper> mapper1 = vtkSmartPointer<vtkPolyDataMapper>::New();
+    //mapper1->SetInputConnection(lineSource1->GetOutputPort());
 
-    vtkSmartPointer<vtkPolyDataMapper> mapper1 = vtkSmartPointer<vtkPolyDataMapper>::New();
-    mapper1->SetInputConnection(lineSource1->GetOutputPort());
+    //vtkSmartPointer<vtkActor> lineActor1 = vtkSmartPointer<vtkActor>::New();
+    //lineActor1->SetMapper(mapper1);
+    //lineActor1->GetProperty()->SetColor(0.0, 1.0, 0.0); // 绿色
+    //lineActor1->GetProperty()->SetLineWidth(3.0); // 设置线粗为3
 
-    vtkSmartPointer<vtkActor> lineActor1 = vtkSmartPointer<vtkActor>::New();
-    lineActor1->SetMapper(mapper1);
-    lineActor1->GetProperty()->SetColor(0.0, 1.0, 0.0); // 绿色
-    lineActor1->GetProperty()->SetLineWidth(3.0); // 设置线粗为3
+    //AddActors(GenerateRandomName("axis"), lineActor1);
 
-    AddActors(GenerateRandomName("axis"), lineActor1);
-
-    ui->winOfAnalyzer->renderWindow()->Render();
-    ui->winOfAnalyzer->update();
+    //ui->winOfAnalyzer->renderWindow()->Render();
+    //ui->winOfAnalyzer->update();
 
     // 输出初次拟合信息
     Update_CFmes(fcy.message);
@@ -441,7 +442,7 @@ void CloudForgeAnalyzer::Slot_fit_cy2_Triggered() {
 
     vtkSmartPointer<vtkActor> lineActor2 = vtkSmartPointer<vtkActor>::New();
     lineActor2->SetMapper(mapper2);
-    lineActor2->GetProperty()->SetColor(1.0, 0.0, 0.0); 
+    lineActor2->GetProperty()->SetColor(1.0, 0.0, 0.0); //red
     lineActor2->GetProperty()->SetLineWidth(3.0); 
 
     AddActors(GenerateRandomName("axis"), lineActor2);
@@ -456,13 +457,15 @@ void CloudForgeAnalyzer::Slot_fit_cy2_Triggered() {
     // 此处显示的是优化过程产生的评估信息，仅为参考。正式的评估应由Tool_MeasureCylindricity完成
     qDebug() << "初次拟合轴线点: (" << initial_center.x() << ", "
              << initial_center.y() << ", " << initial_center.z() << ")";
+    qDebug() << "初次拟合轴线方向: (" << initial_axis.x() << ", "
+        << initial_axis.y() << ", " << initial_axis.z() << ")";
     qDebug() << "二次优化后轴线点: (" << optimized_center.x() << ", "
              << optimized_center.y() << ", " << optimized_center.z() << ")";
-
+    qDebug() << "二次优化轴线方向: (" << optimized_axis.x() << ", "
+        << optimized_axis.y() << ", " << optimized_axis.z() << ")";
     std::string finalMsg = "圆柱拟合与优化完成。\n";
     finalMsg += "初次拟合：内点(绿)/外点(红)，圆柱体 'initial_fit_cylinder'\n";
     finalMsg += "二次优化：圆柱体 'optimized_fit_cylinder'\n";
-
 
     TeEDebug(">>: 二次优化完成，几何体已更新。");
     Update_CFmes(finalMsg);
@@ -644,7 +647,7 @@ void CloudForgeAnalyzer::visualizeCylindricityHeatMap(
         scalarBar->SetMaximumNumberOfColors(256);
 
 
-        const int titleFontSize = 12;        // 颜色条标题文字大小
+        const int titleFontSize = 8;        // 颜色条标题文字大小
         const int labelFontSize = 10;        // 颜色条标签文字大小
         const double colorbarWidth = 0.05;   // 颜色条宽度 (占窗口宽度的比例，建议0.03-0.07)
         const double colorbarHeight = 0.6;   // 颜色条高度 (占窗口高度的比例，建议0.4-0.7)
@@ -819,6 +822,71 @@ void CloudForgeAnalyzer::Tool_MeasureHeight() {
     TeEDebug(out);
     Update_CFmes(out);
 }
+void CloudForgeAnalyzer::Tool_MeasureAngleP2P() {
+    ChosePlaneDialog dialog(planeResultsMap);
+    if (dialog.getSelectedList().empty()) {
+        TeEDebug(">>: 未选择平面拟合结果");
+        return;
+    }
+    if(dialog.getSelectedList().size()!=2){
+        TeEDebug(">>: 请选择两个平面拟合结果");
+        return;
+	}
+
+	pcl::ModelCoefficients::Ptr plane1 = planeResultsMap[dialog.getSelectedList()[0]];
+    pcl::ModelCoefficients::Ptr plane2 = planeResultsMap[dialog.getSelectedList()[1]];
+
+    if (plane1->values.size() < 4 || plane2->values.size() < 4) {
+        TeEDebug(">>: 平面系数无效");
+        return;
+    }
+
+    // 从平面系数中提取法向量
+    Eigen::Vector3f normal1, normal2;
+    normal1[0] = plane1->values[0];
+    normal1[1] = plane1->values[1];
+    normal1[2] = plane1->values[2];
+
+    normal2[0] = plane2->values[0];
+    normal2[1] = plane2->values[1];
+    normal2[2] = plane2->values[2];
+
+    // 归一化法向量（确保是单位向量）
+    normal1.normalize();
+    normal2.normalize();
+
+    // 计算法向量的点积
+    float dot_product = normal1.dot(normal2);
+
+    // 确保点积在[-1, 1]范围内，防止浮点误差
+    dot_product = std::max(-1.0f, std::min(1.0f, dot_product));
+
+    // 计算夹角（弧度）
+    float angle_rad = acosf(dot_product);
+
+    // 转换为角度
+    float angle_deg = angle_rad * 180.0f / M_PI;
+
+    // 平面夹角通常取锐角（0-90度），如果夹角大于90度，取其补角
+    if (angle_deg > 90.0f) {
+        angle_deg = 180.0f - angle_deg;
+    }
+
+    // 输出结果
+    std::stringstream ss;
+    ss << ">>: 平面夹角测量结果:" << std::endl;
+    ss << "平面1: " << dialog.getSelectedList()[0] << std::endl;
+    ss << "平面2: " << dialog.getSelectedList()[1] << std::endl;
+    ss << "平面1法向量: (" << normal1[0] << ", " << normal1[1] << ", " << normal1[2] << ")" << std::endl;
+    ss << "平面2法向量: (" << normal2[0] << ", " << normal2[1] << ", " << normal2[2] << ")" << std::endl;
+    ss << "法向量夹角: " << angle_deg << " 度 (" << angle_rad << " 弧度)" << std::endl;
+
+    TeEDebug(ss.str().c_str());
+
+    
+    QString result = QString("平面夹角: %1 度").arg(angle_deg, 0, 'f', 2);
+    QMessageBox::information(nullptr, "平面夹角测量", result);
+}
 
 void CloudForgeAnalyzer::Tool_MeasureParallel() {
 	ChoseLineDialog dialog(LineMap);
@@ -900,18 +968,26 @@ void CloudForgeAnalyzer::Slot_ph_CurvSeg_Triggered() {
         TeEDebug(">>:操作取消");
         return;
     }
+    pcl::PointCloud<pcl::PointXYZ>::Ptr tempcloud = CloudMap[dialog.getSelectedList()[0]];
     if (dialog.getSelectedList().empty()) {
         return;
 	}
-    pcl::PointCloud<pcl::PointXYZ>::Ptr tempcloud = CloudMap[dialog.getSelectedList()[0]];
-    CurvatureSegmentation cs(tempcloud);
-    cs.segment();
-    pcl::PointCloud<pcl::PointXYZ>::Ptr planar = cs.getPlanarCloud();
-	pcl::PointCloud<pcl::PointXYZ>::Ptr nonplanar = cs.getNonPlanarCloud();
-	ColorManager c1(255,0 , 0);
-    ColorManager c2(0, 255, 0);
-    AddPointCloud("planar", planar, c1);
-	AddPointCloud("nonplanar", nonplanar, c2);
+    TeEDebug("请选择点 (左键选点，Enter确认，ESC取消)");
+    PointPickerMgr mgr(ui->winOfAnalyzer->interactor(), 1);
+    const auto& pts = mgr.GetPickedPoints();
+    const auto& pts_pcl = mgr.GetPickedPCLPoints();
+    if (pts.size() < 1) {
+        TeEDebug("点选择已取消或不足两个点");
+        return;
+    }
+
+    pcl::PointXYZ picked_point = pts_pcl[0];
+    CurvatureSegmentation cs(tempcloud,picked_point);
+    pcl::PointCloud<pcl::PointXYZ>::Ptr plane = cs.getOutputCloud();
+    Update_CFmes(cs.message);
+    ColorManager randomColor;
+	AddPointCloud(GenerateRandomName("planar"), plane, randomColor);
+
 }
 
 
@@ -1086,10 +1162,10 @@ void CloudForgeAnalyzer::Slot_fit_cy_Triggered() {
         qDebug() << "圆柱拟合结果为空";
         return;
     }
-    ColorManager color1(255, 0, 0);
+    ColorManager color1(0, 255, 0);
     AddPointCloud("incylinder",Cloud_Inliers, color1);
 
-    ColorManager color2(0, 0, 255);
+    ColorManager color2(255, 0, 0);
     AddPointCloud("outofcylinder", Cloud_Outliers, color2);
 
     Eigen::VectorXf coeff1;//, coeff2;
@@ -1100,23 +1176,442 @@ void CloudForgeAnalyzer::Slot_fit_cy_Triggered() {
     for (std::size_t i = 0; i < 7; ++i)
         cylinder_coeff->values[i] = coeff1(i);
 	viewer->addCylinder(*cylinder_coeff, "fitted_cylinder");
+
+    vtkSmartPointer<vtkLineSource> lineSource1 = vtkSmartPointer<vtkLineSource>::New();
+    Eigen::Vector3f axis_point(coeff1[0], coeff1[1], coeff1[2]);
+    Eigen::Vector3f axis_dir(coeff1[3], coeff1[4], coeff1[5]);
+    axis_dir.normalize(); // 确保方向向量是单位向量
+
+    float line_length = 800.0f;
+    Eigen::Vector3f p1 = axis_point - axis_dir * line_length;
+    Eigen::Vector3f p2 = axis_point + axis_dir * line_length;
+
+    lineSource1->SetPoint1(p1.x(), p1.y(), p1.z());
+    lineSource1->SetPoint2(p2.x(), p2.y(), p2.z());
+    lineSource1->Update();
+
+    vtkSmartPointer<vtkPolyDataMapper> mapper1 = vtkSmartPointer<vtkPolyDataMapper>::New();
+    mapper1->SetInputConnection(lineSource1->GetOutputPort());
+
+    vtkSmartPointer<vtkActor> lineActor1 = vtkSmartPointer<vtkActor>::New();
+    lineActor1->SetMapper(mapper1);
+    lineActor1->GetProperty()->SetColor(1.0, 0.0, 0.0); // 绿色
+    lineActor1->GetProperty()->SetLineWidth(3.0); // 设置线粗为3
+
+    AddActors(GenerateRandomName("axis"), lineActor1);
+
+    ui->winOfAnalyzer->renderWindow()->Render();
+    ui->winOfAnalyzer->update();
     ui->winOfAnalyzer->renderWindow()->Render();
     ui->winOfAnalyzer->update();
     Update_CFmes(fcy.message);
 }
-void CloudForgeAnalyzer::Slot_fi_open_Triggered() {
-    QString runPath = QDir::currentPath()+"/PCDfiles";//获取项目的根路径
-    QString file_name = QFileDialog::getOpenFileName(this, QStringLiteral("选择文件"), runPath, "*.pcd", nullptr, QFileDialog::DontResolveSymlinks);
-    if (pcl::io::loadPCDFile(file_name.toStdString(), *cloud) == -1) {
+void CloudForgeAnalyzer::Slot_fi_open_Triggered()
+{
+    QString runPath = QDir::currentPath() + "/PCDfiles";
+
+    QString file_name = QFileDialog::getOpenFileName(
+        this,
+        QStringLiteral("选择文件"),
+        runPath,
+        "*.pcd",
+        nullptr,
+        QFileDialog::DontResolveSymlinks
+    );
+
+    if (file_name.isEmpty())
+        return;
+
+#ifdef _WIN32
+    // 转为本地 ANSI 编码（GBK）
+    QByteArray localPath = file_name.toLocal8Bit();
+    std::string path = localPath.constData();
+#else
+    std::string path = file_name.toStdString();
+#endif
+
+    if (pcl::io::loadPCDFile(path, *cloud) == -1) {
         TeEDebug(">>无法加载点云文件");
         return;
     }
+
     ColorManager color(255, 255, 255);
     ClearAllPointCloud();
-    AddPointCloud("example",cloud,color);
+    AddPointCloud("example", cloud, color);
     UpdateCamera(0, 0, 1);
 }
 
+void CloudForgeAnalyzer::Slot_fi_openSTL_Triggered() {
+    QString runPath = QDir::currentPath() + "/PCDfiles";//获取项目的根路径
+    QString file_name = QFileDialog::getOpenFileName(this, QStringLiteral("选择文件"), runPath, "*.STL", nullptr, QFileDialog::DontResolveSymlinks);
+    if (file_name.isEmpty()) {
+        return;
+    }
+    TeEDebug("开始处理STL文件: " + file_name.toStdString());
+
+    // 1. 读取STL文件信息，计算推荐参数
+    float recommendedLeafSize = 0.01f;
+    int triangleCount = 0;
+    float modelDiagonal = 0.0f;
+
+    try {
+        vtkSmartPointer<vtkSTLReader> reader = vtkSmartPointer<vtkSTLReader>::New();
+        reader->SetFileName(file_name.toStdString().c_str());
+        reader->Update();
+
+        vtkPolyData* polyData = reader->GetOutput();
+        if (!polyData) {
+            QMessageBox::warning(this, "错误", "无法读取STL文件");
+            return;
+        }
+
+        triangleCount = polyData->GetNumberOfCells();
+        TeEDebug("STL文件三角形数量: " + std::to_string(triangleCount));
+
+        // 计算包围盒
+        double bounds[6];
+        polyData->GetBounds(bounds);
+        double dx = bounds[1] - bounds[0];
+        double dy = bounds[3] - bounds[2];
+        double dz = bounds[5] - bounds[4];
+
+        modelDiagonal = sqrt(dx * dx + dy * dy + dz * dz);
+        TeEDebug("模型对角线长度: " + std::to_string(modelDiagonal) + " 米");
+
+        // 根据模型尺寸计算推荐leaf size
+        if (modelDiagonal > 0) {
+            if (modelDiagonal < 0.1) {        // 小型模型 (<10cm)
+                recommendedLeafSize = 0.001f;  // 1mm
+            }
+            else if (modelDiagonal < 1.0) {  // 中型模型 (<1m)
+                recommendedLeafSize = 0.002f;  // 2mm
+            }
+            else if (modelDiagonal < 5.0) {  // 大型模型 (<5m)
+                recommendedLeafSize = 0.005f;  // 5mm
+            }
+            else {                            // 超大型模型
+                recommendedLeafSize = 0.01f;   // 1cm
+            }
+
+            // 根据三角形密度微调
+            if (triangleCount > 0) {
+                float triangleDensity = triangleCount / (modelDiagonal * modelDiagonal);
+                if (triangleDensity > 10000) {  // 高密度模型
+                    recommendedLeafSize *= 0.8f;
+                }
+                else if (triangleDensity < 1000) {  // 低密度模型
+                    recommendedLeafSize *= 1.2f;
+                }
+            }
+
+            // 限制范围
+            recommendedLeafSize = std::max(0.0005f, std::min(0.1f, recommendedLeafSize));
+        }
+
+    }
+    catch (const std::exception& e) {
+        TeEDebug("读取STL文件信息失败: " + std::string(e.what()));
+    }
+
+    // 2. 创建对话框获取参数
+    bool ok = false;
+
+    // 创建自定义对话框
+    QDialog dialog(this);
+    dialog.setWindowTitle("这是一个STL文件，你确定要转换为点云吗？");
+    dialog.setFixedSize(400, 200);
+
+    QVBoxLayout* mainLayout = new QVBoxLayout(&dialog);
+
+    // 文件信息
+    QFileInfo fileInfo(file_name);
+    QString fileSize = QString("%1 MB").arg(fileInfo.size() / (1024.0 * 1024.0), 0, 'f', 2);
+
+    QLabel* infoLabel = new QLabel(
+        QString("文件: %1\n大小: %2\n三角形数量: %3\n模型对角线: %4 米")
+        .arg(fileInfo.fileName())
+        .arg(fileSize)
+        .arg(triangleCount)
+        .arg(modelDiagonal, 0, 'f', 3),
+        &dialog
+    );
+    infoLabel->setWordWrap(true);
+    mainLayout->addWidget(infoLabel);
+
+    // 表面点云复选框
+    QCheckBox* surfaceCheckBox = new QCheckBox("生成表面点云（2到3层）", &dialog);
+    surfaceCheckBox->setChecked(true);
+    mainLayout->addWidget(surfaceCheckBox);
+
+    // Leaf size 设置
+    QHBoxLayout* leafLayout = new QHBoxLayout();
+    QLabel* leafLabel = new QLabel("下采样 leaf-size:", &dialog);
+    QLineEdit* leafEdit = new QLineEdit(QString::number(recommendedLeafSize, 'f', 4), &dialog);
+    leafEdit->setMaximumWidth(100);
+
+    leafLayout->addWidget(leafLabel);
+    leafLayout->addWidget(leafEdit);
+    leafLayout->addStretch();
+    mainLayout->addLayout(leafLayout);
+
+    // 按钮
+    QHBoxLayout* buttonLayout = new QHBoxLayout();
+    QPushButton* okButton = new QPushButton("转换", &dialog);
+    QPushButton* cancelButton = new QPushButton("取消", &dialog);
+
+    buttonLayout->addStretch();
+    buttonLayout->addWidget(okButton);
+    buttonLayout->addWidget(cancelButton);
+    mainLayout->addLayout(buttonLayout);
+
+    // 连接按钮信号
+    connect(okButton, &QPushButton::clicked, &dialog, &QDialog::accept);
+    connect(cancelButton, &QPushButton::clicked, &dialog, &QDialog::reject);
+
+    if (dialog.exec() != QDialog::Accepted) {
+        TeEDebug("用户取消STL转换");
+        return;
+    }
+
+    // 获取参数
+    float leafSize = leafEdit->text().toFloat(&ok);
+    if (!ok || leafSize <= 0) {
+        QMessageBox::warning(this, "错误", "leaf-size 必须大于0");
+        return;
+    }
+
+    bool surfaceOnly = surfaceCheckBox->isChecked();
+
+    TeEDebug("转换参数 - leafSize: " + std::to_string(leafSize) +
+        ", surfaceOnly: " + std::to_string(surfaceOnly));
+
+    // 3. 创建进度对话框
+    QProgressDialog progressDialog("正在转换STL文件...", "取消", 0, 100, this);
+    progressDialog.setWindowTitle("STL转换进度");
+    progressDialog.setWindowModality(Qt::WindowModal);
+    progressDialog.setMinimumDuration(0);
+    progressDialog.setValue(0);
+    progressDialog.show();
+
+    // 4. 开始转换
+    pcl::PointCloud<pcl::PointXYZ>::Ptr Cloud_Convert(new pcl::PointCloud<pcl::PointXYZ>);
+
+    try {
+        // 4.1 读取STL文件
+        TeEDebug("开始读取STL文件...");
+        progressDialog.setValue(10);
+        progressDialog.setLabelText("读取STL文件...");
+        QApplication::processEvents();
+
+        vtkSmartPointer<vtkSTLReader> reader = vtkSmartPointer<vtkSTLReader>::New();
+        reader->SetFileName(file_name.toStdString().c_str());
+        reader->Update();
+
+        vtkPolyData* polyData = reader->GetOutput();
+        if (!polyData || polyData->GetNumberOfPoints() == 0) {
+            throw std::runtime_error("STL文件为空");
+        }
+
+        TeEDebug("STL文件读取成功");
+        TeEDebug("顶点数量: " + std::to_string(polyData->GetNumberOfPoints()));
+        TeEDebug("三角形数量: " + std::to_string(polyData->GetNumberOfCells()));
+
+        progressDialog.setValue(20);
+        progressDialog.setLabelText("转换网格数据...");
+        QApplication::processEvents();
+
+        // 4.2 转换为PCL网格
+        pcl::PolygonMesh mesh;
+        pcl::io::vtk2mesh(polyData, mesh);
+
+        // 4.3 获取顶点
+        pcl::PointCloud<pcl::PointXYZ>::Ptr vertices(new pcl::PointCloud<pcl::PointXYZ>);
+        pcl::fromPCLPointCloud2(mesh.cloud, *vertices);
+
+        progressDialog.setValue(30);
+        progressDialog.setLabelText("获取顶点数据...");
+        QApplication::processEvents();
+
+        if (surfaceOnly) {
+            // 4.4a 表面采样
+            TeEDebug("开始表面采样...");
+            progressDialog.setValue(40);
+            progressDialog.setLabelText("表面采样...");
+            QApplication::processEvents();
+
+            pcl::PointCloud<pcl::PointXYZ>::Ptr sampledCloud(new pcl::PointCloud<pcl::PointXYZ>);
+
+            int totalTriangles = mesh.polygons.size();
+            int processedTriangles = 0;
+
+            int batchSize = 1000;
+            int numBatches = (totalTriangles + batchSize - 1) / batchSize;
+            bool cancelFlag = false;
+
+            sampledCloud->reserve(totalTriangles * 50);
+
+            for (int batch = 0; batch < numBatches && !cancelFlag; ++batch) {
+                // 检查是否取消
+                if (progressDialog.wasCanceled()) {
+                    cancelFlag = true;
+                    TeEDebug("用户取消转换");
+                    break;
+                }
+
+                int batchStart = batch * batchSize;
+                int batchEnd = std::min((batch + 1) * batchSize, totalTriangles);
+
+                // 并行处理当前批次
+#pragma omp parallel
+                {
+                    pcl::PointCloud<pcl::PointXYZ>::Ptr localCloud(new pcl::PointCloud<pcl::PointXYZ>);
+
+#pragma omp for nowait
+                    for (int i = batchStart; i < batchEnd; ++i) {
+                        if (mesh.polygons[i].vertices.size() == 3) {
+                            pcl::PointXYZ A = vertices->points[mesh.polygons[i].vertices[0]];
+                            pcl::PointXYZ B = vertices->points[mesh.polygons[i].vertices[1]];
+                            pcl::PointXYZ C = vertices->points[mesh.polygons[i].vertices[2]];
+
+                            float area = 0.5f * sqrt(
+                                pow((B.y - A.y) * (C.z - A.z) - (B.z - A.z) * (C.y - A.y), 2) +
+                                pow((B.z - A.z) * (C.x - A.x) - (B.x - A.x) * (C.z - A.z), 2) +
+                                pow((B.x - A.x) * (C.y - A.y) - (B.y - A.y) * (C.x - A.x), 2)
+                            );
+
+                            float trianglePerimeter =
+                                sqrt(pow(B.x - A.x, 2) + pow(B.y - A.y, 2) + pow(B.z - A.z, 2)) +
+                                sqrt(pow(C.x - B.x, 2) + pow(C.y - B.y, 2) + pow(C.z - B.z, 2)) +
+                                sqrt(pow(A.x - C.x, 2) + pow(A.y - C.y, 2) + pow(A.z - C.z, 2));
+
+                            // 根据周长和面积综合计算采样点数
+                            float averageSideLength = trianglePerimeter / 3.0f;
+                            int samplesBasedOnLength = static_cast<int>(averageSideLength / (leafSize * 0.5f));
+                            int samplesBasedOnArea = static_cast<int>(area / (leafSize * leafSize * 0.1f));
+
+                            // 取两者较大值
+                            int samplesPerTriangle = std::max(10, std::max(samplesBasedOnLength, samplesBasedOnArea));
+                            samplesPerTriangle = std::min(samplesPerTriangle, 500);
+
+                            for (int layer = 0; layer < 3; ++layer) {
+                                for (int j = 0; j < samplesPerTriangle; ++j) {
+                                    float r1 = static_cast<float>(rand()) / RAND_MAX;
+                                    float r2 = static_cast<float>(rand()) / RAND_MAX;
+
+                                    if (r1 + r2 > 1.0f) {
+                                        r1 = 1.0f - r1;
+                                        r2 = 1.0f - r2;
+                                    }
+
+                                    pcl::PointXYZ point;
+                                    point.x = A.x + r1 * (B.x - A.x) + r2 * (C.x - A.x);
+                                    point.y = A.y + r1 * (B.y - A.y) + r2 * (C.y - A.y);
+                                    point.z = A.z + r1 * (B.z - A.z) + r2 * (C.z - A.z);
+
+                                    if (layer > 0) {
+                                        Eigen::Vector3f v1(B.x - A.x, B.y - A.y, B.z - A.z);
+                                        Eigen::Vector3f v2(C.x - A.x, C.y - A.y, C.z - A.z);
+                                        Eigen::Vector3f normal = v1.cross(v2);
+                                        normal.normalize();
+
+                                        float offset = (layer - 1) * leafSize * 0.1f;
+                                        point.x += normal.x() * offset;
+                                        point.y += normal.y() * offset;
+                                        point.z += normal.z() * offset;
+                                    }
+
+                                    localCloud->push_back(point);
+                                }
+                            }
+                        }
+                    }
+
+                    // 合并到全局点云
+#pragma omp critical
+                    {
+                        *sampledCloud += *localCloud;
+                    }
+                }
+
+                // 更新进度
+                int processedTriangles = batchEnd;
+                int progress = 40 + static_cast<int>(40.0f * processedTriangles / totalTriangles);
+                progress = std::min(progress, 80);
+
+                progressDialog.setValue(progress);
+                progressDialog.setLabelText(
+                    QString("表面采样: %1/%2 三角形").arg(processedTriangles).arg(totalTriangles));
+
+                QString debugMsg = QString("采样进度: %1% (%2/%3 三角形)")
+                    .arg(progress)
+                    .arg(processedTriangles)
+                    .arg(totalTriangles);
+                TeEDebug(debugMsg.toStdString());
+
+                QApplication::processEvents();
+            }
+
+            *Cloud_Convert = *sampledCloud;
+            TeEDebug("表面采样完成，采样点数: " + std::to_string(Cloud_Convert->size()));
+
+        }
+        else {
+            // 4.4b 使用所有顶点
+            *Cloud_Convert = *vertices;
+            TeEDebug("使用所有顶点，点数: " + std::to_string(Cloud_Convert->size()));
+        }
+
+        // 4.5 下采样
+        if (leafSize > 0 && Cloud_Convert->size() > 0) {
+            TeEDebug("开始下采样...");
+            progressDialog.setValue(85);
+            progressDialog.setLabelText("下采样...");
+            QApplication::processEvents();
+
+            pcl::VoxelGrid<pcl::PointXYZ> voxelGrid;
+            voxelGrid.setInputCloud(Cloud_Convert);
+            voxelGrid.setLeafSize(leafSize, leafSize, leafSize);
+
+            pcl::PointCloud<pcl::PointXYZ>::Ptr filteredCloud(new pcl::PointCloud<pcl::PointXYZ>);
+            voxelGrid.filter(*filteredCloud);
+
+            *Cloud_Convert = *filteredCloud;
+
+            TeEDebug("下采样完成，点数: " + std::to_string(Cloud_Convert->size()));
+        }
+
+        progressDialog.setValue(100);
+        progressDialog.setLabelText("转换完成！");
+        QApplication::processEvents();
+
+        // 显示结果信息
+        QString resultMsg = QString("转换完成！\n"
+            "原始STL文件: %1\n"
+            "生成点云数量: %2\n"
+            "Leaf size: %3\n"
+            "表面点云: %4")
+            .arg(fileInfo.fileName())
+            .arg(Cloud_Convert->size())
+            .arg(leafSize)
+            .arg(surfaceOnly ? "是" : "否");
+
+        QMessageBox::information(this, "转换完成", resultMsg);
+        TeEDebug(resultMsg.toStdString());
+
+    }
+    catch (const std::exception& e) {
+        QString errorMsg = QString("STL转换失败: %1").arg(e.what());
+        QMessageBox::warning(this, "错误", errorMsg);
+        TeEDebug("转换失败: " + std::string(e.what()));
+        return;
+    }
+    //..
+    ClearAllPointCloud();
+    viewer->removeAllShapes();
+    clearAllActors();
+    ColorManager color(255, 255, 255);
+    AddPointCloud(GenerateRandomName("stl_convert_cloud"), Cloud_Convert, color);
+}
 void CloudForgeAnalyzer::Slot_fi_add_Triggered() {
     QString runPath = QDir::currentPath() + "/PCDfiles";
     QStringList file_names = QFileDialog::getOpenFileNames(

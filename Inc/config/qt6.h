@@ -8,4 +8,7 @@
 #include <QTimer>
 #include <QVTKOpenGLNativeWidget.h>
 #include <QInputDialog>
+#include <QFutureWatcher>
+#include <QtConcurrent/QtConcurrent>
+#include <QProgressDialog>
 #include "ui_CloudForgeAnalyzer.h"

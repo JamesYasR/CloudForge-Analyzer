@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>1191</width>
-    <height>807</height>
+    <height>804</height>
    </rect>
   </property>
   <property name="minimumSize">
@@ -519,6 +519,7 @@ font: 700 8pt &quot;Microsoft YaHei UI&quot;;</string>
    <addaction name="measure_height"/>
    <addaction name="measure_Cylindricity"/>
    <addaction name="measure_planarity"/>
+   <addaction name="measure_angleP2P"/>
    <addaction name="separator"/>
    <addaction name="action_Clip"/>
    <addaction name="separator"/>
@@ -552,10 +553,10 @@ font: 700 8pt &quot;Microsoft YaHei UI&quot;;</string>
    <widget class="QMenu" name="menu_file">
     <property name="geometry">
      <rect>
-      <x>331</x>
-      <y>211</y>
+      <x>551</x>
+      <y>205</y>
       <width>94</width>
-      <height>219</height>
+      <height>250</height>
      </rect>
     </property>
     <property name="maximumSize">
@@ -606,6 +607,7 @@ QMenu::item:selected {
     <addaction name="menu_recent"/>
     <addaction name="action_fi_save"/>
     <addaction name="action_fi_saveas"/>
+    <addaction name="action_fi_openSTL"/>
    </widget>
    <widget class="QMenu" name="menu_hardware">
     <property name="styleSheet">
@@ -897,7 +899,7 @@ QMenu::item:selected {
   </action>
   <action name="action_ProtruSeg">
    <property name="text">
-    <string>曲面突起分割</string>
+    <string>按曲面突起分割</string>
    </property>
   </action>
   <action name="action_Clip">
@@ -1027,6 +1029,37 @@ QMenu::item:selected {
   <action name="action_fit_plane">
    <property name="text">
     <string>拟合平面</string>
+   </property>
+  </action>
+  <action name="action_STL">
+   <property name="text">
+    <string>打开STL</string>
+   </property>
+  </action>
+  <action name="action_fi_openSTL">
+   <property name="text">
+    <string>打开STL</string>
+   </property>
+   <property name="toolTip">
+    <string>打开STL并转化为点云格式</string>
+   </property>
+   <property name="menuRole">
+    <enum>QAction::MenuRole::NoRole</enum>
+   </property>
+  </action>
+  <action name="measure_angleP2P">
+   <property name="icon">
+    <iconset resource="CloudForgeAnalyzer.qrc">
+     <normaloff>:/CloudForgeAnalyzer/Icons/icons_Vertical.png</normaloff>:/CloudForgeAnalyzer/Icons/icons_Vertical.png</iconset>
+   </property>
+   <property name="text">
+    <string>平面夹角</string>
+   </property>
+   <property name="toolTip">
+    <string>可以用于测量垂直度</string>
+   </property>
+   <property name="menuRole">
+    <enum>QAction::MenuRole::NoRole</enum>
    </property>
   </action>
  </widget>

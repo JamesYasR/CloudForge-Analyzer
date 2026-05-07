@@ -14,3 +14,6 @@
 #include <pcl/common/pca.h>
 #include <pcl/common/common.h>
 #include <pcl/features/normal_3d_omp.h>
+#include <pcl/segmentation/region_growing.h>
+#include <pcl/surface/mls.h>
+#include <pcl/io/vtk_lib_io.h>

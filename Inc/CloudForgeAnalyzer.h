@@ -37,6 +37,7 @@ private slots:
     void Slot_ChangeVA_z();
     void Slot_ChangeVA_o();
     void Slot_fi_open_Triggered();
+    void Slot_fi_openSTL_Triggered();
     void Slot_fi_save_Triggered();
     void Slot_fi_saveas_Triggered();
     void Slot_fi_add_Triggered();
@@ -61,6 +62,7 @@ private slots:
     void Tool_MeasureHeight();
     void Tool_MeasureParallel();
     void Tool_MeasurePlanarity();
+    void Tool_MeasureAngleP2P();
     void Tool_Clip();
     void Tool_MeasureCylindricity();
     void Update_PointCounts();
