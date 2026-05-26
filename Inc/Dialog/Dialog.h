@@ -17,5 +17,6 @@
 #include "ChoseLineDialog.h"
 #include "ChosePlaneDialog.h"
 #include "ParamDialogMeausreCy.h"
+#include "ParamDialogMeasureHeight.h"
 #include "ChoseCyDialog.h"
 #include "OptionBox.h"

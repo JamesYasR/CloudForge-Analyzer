@@ -34,7 +34,9 @@ bool SaveCloudDialog::SaveSelectedClouds(const QString& filePath, QString& infoM
         }
     }
     if (!filePath.isEmpty()) {
-        std::string savePath = filePath.toStdString();
+        // toLocal8Bit() → 系统本地编码(中文Windows即GBK),
+        // 匹配PCL内部fopen的ANSI编码预期, 避免中文路径乱码
+        std::string savePath = filePath.toLocal8Bit().toStdString();
         if (QFileInfo(filePath).suffix().compare("pcd", Qt::CaseInsensitive) != 0) {
             savePath += ".pcd";
         }
@@ -43,7 +45,7 @@ bool SaveCloudDialog::SaveSelectedClouds(const QString& filePath, QString& infoM
             return false;
         }
         else {
-            infoMsg = QString("成功保存 %1 个点云到：\n%2").arg(SaveList.size()).arg(QString::fromStdString(savePath));
+            infoMsg = QString("成功保存 %1 个点云到：\n%2").arg(SaveList.size()).arg(QString::fromLocal8Bit(savePath));
             return true;
         }
     }

@@ -2,6 +2,7 @@
 #include <pcl/point_types.h>
 #include <pcl/ModelCoefficients.h>
 #include <pcl/segmentation/sac_segmentation.h>
+#include <pcl/kdtree/kdtree_flann.h>
 #include <memory>
 #include <vector>
 
@@ -21,6 +22,13 @@ public:
 
     // 如果需要参考平面系数（a,b,c,d）
     pcl::ModelCoefficients::Ptr GetPlaneCoefficients() const;
+
+    // 迭代测量：每次找当前最高点(距平面最远)，取其K个最近邻，算平均距离，
+    // 排除该参考点后重复，共 iterations 轮。结果依次写入 avgDistances。
+    // numNeighbors 默认 10，iterations 默认 5，均暴露在此便于调试。
+    bool measureIterative(std::vector<double>& avgDistances,
+        int numNeighbors = 12,
+        int iterations = 5);
 
 private:
     bool fitPlane();               // 拟合参考平面，返回是否成功

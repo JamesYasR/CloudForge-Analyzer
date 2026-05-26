@@ -133,6 +133,7 @@
     <ClCompile Include="Src\Basic\PointPicker.cpp" />
     <ClCompile Include="Src\Basic\PointPickerMgr.cpp" />
     <ClCompile Include="Src\CloudForgeAnalyzer.cpp" />
+    <ClCompile Include="Src\UndoRedoManager.cpp" />
     <ClCompile Include="Src\Dialog\ChoseCloudDialog.cpp">
       <DynamicSource Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">input</DynamicSource>
       <QtMocFileName Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">%(Filename).moc</QtMocFileName>
@@ -157,6 +158,7 @@
     <ClCompile Include="Src\Dialog\ParamDialog_FittingPlane.cpp" />
     <ClCompile Include="Src\Dialog\ParamDialog_measureArc.cpp" />
     <ClCompile Include="Src\Dialog\ParamDialogMeaGeodetic.cpp" />
+    <ClCompile Include="Src\Dialog\ParamDialogMeasureHeight.cpp" />
     <ClCompile Include="Src\Dialog\RmCloudDialog.cpp" />
     <ClCompile Include="Src\Dialog\SaveCloudDialog.cpp" />
     <ClCompile Include="Src\Dialog\SelectionDialog.cpp" />
@@ -185,6 +187,7 @@
   </ItemGroup>
   <ItemGroup>
     <QtMoc Include="Inc\CloudForgeAnalyzer.h" />
+    <ClInclude Include="Inc\UndoRedoManager.h" />
   </ItemGroup>
   <ItemGroup>
     <QtMoc Include="Inc\Dialog\ParamDialog_ec.h" />
@@ -195,6 +198,7 @@
     <QtMoc Include="Inc\Dialog\ChoseCloudDialog.h" />
     <QtMoc Include="Inc\Basic\PointPickerMgr.h" />
     <QtMoc Include="Inc\Dialog\ParamDialogMeaGeodetic.h" />
+    <QtMoc Include="Inc\Dialog\ParamDialogMeasureHeight.h" />
     <QtMoc Include="Inc\Dialog\ParamDialogCurvSeg.h" />
     <ClInclude Include="Inc\Basic\Basic.h" />
     <ClInclude Include="Inc\Basic\CloudClipper.h" />

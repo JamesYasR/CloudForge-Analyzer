@@ -6,6 +6,7 @@
 #include "PreProcessing/PreProcessing.h"
 #include "Measure/Measure.h"
 #include "Basic/Basic.h"
+#include "UndoRedoManager.h"
 
 
 #include <string>
@@ -50,6 +51,8 @@ private slots:
     void Slot_ed_cleanRGB_Triggered();
     void Slot_ed_cleangeodetic_Triggered();
     void Slot_ed_clean2DActor_Triggered();
+    void Slot_ed_undo_Triggered();
+    void Slot_ed_redo_Triggered();
     void Slot_fit_cy_Triggered();
     void Slot_fit_cy2_Triggered();
     void Slot_fit_plane_Triggered();
@@ -87,7 +90,14 @@ private:
     void ClearAllPointCloudRGB();
     void ClearAllPointCloud();
     void DelePointCloud(std::string name);
-    void InitalizeQWidgets();  
+
+    // 撤销/重做相关
+    void saveUndoState(const std::string& description);
+    void rebuildCloudVisualization();
+    void beginUndoBatch(const std::string& description);
+    void endUndoBatch();
+
+    void InitalizeQWidgets();
     void InitalizeRenderer();
     void InitalizeConnects();
     void TeEDebug(std::string debugMes);
@@ -101,6 +111,8 @@ private:
 
     pcl::visualization::PCLVisualizer::Ptr viewer;
     pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZ>::Ptr renderer_custom;
+    UndoRedoManager m_undoRedoManager;
+    int m_undoBatchLevel = 0; // >0 时 AddPointCloud 等不单独记录 undo
     std::map<std::string, pcl::PointCloud<pcl::PointXYZ>::Ptr> CloudMap;
     std::map<std::string, pcl::PointCloud<pcl::PointXYZRGB>::Ptr> RGBCloudMap;
     std::map<std::string, ColorManager> ColorMap;
@@ -121,16 +133,16 @@ private:
 
     void DeleteLine(const std::string& name);
     void ClearAllLines();
-    void visualizeMeasurementResults(MeasureHeight& measurer,
+    static void visualizeMeasurementResults(MeasureHeight& measurer,
         pcl::PointCloud<pcl::PointXYZ>::Ptr measureCloud,
         pcl::PointCloud<pcl::PointXYZ>::Ptr refCloud);
-    void colorPointCloudByHeight(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud,
+    static void colorPointCloudByHeight(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud,
         pcl::ModelCoefficients::Ptr plane_coeffs,
         pcl::PointCloud<pcl::PointXYZRGB>::Ptr colored_cloud);
 
-    double calculatePlaneSize(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud);
+    static double calculatePlaneSize(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud);
 
-    void addHeightLines(pcl::visualization::PCLVisualizer::Ptr viewer,
+    static void addHeightLines(pcl::visualization::PCLVisualizer::Ptr viewer,
         pcl::PointCloud<pcl::PointXYZ>::Ptr cloud,
         pcl::ModelCoefficients::Ptr plane_coeffs);
 

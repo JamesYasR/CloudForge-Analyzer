@@ -1,4 +1,5 @@
 #include "CloudForgeAnalyzer.h"
+#include <thread>
 
 CloudForgeAnalyzer::CloudForgeAnalyzer(QWidget *parent)
     : QMainWindow(parent)
@@ -17,8 +18,10 @@ CloudForgeAnalyzer::CloudForgeAnalyzer(QWidget *parent)
         return;
     }
     ColorManager color(255,255,255);
+    ++m_undoBatchLevel; // 初始化加载不记入撤销历史
     AddPointCloud("example", cloud, color);
-    
+    --m_undoBatchLevel;
+
 }
 
 CloudForgeAnalyzer::~CloudForgeAnalyzer()
@@ -67,6 +70,8 @@ void CloudForgeAnalyzer::InitalizeConnects() {
     connect(ui->action_ed_cleanRGB, &QAction::triggered, this, &CloudForgeAnalyzer::Slot_ed_cleanRGB_Triggered);
     connect(ui->action_ed_cleangeodetic, &QAction::triggered, this, &CloudForgeAnalyzer::Slot_ed_cleangeodetic_Triggered);
     connect(ui->action_ed_clean2DActor, &QAction::triggered, this, &CloudForgeAnalyzer::Slot_ed_clean2DActor_Triggered);
+    connect(ui->action_ed_undo, &QAction::triggered, this, &CloudForgeAnalyzer::Slot_ed_undo_Triggered);
+    connect(ui->action_ed_redo, &QAction::triggered, this, &CloudForgeAnalyzer::Slot_ed_redo_Triggered);
     connect(ui->action_fi_open, &QAction::triggered, this, &CloudForgeAnalyzer::Slot_fi_open_Triggered);
     connect(ui->action_fi_openSTL, &QAction::triggered, this, &CloudForgeAnalyzer::Slot_fi_openSTL_Triggered);
     connect(ui->action_fi_save, &QAction::triggered, this, &CloudForgeAnalyzer::Slot_fi_save_Triggered);
@@ -89,7 +94,6 @@ void CloudForgeAnalyzer::InitalizeConnects() {
     connect(ui->measure_angleP2P, &QAction::triggered, this, &CloudForgeAnalyzer::Tool_MeasureAngleP2P);
     connect(ui->measure_Cylindricity, &QAction::triggered, this, &CloudForgeAnalyzer::Tool_MeasureCylindricity);
     connect(ui->action_Clip, &QAction::triggered, this, &CloudForgeAnalyzer::Tool_Clip);
-
 }
 
 void CloudForgeAnalyzer::mainLoop_Init() {
@@ -131,9 +135,11 @@ void CloudForgeAnalyzer::Slot_fit_plane_Triggered() {
 	ColorManager color_outliers(255, 0, 0);  // 红色-外点
 	ColorManager color_anomaly(255, 255, 0); // 黄色-异常点
 
+	beginUndoBatch("平面拟合");
 	AddPointCloud("plane_fit_inliers", Cloud_inliers, color_inliers);
 	AddPointCloud("plane_fit_outliers", Cloud_outliers, color_outliers);
     AddPointCloud("plane_fit_anomaly", Cloud_anomaly, color_anomaly);
+	endUndoBatch();
 
 	std::string message = fp.message;
     Eigen::Vector4f coeff_vec = fp.Get_Coeff_in(); // [A, B, C, D]
@@ -352,8 +358,10 @@ void CloudForgeAnalyzer::Slot_fit_cy2_Triggered() {
     pcl::PointCloud<pcl::PointXYZ>::Ptr Cloud_Outliers = fcy.Get_Outliers();
     ColorManager color_inliers(0, 255, 0);   // 绿色-内点
     ColorManager color_outliers(255, 0, 0);  // 红色-外点
+    beginUndoBatch("初始圆柱拟合");
     AddPointCloud("initial_fit_inliers", Cloud_Inliers, color_inliers);
     AddPointCloud("initial_fit_outliers", Cloud_Outliers, color_outliers);
+    endUndoBatch();
 
     viewer->addCylinder(*cycoeff1, "initial_fit_cylinder");
 
@@ -454,21 +462,23 @@ void CloudForgeAnalyzer::Slot_fit_cy2_Triggered() {
     std::string storedName = GenerateRandomName("optimized_cylinder");
     addCylinderResult(storedName, cycoeff2);
 
+	std::stringstream ss;
+	ss << "圆柱拟合与优化完成。\n";
     // 此处显示的是优化过程产生的评估信息，仅为参考。正式的评估应由Tool_MeasureCylindricity完成
-    qDebug() << "初次拟合轴线点: (" << initial_center.x() << ", "
+    ss<< "初次拟合轴线点: (" << initial_center.x() << ", "
              << initial_center.y() << ", " << initial_center.z() << ")";
-    qDebug() << "初次拟合轴线方向: (" << initial_axis.x() << ", "
+    ss<< "初次拟合轴线方向: (" << initial_axis.x() << ", "
         << initial_axis.y() << ", " << initial_axis.z() << ")";
-    qDebug() << "二次优化后轴线点: (" << optimized_center.x() << ", "
+    ss<< "二次优化后轴线点: (" << optimized_center.x() << ", "
              << optimized_center.y() << ", " << optimized_center.z() << ")";
-    qDebug() << "二次优化轴线方向: (" << optimized_axis.x() << ", "
+    ss << "二次优化轴线方向: (" << optimized_axis.x() << ", "
         << optimized_axis.y() << ", " << optimized_axis.z() << ")";
     std::string finalMsg = "圆柱拟合与优化完成。\n";
     finalMsg += "初次拟合：内点(绿)/外点(红)，圆柱体 'initial_fit_cylinder'\n";
     finalMsg += "二次优化：圆柱体 'optimized_fit_cylinder'\n";
 
     TeEDebug(">>: 二次优化完成，几何体已更新。");
-    Update_CFmes(finalMsg);
+    Update_CFmes(finalMsg+ss.str());
 }
 
 void CloudForgeAnalyzer::Tool_MeasureArc() {
@@ -806,21 +816,41 @@ void CloudForgeAnalyzer::Tool_MeasureHeight() {
         TeEDebug("参考点云为空或无效");
         return;
     }
+    // 弹出参数设置对话框
+    ParamDialogMeasureHeight paramDialog;
+    if (paramDialog.exec() != QDialog::Accepted) {
+        TeEDebug(">>:操作取消");
+        return;
+    }
+    bool ok1 = false, ok2 = false;
+    int HEIGHT_NEIGHBOR_COUNT = paramDialog.getParams()[0].toInt(&ok1);
+    int HEIGHT_ITERATIONS     = paramDialog.getParams()[1].toInt(&ok2);
+    if (!ok1 || !ok2 || HEIGHT_NEIGHBOR_COUNT < 1 || HEIGHT_ITERATIONS < 1) {
+        TeEDebug("测高参数无效");
+        return;
+    }
 
-    // 执行测量
+    // 执行迭代测量
     MeasureHeight measurer(measureCloud, refCloud);
-    if (!measurer.measure()) {
+    std::vector<double> avgDistances;
+    if (!measurer.measureIterative(avgDistances, HEIGHT_NEIGHBOR_COUNT, HEIGHT_ITERATIONS)) {
         TeEDebug("测高失败：无法拟合参考平面或点云无效");
         return;
     }
 
-    // 输出结果
-    std::string out = "测高结果：最大距离 = " + std::to_string(measurer.GetMaxDistance())
-        + "，最小距离 = " + std::to_string(measurer.GetMinDistance())
-        + "，平均距离 = " + std::to_string(measurer.GetMeanDistance());
-    visualizeMeasurementResults(measurer, measureCloud, refCloud);
-    TeEDebug(out);
-    Update_CFmes(out);
+    // 依次输出每次迭代结果
+    for (size_t i = 0; i < avgDistances.size(); ++i) {
+        char buf[128];
+        snprintf(buf, sizeof(buf), "测高[%zu/%d]: 平均距离 = %.4f",
+            i + 1, HEIGHT_ITERATIONS, avgDistances[i]);
+        TeEDebug(buf);
+        Update_CFmes(buf);
+    }
+
+    // 可视化（在独立线程中运行，不阻塞主线程）
+    std::thread([measurer, measureCloud, refCloud]() mutable {
+        CloudForgeAnalyzer::visualizeMeasurementResults(measurer, measureCloud, refCloud);
+    }).detach();
 }
 void CloudForgeAnalyzer::Tool_MeasureAngleP2P() {
     ChosePlaneDialog dialog(planeResultsMap);
@@ -933,8 +963,10 @@ void CloudForgeAnalyzer::Tool_Clip() {
         }
         ColorManager color1;
         ColorManager color2;
+	beginUndoBatch("裁剪点云");
 		AddPointCloud(GenerateRandomName(dialog.getSelectedList()[0] + "_clippedin"), clipedin, color1);
         AddPointCloud(GenerateRandomName(dialog.getSelectedList()[0] + "_clippedout"), clipedout, color2);
+	endUndoBatch();
     }
     else {
         TeEDebug(">>:操作取消");
@@ -958,8 +990,10 @@ void CloudForgeAnalyzer::Slot_ph_ProtruSeg_Triggered() {
     pcl::PointCloud<pcl::PointXYZ>::Ptr nonplanar = ps.getProtrusionCloud();
     ColorManager c1(255, 0, 0);
     ColorManager c2(0, 255, 0);
+    beginUndoBatch("凸起/平面分割");
     AddPointCloud("planar", planar, c1);
     AddPointCloud("nonplanar", nonplanar, c2);
+    endUndoBatch();
 }
 
 void CloudForgeAnalyzer::Slot_ph_CurvSeg_Triggered() {
@@ -1120,8 +1154,10 @@ void CloudForgeAnalyzer::Slot_fit_line_Triggered() {
     ColorManager color1(0, 255, 0); // 内点绿色
     ColorManager color2(255, 0, 0); // 外点红色
 
+    beginUndoBatch("直线拟合");
     AddPointCloud("line_inliers", inliers, color1);
     AddPointCloud("line_outliers", outliers, color2);
+    endUndoBatch();
 
     // 可视化直线
     Eigen::VectorXf coeffs = fitter.Get_Coeff_in();
@@ -1163,10 +1199,12 @@ void CloudForgeAnalyzer::Slot_fit_cy_Triggered() {
         return;
     }
     ColorManager color1(0, 255, 0);
+    beginUndoBatch("圆柱拟合");
     AddPointCloud("incylinder",Cloud_Inliers, color1);
 
     ColorManager color2(255, 0, 0);
     AddPointCloud("outofcylinder", Cloud_Outliers, color2);
+    endUndoBatch();
 
     Eigen::VectorXf coeff1;//, coeff2;
 
@@ -1247,7 +1285,13 @@ void CloudForgeAnalyzer::Slot_fi_openSTL_Triggered() {
     if (file_name.isEmpty()) {
         return;
     }
-    TeEDebug("开始处理STL文件: " + file_name.toStdString());
+#ifdef _WIN32
+    QByteArray stlLocalPath = file_name.toLocal8Bit();
+    std::string stlPath = stlLocalPath.constData();
+#else
+    std::string stlPath = file_name.toStdString();
+#endif
+    TeEDebug("开始处理STL文件: " + stlPath);
 
     // 1. 读取STL文件信息，计算推荐参数
     float recommendedLeafSize = 0.01f;
@@ -1256,7 +1300,7 @@ void CloudForgeAnalyzer::Slot_fi_openSTL_Triggered() {
 
     try {
         vtkSmartPointer<vtkSTLReader> reader = vtkSmartPointer<vtkSTLReader>::New();
-        reader->SetFileName(file_name.toStdString().c_str());
+        reader->SetFileName(stlPath.c_str());
         reader->Update();
 
         vtkPolyData* polyData = reader->GetOutput();
@@ -1404,7 +1448,7 @@ void CloudForgeAnalyzer::Slot_fi_openSTL_Triggered() {
         QApplication::processEvents();
 
         vtkSmartPointer<vtkSTLReader> reader = vtkSmartPointer<vtkSTLReader>::New();
-        reader->SetFileName(file_name.toStdString().c_str());
+        reader->SetFileName(stlPath.c_str());
         reader->Update();
 
         vtkPolyData* polyData = reader->GetOutput();
@@ -1653,7 +1697,13 @@ void CloudForgeAnalyzer::Slot_fi_add_Triggered() {
         QString status;
         bool success = false;
         try {
-            if (pcl::io::loadPCDFile(file_name.toStdString(), *cloud) == -1) {
+#ifdef _WIN32
+            QByteArray localPath = file_name.toLocal8Bit();
+            std::string path = localPath.constData();
+#else
+            std::string path = file_name.toStdString();
+#endif
+            if (pcl::io::loadPCDFile(path, *cloud) == -1) {
                 status = QString(">>加载失败: %1").arg(QFileInfo(file_name).fileName());
             }
             else {
@@ -1742,8 +1792,12 @@ void CloudForgeAnalyzer::Slot_fi_save_Triggered() {
 void CloudForgeAnalyzer::Slot_ed_dork_Triggered() {
     RmCloudDialog dcc(CloudMap,ColorMap);
     std::vector<std::string> todelete = dcc.Get_toDelete();
-    for (const auto& it : todelete) {
-        DelePointCloud(it);
+    if (!todelete.empty()) {
+        beginUndoBatch("批量删除点云");
+        for (const auto& it : todelete) {
+            DelePointCloud(it);
+        }
+        endUndoBatch();
     }
     ui->winOfAnalyzer->renderWindow()->Render();
     ui->winOfAnalyzer->update();
@@ -1886,6 +1940,7 @@ void CloudForgeAnalyzer::Slot_ph_1_Triggered() {
     if (cs.GetClusterMap().empty() || cs.GetColorMap().empty()) {
         return;
     }
+    beginUndoBatch("聚类分割");
     ClearAllPointCloud();
     auto cluster_map = cs.GetClusterMap();
     auto color_map = cs.GetColorMap();
@@ -1897,7 +1952,7 @@ void CloudForgeAnalyzer::Slot_ph_1_Triggered() {
         AddPointCloud("cluster_" + std::to_string(cluster_id),cloud_cluster, cluster_color);
         //viewer->addPointCloud<pcl::PointXYZ>(cloud_cluster, cluster_color, "cluster_" + std::to_string(cluster_id));//这里绑定颜色有点问题导致后面颜色读不出来
     }
-    
+    endUndoBatch();
 }
 
 
@@ -1961,6 +2016,9 @@ void CloudForgeAnalyzer::Update_CFmes(std::string cfmes) {
 }
 
 void CloudForgeAnalyzer::AddPointCloud(std::string name, pcl::PointCloud<pcl::PointXYZ>::Ptr cloud, ColorManager color) {
+    if (m_undoBatchLevel == 0) {
+        saveUndoState("添加点云: " + name);
+    }
     CloudMap.emplace(name, cloud);
     ColorMap.emplace(name,color);
     qDebug() << color.r << color.g <<color.b;
@@ -1968,7 +2026,7 @@ void CloudForgeAnalyzer::AddPointCloud(std::string name, pcl::PointCloud<pcl::Po
     viewer->addPointCloud<pcl::PointXYZ>(cloud, colorhandler, name);
     ui->winOfAnalyzer->renderWindow()->Render();
     ui->winOfAnalyzer->update();
-    UpdateCamera(0, 0, 1);
+
 }
 
 void CloudForgeAnalyzer::ClearAllPointCloudRGB() {
@@ -1983,6 +2041,9 @@ void CloudForgeAnalyzer::ClearAllPointCloudRGB() {
 
 
 void CloudForgeAnalyzer::ClearAllPointCloud() {
+    if (m_undoBatchLevel == 0) {
+        saveUndoState("清除全部点云");
+    }
     for (auto& pair : CloudMap) {
         pair.second.reset(); // 智能指针置空，释放点云
     }
@@ -1995,6 +2056,9 @@ void CloudForgeAnalyzer::ClearAllPointCloud() {
 }
 
 void CloudForgeAnalyzer::DelePointCloud(std::string name) {
+    if (m_undoBatchLevel == 0) {
+        saveUndoState("删除点云: " + name);
+    }
     auto it = CloudMap.find(name);
     if (it != CloudMap.end()) {
         it->second.reset(); // 智能指针置空，释放点云
@@ -2005,7 +2069,62 @@ void CloudForgeAnalyzer::DelePointCloud(std::string name) {
     viewer->removePointCloud(name);
     ui->winOfAnalyzer->renderWindow()->Render();
     ui->winOfAnalyzer->update();
+
+}
+
+// ========== 撤销/重做实现 ==========
+
+void CloudForgeAnalyzer::saveUndoState(const std::string& description) {
+    m_undoRedoManager.pushState(description, CloudMap, ColorMap);
+}
+
+void CloudForgeAnalyzer::beginUndoBatch(const std::string& description) {
+    if (m_undoBatchLevel == 0) {
+        saveUndoState(description);
+    }
+    ++m_undoBatchLevel;
+}
+
+void CloudForgeAnalyzer::endUndoBatch() {
+    if (m_undoBatchLevel > 0) {
+        --m_undoBatchLevel;
+    }
+}
+
+void CloudForgeAnalyzer::rebuildCloudVisualization() {
+    viewer->removeAllPointClouds();
+    for (const auto& pair : CloudMap) {
+        auto colorIt = ColorMap.find(pair.first);
+        if (colorIt == ColorMap.end()) continue;
+        pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZ> colorHandler(
+            pair.second, colorIt->second.r, colorIt->second.g, colorIt->second.b);
+        viewer->addPointCloud<pcl::PointXYZ>(pair.second, colorHandler, pair.first);
+    }
+    ui->winOfAnalyzer->renderWindow()->Render();
+    ui->winOfAnalyzer->update();
     UpdateCamera(0, 0, 1);
+}
+
+void CloudForgeAnalyzer::Slot_ed_undo_Triggered() {
+    if (!m_undoRedoManager.canUndo()) {
+        TeEDebug("撤销: 没有更多历史记录");
+        return;
+    }
+    std::string desc = m_undoRedoManager.undo(CloudMap, ColorMap);
+    rebuildCloudVisualization();
+    TeEDebug("已撤销: " + desc);
+    Update_CFmes("已撤销: " + desc);
+}
+
+void CloudForgeAnalyzer::Slot_ed_redo_Triggered() {
+    if (!m_undoRedoManager.canRedo()) {
+        TeEDebug("重做: 没有更多历史记录");
+        return;
+    }
+    std::string desc = m_undoRedoManager.redo(CloudMap, ColorMap);
+    rebuildCloudVisualization();
+    TeEDebug("已重做: " + desc);
+    Update_CFmes("已重做: " + desc);
 }
 
 void CloudForgeAnalyzer::InitializeProgressBar() {
@@ -2140,7 +2259,6 @@ void CloudForgeAnalyzer::visualizeMeasurementResults(MeasureHeight& measurer,
     viewer->addText("按 'r' 重置视角, 按 'q' 退出", 10, 30, 12, 1.0, 1.0, 1.0, "help_text");
 
     // 7. 显示可视化窗口
-    TeEDebug("可视化窗口已打开，按 'q' 退出查看");
     while (!viewer->wasStopped()) {
         viewer->spinOnce(100);
         std::this_thread::sleep_for(std::chrono::milliseconds(100));

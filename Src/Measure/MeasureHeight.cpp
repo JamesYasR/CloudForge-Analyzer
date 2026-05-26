@@ -102,3 +102,57 @@ double MeasureHeight::GetMeanDistance() const {
 pcl::ModelCoefficients::Ptr MeasureHeight::GetPlaneCoefficients() const {
     return plane_coeffs_;
 }
+
+bool MeasureHeight::measureIterative(std::vector<double>& avgDistances,
+    int numNeighbors,
+    int iterations) {
+    avgDistances.clear();
+    if (!measure_cloud_ || measure_cloud_->empty()) return false;
+    if (!reference_cloud_ || reference_cloud_->empty()) return false;
+
+    if (!fitPlane()) return false;
+
+    computeDistances();
+
+    // 构建 3D KD-tree 用于空间最近邻搜索
+    pcl::KdTreeFLANN<pcl::PointXYZ> kdtree;
+    kdtree.setInputCloud(measure_cloud_);
+
+    std::vector<bool> used(measure_cloud_->points.size(), false);
+
+    for (int iter = 0; iter < iterations; ++iter) {
+        // 在未使用的点中找距平面最远的点（最高点）
+        int max_idx = -1;
+        double max_dist = -1.0;
+        for (size_t i = 0; i < distances_.size(); ++i) {
+            if (!used[i] && distances_[i] > max_dist) {
+                max_dist = distances_[i];
+                max_idx = static_cast<int>(i);
+            }
+        }
+
+        if (max_idx < 0) break; // 没有剩余点
+
+        used[max_idx] = true;
+
+        // 搜索 3D 空间中距离最近的 numNeighbors 个点
+        std::vector<int> neighbor_idx(numNeighbors);
+        std::vector<float> neighbor_sqdist(numNeighbors);
+        int found = kdtree.nearestKSearch(
+            measure_cloud_->points[max_idx],
+            numNeighbors,
+            neighbor_idx,
+            neighbor_sqdist);
+
+        // 计算这些邻近点到参考平面的平均距离
+        double sum = 0.0;
+        for (int i = 0; i < found; ++i) {
+            sum += distances_[neighbor_idx[i]];
+        }
+        double avg = (found > 0) ? sum / found : 0.0;
+        avgDistances.push_back(avg);
+    }
+
+    measured_ = true;
+    return true;
+}

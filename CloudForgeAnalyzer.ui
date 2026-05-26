@@ -740,6 +740,8 @@ QMenu::item:selected {
     <addaction name="action_ed_cleangeodetic"/>
     <addaction name="action_ed_clean2DActor"/>
     <addaction name="action_ed_cleangall"/>
+    <addaction name="action_ed_undo"/>
+    <addaction name="action_ed_redo"/>
    </widget>
    <addaction name="menu_file"/>
    <addaction name="menu_edit"/>
@@ -960,9 +962,6 @@ QMenu::item:selected {
    <property name="text">
     <string>圆柱度</string>
    </property>
-   <property name="shortcut">
-    <string>Ctrl+Y</string>
-   </property>
    <property name="menuRole">
     <enum>QAction::MenuRole::NoRole</enum>
    </property>
@@ -1057,6 +1056,28 @@ QMenu::item:selected {
    </property>
    <property name="toolTip">
     <string>可以用于测量垂直度</string>
+   </property>
+   <property name="menuRole">
+    <enum>QAction::MenuRole::NoRole</enum>
+   </property>
+  </action>
+  <action name="action_ed_undo">
+   <property name="text">
+    <string>撤回 ↺</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+Z</string>
+   </property>
+   <property name="menuRole">
+    <enum>QAction::MenuRole::NoRole</enum>
+   </property>
+  </action>
+  <action name="action_ed_redo">
+   <property name="text">
+    <string>重做 ↻</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+Y</string>
    </property>
    <property name="menuRole">
     <enum>QAction::MenuRole::NoRole</enum>

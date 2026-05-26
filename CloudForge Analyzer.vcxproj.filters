@@ -70,6 +70,9 @@
     <ClCompile Include="Src\CloudForgeAnalyzer.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="Src\UndoRedoManager.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="Src\Dialog\ParamDialog_ec.cpp">
       <Filter>Source Files\Dialog</Filter>
     </ClCompile>
@@ -125,6 +128,9 @@
       <Filter>Source Files\Basic</Filter>
     </ClCompile>
     <ClCompile Include="Src\Dialog\ParamDialogMeaGeodetic.cpp">
+      <Filter>Source Files\Dialog</Filter>
+    </ClCompile>
+    <ClCompile Include="Src\Dialog\ParamDialogMeasureHeight.cpp">
       <Filter>Source Files\Dialog</Filter>
     </ClCompile>
     <ClCompile Include="Src\Dialog\ParamDialogCurvSeg.cpp">
@@ -207,6 +213,9 @@
     <QtMoc Include="Inc\CloudForgeAnalyzer.h">
       <Filter>Header Files</Filter>
     </QtMoc>
+    <ClInclude Include="Inc\UndoRedoManager.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <QtMoc Include="Inc\Dialog\ParamDialog_ec.h">
       <Filter>Header Files\Dialog</Filter>
     </QtMoc>
@@ -241,6 +250,9 @@
       <Filter>Header Files\Basic</Filter>
     </QtMoc>
     <QtMoc Include="Inc\Dialog\ParamDialogMeaGeodetic.h">
+      <Filter>Header Files\Dialog</Filter>
+    </QtMoc>
+    <QtMoc Include="Inc\Dialog\ParamDialogMeasureHeight.h">
       <Filter>Header Files\Dialog</Filter>
     </QtMoc>
     <QtMoc Include="Inc\Dialog\ParamDialogCurvSeg.h">
