@@ -133,6 +133,9 @@
     <ClCompile Include="Src\Dialog\ParamDialogMeasureHeight.cpp">
       <Filter>Source Files\Dialog</Filter>
     </ClCompile>
+    <ClCompile Include="Src\Dialog\ParamDialogMeasureWeldHeight.cpp">
+      <Filter>Source Files\Dialog</Filter>
+    </ClCompile>
     <ClCompile Include="Src\Dialog\ParamDialogCurvSeg.cpp">
       <Filter>Source Files\Dialog</Filter>
     </ClCompile>
@@ -205,6 +208,9 @@
     <ClCompile Include="Src\Measure\MeasurePlanarity.cpp">
       <Filter>Source Files\Measure</Filter>
     </ClCompile>
+    <ClCompile Include="Src\Measure\MeasureWeldHeight.cpp">
+      <Filter>Source Files\Measure</Filter>
+    </ClCompile>
     <ClCompile Include="Src\Dialog\ChosePlaneDialog.cpp">
       <Filter>Source Files\Dialog</Filter>
     </ClCompile>
@@ -253,6 +259,9 @@
       <Filter>Header Files\Dialog</Filter>
     </QtMoc>
     <QtMoc Include="Inc\Dialog\ParamDialogMeasureHeight.h">
+      <Filter>Header Files\Dialog</Filter>
+    </QtMoc>
+    <QtMoc Include="Inc\Dialog\ParamDialogMeasureWeldHeight.h">
       <Filter>Header Files\Dialog</Filter>
     </QtMoc>
     <QtMoc Include="Inc\Dialog\ParamDialogCurvSeg.h">
@@ -381,6 +390,9 @@
       <Filter>Header Files\Fitting</Filter>
     </ClInclude>
     <ClInclude Include="Inc\Measure\MeasurePlanarity.h">
+      <Filter>Header Files\Measure</Filter>
+    </ClInclude>
+    <ClInclude Include="Inc\Measure\MeasureWeldHeight.h">
       <Filter>Header Files\Measure</Filter>
     </ClInclude>
   </ItemGroup>

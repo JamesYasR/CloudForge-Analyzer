@@ -119,9 +119,6 @@ void MeasureCylindricity::generateHeatMapCloud(const LineParams& line)
     }
 }
 
-// ============================================================================
-// 新增：获取优化后的轴线系数和参数
-// ============================================================================
 
 std::vector<float> MeasureCylindricity::getOptimizedAxisCoeffs() const
 {
@@ -132,10 +129,6 @@ MeasureCylindricity::LineParams MeasureCylindricity::getOptimizedAxisParams() co
 {
     return last_optimized_line_;
 }
-
-// ============================================================================
-// 原有函数实现（保持不变）
-// ============================================================================
 
 void MeasureCylindricity::setInputCloud(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud)
 {

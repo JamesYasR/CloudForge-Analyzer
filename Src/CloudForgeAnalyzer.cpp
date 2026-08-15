@@ -1,4 +1,5 @@
 #include "CloudForgeAnalyzer.h"
+#include "Dialog/ParamDialogMeasureWeldHeight.h"
 #include <thread>
 
 CloudForgeAnalyzer::CloudForgeAnalyzer(QWidget *parent)
@@ -93,6 +94,7 @@ void CloudForgeAnalyzer::InitalizeConnects() {
     connect(ui->measure_planarity, &QAction::triggered, this, &CloudForgeAnalyzer::Tool_MeasurePlanarity);
     connect(ui->measure_angleP2P, &QAction::triggered, this, &CloudForgeAnalyzer::Tool_MeasureAngleP2P);
     connect(ui->measure_Cylindricity, &QAction::triggered, this, &CloudForgeAnalyzer::Tool_MeasureCylindricity);
+    connect(ui->measure_weldheight, &QAction::triggered, this, &CloudForgeAnalyzer::Tool_MeasureWeldHeight);
     connect(ui->action_Clip, &QAction::triggered, this, &CloudForgeAnalyzer::Tool_Clip);
 }
 
@@ -370,6 +372,7 @@ void CloudForgeAnalyzer::Slot_fit_cy2_Triggered() {
     Eigen::Vector3f axis_dir(coeff1[3], coeff1[4], coeff1[5]);
     axis_dir.normalize(); // 确保方向向量是单位向量
     float line_length = 800.0f; 
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////////
     //Eigen::Vector3f p1 = axis_point - axis_dir * line_length;
     //Eigen::Vector3f p2 = axis_point + axis_dir * line_length;
 
@@ -388,8 +391,8 @@ void CloudForgeAnalyzer::Slot_fit_cy2_Triggered() {
     //AddActors(GenerateRandomName("axis"), lineActor1);
 
     //ui->winOfAnalyzer->renderWindow()->Render();
-    //ui->winOfAnalyzer->update();
-
+    //ui->winOfAnalyzer->update();`
+    //////////////////////////////////////////////////////////////////////////////////////////////////////////
     // 输出初次拟合信息
     Update_CFmes(fcy.message);
     TeEDebug(">>: 初次圆柱拟合完成。内点(绿)/外点(红)与圆柱体(initial_fit_cylinder)已可视化。");
@@ -783,6 +786,212 @@ void CloudForgeAnalyzer::Tool_MeasureCylindricity()
     // 9. 刷新视图
     ui->winOfAnalyzer->renderWindow()->Render();
     ui->winOfAnalyzer->update();
+}
+
+void CloudForgeAnalyzer::Tool_MeasureWeldHeight()
+{
+    // === 1. 选择焊缝点云（支持勾选多个）===
+    ChoseCloudDialog dialogWeld(CloudMap, ColorMap, "选择焊缝点云（可勾选多个）");
+    if (dialogWeld.exec() != QDialog::Accepted) {
+        TeEDebug(">>: 操作取消");
+        return;
+    }
+    auto weldNames = dialogWeld.getSelectedList();
+    if (weldNames.empty()) {
+        TeEDebug(">>: 未选择焊缝点云");
+        return;
+    }
+
+    // === 2. 选择壁面点云（单选）===
+    ChoseCloudDialog dialogBase(CloudMap, ColorMap, "选择圆柱壁面点云");
+    if (dialogBase.exec() != QDialog::Accepted) {
+        TeEDebug(">>: 操作取消");
+        return;
+    }
+    if (dialogBase.getSelectedList().empty()) {
+        TeEDebug(">>: 未选择壁面点云");
+        return;
+    }
+    pcl::PointCloud<pcl::PointXYZ>::Ptr baseCloud = CloudMap[dialogBase.getSelectedList()[0]];
+
+    // === 3. 参数设置 ===
+    ParamDialogMeasureWeldHeight paramDialog;
+    if (paramDialog.exec() != QDialog::Accepted) {
+        TeEDebug(">>: 操作取消");
+        return;
+    }
+    auto params = paramDialog.getParams();
+    bool ok1, ok2, ok3, ok4;
+    double searchR  = params[0].toDouble(&ok1);
+    double regionSz = params[1].toDouble(&ok2);
+    double ransacTh = params[2].toDouble(&ok3);
+    int minNei      = params[3].toInt(&ok4);
+    if (!ok1 || !ok2 || !ok3 || !ok4 || searchR <= 0 || regionSz <= 0) {
+        TeEDebug(">>: 参数无效");
+        return;
+    }
+
+    // === 4. 对每个焊缝点云独立处理 ===
+    m_weldMeasureShapeIds.clear();
+    std::string allReports;
+    for (size_t wi = 0; wi < weldNames.size(); ++wi) {
+        const std::string& weldName = weldNames[wi];
+        pcl::PointCloud<pcl::PointXYZ>::Ptr weldCloud = CloudMap[weldName];
+        if (!weldCloud || weldCloud->empty()) {
+            TeEDebug(">>: 焊缝点云 '" + weldName + "' 为空，跳过");
+            continue;
+        }
+
+        std::string prefix = "weld_" + std::to_string(wi) + "_";
+        TeEDebug(">>: 正在评估焊缝 '" + weldName + "' ...");
+
+        // 追踪形状 ID，供撤销时清理
+        m_weldMeasureShapeIds.push_back(prefix + "heatmap");
+        m_weldMeasureShapeIds.push_back(prefix + "sphere_high");
+        m_weldMeasureShapeIds.push_back(prefix + "text_high");
+
+        MeasureWeldHeight measurer;
+        measurer.setWeldCloud(weldCloud);
+        measurer.setBaseCloud(baseCloud);
+        measurer.setSearchRadius(searchR);
+        measurer.setRegionSize(regionSz);
+        measurer.setRansacThreshold(ransacTh);
+        measurer.setMinNeighbors(minNei);
+        measurer.setVerbose(true);
+
+        auto result = measurer.evaluate();
+
+        // --- 4a. 热力图可视化 ---
+        auto heatmap = measurer.getHeatMapCloud();
+        double minH, maxH;
+        measurer.getHeightRange(minH, maxH);
+        double maxAbsH = measurer.getMaxAbsHeight();
+
+        if (heatmap && !heatmap->empty()) {
+            std::string heatmap_id = prefix + "heatmap";
+
+            // 清除旧的
+            viewer->removePointCloud(heatmap_id);
+            viewer->removeShape(prefix + "colorbar");
+            viewer->removeShape(prefix + "sphere_high");
+            viewer->removeText3D(prefix + "text_high");
+
+            // 添加热力图点云
+            pcl::visualization::PointCloudColorHandlerRGBField<pcl::PointXYZRGB> rgb(heatmap);
+            viewer->addPointCloud<pcl::PointXYZRGB>(heatmap, rgb, heatmap_id);
+            viewer->setPointCloudRenderingProperties(
+                pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 3, heatmap_id);
+            RGBCloudMap.emplace(heatmap_id, heatmap);
+
+            // --- 颜色条（双方向发散）---
+            vtkRenderer* renderer = viewer->getRendererCollection()->GetFirstRenderer();
+            if (renderer) {
+                // 先清除所有旧的 vtkScalarBarActor，避免累积
+                {
+                    vtkPropCollection* props = renderer->GetViewProps();
+                    props->InitTraversal();
+                    std::vector<vtkProp*> barsToRemove;
+                    vtkProp* prop;
+                    while ((prop = props->GetNextProp()) != nullptr) {
+                        if (vtkScalarBarActor::SafeDownCast(prop)) {
+                            barsToRemove.push_back(prop);
+                        }
+                    }
+                    for (auto p : barsToRemove) {
+                        renderer->RemoveActor2D(static_cast<vtkActor2D*>(p));
+                    }
+                }
+
+                // 用 [0, 1] 正范围构建发散色表（规避 VTK 负值范围标签 bug）
+                vtkNew<vtkLookupTable> lut;
+                lut->SetTableRange(0.0, 1.0);
+                lut->SetNumberOfTableValues(256);
+
+                for (int i = 0; i < 256; ++i) {
+                    double t = i / 255.0;  // 0(蓝) → 0.5(绿) → 1(红)
+                    double r, g, b;
+                    if (t < 0.5) {
+                        double s = t * 2;
+                        r = 0.0; g = s; b = 1.0 - s;
+                    } else {
+                        double s = (t - 0.5) * 2;
+                        r = s; g = 1.0 - s; b = 0.0;
+                    }
+                    lut->SetTableValue(i, r, g, b);
+                }
+
+                // 设置标注：只在三个关键位置显示文字
+                auto fmtVal = [](double v) -> std::string {
+                    char buf[32];
+                    snprintf(buf, sizeof(buf), "%.1f", v);
+                    return std::string(buf);
+                };
+                lut->SetAnnotation(vtkVariant(0.0), fmtVal(-maxAbsH));
+                lut->SetAnnotation(vtkVariant(0.5), "0.0");
+                lut->SetAnnotation(vtkVariant(1.0), fmtVal(maxAbsH));
+                lut->Build();
+
+                vtkNew<vtkScalarBarActor> scalarBar;
+                scalarBar->SetLookupTable(lut);
+                scalarBar->SetTitle("mm");
+                scalarBar->SetMaximumNumberOfColors(256);
+                scalarBar->SetTextPosition(vtkScalarBarActor::PrecedeScalarBar);
+                scalarBar->SetDrawTickLabels(0);   // 关闭自动刻度标签，仅显示 annotations
+
+                vtkNew<vtkTextProperty> titleProp;
+                titleProp->SetFontSize(8);
+                titleProp->BoldOn();
+                titleProp->SetColor(1, 1, 1);
+                scalarBar->SetTitleTextProperty(titleProp);
+
+                vtkNew<vtkTextProperty> labelProp;
+                labelProp->SetFontSize(8);
+                labelProp->SetColor(0.9, 0.9, 0.9);
+                scalarBar->SetLabelTextProperty(labelProp);
+
+                scalarBar->SetPosition(0.87, 0.2);
+                scalarBar->SetWidth(0.06);
+                scalarBar->SetHeight(0.6);
+                scalarBar->SetPickable(0);
+                renderer->AddActor2D(scalarBar);
+            }
+
+            // --- 4b. 最高点标注 ---
+            if (result.valid_points > 0) {
+                std::string sphere_id = prefix + "sphere_high";
+                std::string text_id   = prefix + "text_high";
+
+                viewer->removeShape(sphere_id);
+                viewer->removeText3D(text_id);
+
+                const auto& hp = result.highest_point;
+                viewer->addSphere(hp, regionSz * 0.3, 1.0, 0.84, 0.0, sphere_id);
+                viewer->setShapeRenderingProperties(
+                    pcl::visualization::PCL_VISUALIZER_COLOR, 1.0, 0.84, 0.0, sphere_id);
+                viewer->setShapeRenderingProperties(
+                    pcl::visualization::PCL_VISUALIZER_OPACITY, 0.9, sphere_id);
+
+                // 3D 文字标签
+                std::string labelText = "Max: " + std::to_string(result.highest_value).substr(0, 6) + " mm";
+                viewer->addText3D(labelText,
+                    pcl::PointXYZ(hp.x + regionSz * 0.5, hp.y, hp.z + regionSz * 0.5),
+                    0.5, 1.0, 1.0, 1.0, text_id);
+            }
+
+            TeEDebug(">>: 焊缝 '" + weldName + "' 热力图与最高点标注完成");
+        }
+
+        // --- 4c. 输出报告 ---
+        TeEDebug(result.assessment_message);
+        if (!allReports.empty()) allReports += "\n\n";
+        allReports += result.assessment_message;
+    }
+    Update_CFmes(allReports);
+
+    // === 5. 刷新视图 ===
+    ui->winOfAnalyzer->renderWindow()->Render();
+    ui->winOfAnalyzer->update();
+    TeEDebug(">>: 焊缝高度测量完成。");
 }
 
 void CloudForgeAnalyzer::Tool_MeasureHeight() {
@@ -1804,7 +2013,7 @@ void CloudForgeAnalyzer::Slot_ed_dork_Triggered() {
 }
 void CloudForgeAnalyzer::Slot_ed_cleangeo_Triggered() {
     viewer->removeAllShapes();
-    clearAllActors();
+    //clearAllActors();
 
     ui->winOfAnalyzer->renderWindow()->Render();
     ui->winOfAnalyzer->update();
@@ -1906,8 +2115,11 @@ void CloudForgeAnalyzer::Slot_fl_2_Triggered() {
 		return;
     }
     ColorManager color(255, 255, 255);
-    ClearAllPointCloud();
+    DelePointCloud(dialog.getSelectedList()[0]);
     AddPointCloud("example", tempcloud, color);
+    ui->winOfAnalyzer->renderWindow()->Render();
+    ui->winOfAnalyzer->update();
+    
 }
 void CloudForgeAnalyzer::Slot_fl_1_Triggered() {
     ChoseCloudDialog dialog(CloudMap, ColorMap);
@@ -1925,8 +2137,10 @@ void CloudForgeAnalyzer::Slot_fl_1_Triggered() {
         return;
     }
     ColorManager color(255, 255, 255);
-    ClearAllPointCloud();
-    AddPointCloud("example", cloud, color);
+    DelePointCloud(dialog.getSelectedList()[0]);
+    AddPointCloud("example", tempcloud, color);
+    ui->winOfAnalyzer->renderWindow()->Render();
+    ui->winOfAnalyzer->update();
 }
 void CloudForgeAnalyzer::Slot_ph_1_Triggered() {
     ChoseCloudDialog dialog(CloudMap, ColorMap);
@@ -2105,12 +2319,42 @@ void CloudForgeAnalyzer::rebuildCloudVisualization() {
     UpdateCamera(0, 0, 1);
 }
 
+void CloudForgeAnalyzer::cleanWeldMeasureVisuals()
+{
+    // 清理 PCL 管理的形状（球体、文字、热力图点云）
+    for (const auto& id : m_weldMeasureShapeIds) {
+        viewer->removeShape(id);
+        viewer->removePointCloud(id);
+        viewer->removeText3D(id);
+        RGBCloudMap.erase(id);
+    }
+    m_weldMeasureShapeIds.clear();
+
+    // 清理 vtkActor2D 颜色条（不受 PCL 管理）
+    vtkRenderer* renderer = viewer->getRendererCollection()->GetFirstRenderer();
+    if (renderer) {
+        vtkPropCollection* props = renderer->GetViewProps();
+        props->InitTraversal();
+        std::vector<vtkProp*> barsToRemove;
+        vtkProp* prop;
+        while ((prop = props->GetNextProp()) != nullptr) {
+            if (vtkScalarBarActor::SafeDownCast(prop)) {
+                barsToRemove.push_back(prop);
+            }
+        }
+        for (auto p : barsToRemove) {
+            renderer->RemoveActor2D(static_cast<vtkActor2D*>(p));
+        }
+    }
+}
+
 void CloudForgeAnalyzer::Slot_ed_undo_Triggered() {
     if (!m_undoRedoManager.canUndo()) {
         TeEDebug("撤销: 没有更多历史记录");
         return;
     }
     std::string desc = m_undoRedoManager.undo(CloudMap, ColorMap);
+    cleanWeldMeasureVisuals();
     rebuildCloudVisualization();
     TeEDebug("已撤销: " + desc);
     Update_CFmes("已撤销: " + desc);
@@ -2122,6 +2366,7 @@ void CloudForgeAnalyzer::Slot_ed_redo_Triggered() {
         return;
     }
     std::string desc = m_undoRedoManager.redo(CloudMap, ColorMap);
+    cleanWeldMeasureVisuals();
     rebuildCloudVisualization();
     TeEDebug("已重做: " + desc);
     Update_CFmes("已重做: " + desc);
@@ -2254,7 +2499,6 @@ void CloudForgeAnalyzer::visualizeMeasurementResults(MeasureHeight& measurer,
     // 6. 设置相机位置以获得更好的视角[6](@ref)
     viewer->initCameraParameters();
     viewer->resetCamera();
-
     // 添加交互说明文本
     viewer->addText("按 'r' 重置视角, 按 'q' 退出", 10, 30, 12, 1.0, 1.0, 1.0, "help_text");
 

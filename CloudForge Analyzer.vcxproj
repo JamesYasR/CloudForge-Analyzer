@@ -159,6 +159,7 @@
     <ClCompile Include="Src\Dialog\ParamDialog_measureArc.cpp" />
     <ClCompile Include="Src\Dialog\ParamDialogMeaGeodetic.cpp" />
     <ClCompile Include="Src\Dialog\ParamDialogMeasureHeight.cpp" />
+    <ClCompile Include="Src\Dialog\ParamDialogMeasureWeldHeight.cpp" />
     <ClCompile Include="Src\Dialog\RmCloudDialog.cpp" />
     <ClCompile Include="Src\Dialog\SaveCloudDialog.cpp" />
     <ClCompile Include="Src\Dialog\SelectionDialog.cpp" />
@@ -178,6 +179,7 @@
     <ClCompile Include="Src\Measure\MeasureHeight.cpp" />
     <ClCompile Include="Src\Measure\MeasurePallel.cpp" />
     <ClCompile Include="Src\Measure\MeasurePlanarity.cpp" />
+    <ClCompile Include="Src\Measure\MeasureWeldHeight.cpp" />
     <ClCompile Include="Src\PreProcessing\Cluster.cpp" />
     <ClCompile Include="Src\PreProcessing\CurvatureSegmentation.cpp" />
     <ClCompile Include="Src\PreProcessing\Filter_sor.cpp" />
@@ -199,6 +201,7 @@
     <QtMoc Include="Inc\Basic\PointPickerMgr.h" />
     <QtMoc Include="Inc\Dialog\ParamDialogMeaGeodetic.h" />
     <QtMoc Include="Inc\Dialog\ParamDialogMeasureHeight.h" />
+    <QtMoc Include="Inc\Dialog\ParamDialogMeasureWeldHeight.h" />
     <QtMoc Include="Inc\Dialog\ParamDialogCurvSeg.h" />
     <ClInclude Include="Inc\Basic\Basic.h" />
     <ClInclude Include="Inc\Basic\CloudClipper.h" />
@@ -237,6 +240,7 @@
     <ClInclude Include="Inc\Measure\MeasureHeight.h" />
     <ClInclude Include="Inc\Measure\MeasurePallel.h" />
     <ClInclude Include="Inc\Measure\MeasurePlanarity.h" />
+    <ClInclude Include="Inc\Measure\MeasureWeldHeight.h" />
     <ClInclude Include="Inc\PreProcessing\Cluster.h" />
     <ClInclude Include="Inc\PreProcessing\CurvatureSegmentation.h" />
     <ClInclude Include="Inc\PreProcessing\Filter_sor.h" />

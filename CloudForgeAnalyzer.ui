@@ -520,6 +520,7 @@ font: 700 8pt &quot;Microsoft YaHei UI&quot;;</string>
    <addaction name="measure_Cylindricity"/>
    <addaction name="measure_planarity"/>
    <addaction name="measure_angleP2P"/>
+   <addaction name="measure_weldheight"/>
    <addaction name="separator"/>
    <addaction name="action_Clip"/>
    <addaction name="separator"/>
@@ -1078,6 +1079,21 @@ QMenu::item:selected {
    </property>
    <property name="shortcut">
     <string>Ctrl+Y</string>
+   </property>
+   <property name="menuRole">
+    <enum>QAction::MenuRole::NoRole</enum>
+   </property>
+  </action>
+  <action name="measure_weldheight">
+   <property name="icon">
+    <iconset resource="CloudForgeAnalyzer.qrc">
+     <normaloff>:/CloudForgeAnalyzer/Icons/icon_weldheight.png</normaloff>:/CloudForgeAnalyzer/Icons/icon_weldheight.png</iconset>
+   </property>
+   <property name="text">
+    <string>焊缝高度</string>
+   </property>
+   <property name="toolTip">
+    <string>焊缝高度</string>
    </property>
    <property name="menuRole">
     <enum>QAction::MenuRole::NoRole</enum>

@@ -19,4 +19,5 @@
 #include "ParamDialogMeausreCy.h"
 #include "ParamDialogMeasureHeight.h"
 #include "ChoseCyDialog.h"
+#include "ParamDialogMeasureWeldHeight.h"
 #include "OptionBox.h"

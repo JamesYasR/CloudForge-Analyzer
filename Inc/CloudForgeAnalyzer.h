@@ -68,6 +68,7 @@ private slots:
     void Tool_MeasureAngleP2P();
     void Tool_Clip();
     void Tool_MeasureCylindricity();
+    void Tool_MeasureWeldHeight();
     void Update_PointCounts();
 private:
     //  
@@ -122,6 +123,10 @@ private:
     std::map<std::string, pcl::ModelCoefficients::Ptr> cylinderResultsMap;
     std::map<std::string, pcl::ModelCoefficients::Ptr> planeResultsMap;
     std::map<std::string, vtkSmartPointer<vtkActor>> ActorMap;
+
+    // 焊缝高度测量形状追踪（用于撤销时清理）
+    std::vector<std::string> m_weldMeasureShapeIds;
+    void cleanWeldMeasureVisuals();
 
     void cleanGeodesicVisualization();
     void AddLine(const std::string& name,
