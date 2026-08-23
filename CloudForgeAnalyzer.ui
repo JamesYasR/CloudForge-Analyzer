@@ -705,6 +705,7 @@ QMenu::item:selected {
     </property>
     <addaction name="action_fit_cy"/>
     <addaction name="action_fit_cy2"/>
+    <addaction name="action_fit_cy3"/>
     <addaction name="action_fit_line"/>
     <addaction name="action_fit_plane"/>
    </widget>
@@ -1094,6 +1095,14 @@ QMenu::item:selected {
    </property>
    <property name="toolTip">
     <string>焊缝高度</string>
+   </property>
+   <property name="menuRole">
+    <enum>QAction::MenuRole::NoRole</enum>
+   </property>
+  </action>
+  <action name="action_fit_cy3">
+   <property name="text">
+    <string>三次约束圆柱</string>
    </property>
    <property name="menuRole">
     <enum>QAction::MenuRole::NoRole</enum>

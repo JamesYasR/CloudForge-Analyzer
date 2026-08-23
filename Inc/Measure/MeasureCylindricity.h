@@ -1,6 +1,7 @@
 #pragma once
 #include "config/pcl114.h"
 #include <memory>
+#include <vector>
 
 class MeasureCylindricity
 {
@@ -74,6 +75,12 @@ public:
     void setMaxIterations(int max_iters);
     void setVerbose(bool verbose);
 
+    // 新增：焊缝检测参数设置（第三阶段，均含默认值）
+    void setWeldThresholdFactor(double k);      // 稳健阈值系数(默认3.0, 越小检测越多)
+    void setWeldClusterTolerance(double eps);   // 欧氏聚类容差mm(默认2.0)
+    void setWeldMinClusterSize(int n);          // 最小簇点数(默认50)
+    void setWeldConstraintWeight(double lambda); // 焊缝约束权重(默认1.0)
+
     // 新增：设置初始直线参数接口
     void setInitialLine(const Eigen::Vector3f& center, const Eigen::Vector3f& axis);
     void setInitialLine(const LineParams& line);
@@ -101,6 +108,14 @@ public:
     // 新增：获取最后一次评估结果
     AssessmentResult getLastAssessmentResult() const { return last_assessment_result_; }
 
+    // 新增：焊缝约束的圆柱度评估（第二阶段后增加焊缝带检测与轴向修正）
+    AssessmentResult evaluateCylindricityWithWeld();
+
+    // 新增：获取检测到的焊缝点云（供可视化）
+    pcl::PointCloud<pcl::PointXYZ>::Ptr getWeldPoints() const { return weld_points_; }
+    int getWeldPointCount() const { return weld_points_ ? static_cast<int>(weld_points_->size()) : 0; }
+    bool isWeldConstraintApplied() const { return weld_constraint_applied_; }
+
    
 
 private:
@@ -125,6 +140,25 @@ private:
     // 直线参数工具
     LineParams initializeLineParameters(); // 初始化直线参数
     LineParams perturbLineParameters(const LineParams& line, float magnitude); // 参数扰动
+
+    // 新增：第二阶段粗到精确定性搜索（全局方向采样 + 固定半径圆心拟合 + 局部精化）
+    LineParams coarseToFineOptimization(); // 粗到精搜索主流程
+    static std::vector<Eigen::Vector3f> sampleDirectionsSphere(int n); // Fibonacci 球面均匀采样
+    void fitCircleCenterFixedRadius(const Eigen::Vector3f& direction,
+                                    const Eigen::Vector3f& c0,
+                                    Eigen::Vector2f& ab) const; // 固定半径圆心拟合(代数初值+Gauss-Newton)
+    void refineLineParams(const Eigen::Vector3f& c0, LineParams& line); // 四自由度 Nelder-Mead 联合精化
+    double evaluateCandidate(const Eigen::Vector3f& center,
+                             const Eigen::Vector3f& direction); // 候选轴线残差评估
+
+    // 新增：焊缝约束优化（第三阶段）
+    LineParams optimizeWithWeldConstraint(const LineParams& baseLine); // 检测焊缝带并修正轴线
+    bool detectWeldBand(const LineParams& line, std::vector<int>& weldIndices,
+                        Eigen::Vector3f& weldDirection); // 残差阈值+欧氏聚类+走向估计
+    double objectiveWithWeldConstraint(const LineParams& line,
+                                       const std::vector<int>& weldIndices); // 残差+焊缝轴向方差惩罚
+    void refineLineParamsWithWeld(const Eigen::Vector3f& c0, LineParams& line,
+                                  const std::vector<int>& weldIndices); // 含焊缝惩罚的局部精化
 
     // 新增：生成热力图点云
     void generateHeatMapCloud(const LineParams& line);
@@ -153,5 +187,15 @@ private:
     pcl::PointCloud<pcl::PointXYZRGB>::Ptr heatmap_cloud_;
     double min_distance_;
     double max_distance_;
+
+    // 新增：焊缝检测结果
+    pcl::PointCloud<pcl::PointXYZ>::Ptr weld_points_;
+    bool weld_constraint_applied_;
+
+    // 新增：焊缝检测参数（可由参数对话框调整）
+    double weld_thr_factor_;        // 稳健阈值系数
+    double weld_cluster_tolerance_; // 聚类容差(mm)
+    int weld_min_cluster_size_;     // 最小簇点数
+    double weld_lambda_;            // 焊缝约束权重
 
 };

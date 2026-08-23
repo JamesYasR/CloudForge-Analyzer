@@ -85,6 +85,7 @@ void CloudForgeAnalyzer::InitalizeConnects() {
     connect(ui->action_fl_2, &QAction::triggered, this, &CloudForgeAnalyzer::Slot_fl_2_Triggered);
     connect(ui->action_fit_cy, &QAction::triggered, this, &CloudForgeAnalyzer::Slot_fit_cy_Triggered);
     connect(ui->action_fit_cy2, &QAction::triggered, this, &CloudForgeAnalyzer::Slot_fit_cy2_Triggered);
+    connect(ui->action_fit_cy3, &QAction::triggered, this, &CloudForgeAnalyzer::Slot_fit_cy3_Triggered);
     connect(ui->action_fit_line, &QAction::triggered, this, &CloudForgeAnalyzer::Slot_fit_line_Triggered);
     connect(ui->action_fit_plane, &QAction::triggered, this, &CloudForgeAnalyzer::Slot_fit_plane_Triggered);
     connect(ui->measure_cylinder, &QAction::triggered,this, &CloudForgeAnalyzer::Tool_MeasureArc);
@@ -482,6 +483,164 @@ void CloudForgeAnalyzer::Slot_fit_cy2_Triggered() {
 
     TeEDebug(">>: 二次优化完成，几何体已更新。");
     Update_CFmes(finalMsg+ss.str());
+}
+
+void CloudForgeAnalyzer::Slot_fit_cy3_Triggered() {
+    // 1. 选择点云（含焊缝的原始壁面点云）
+    ChoseCloudDialog dialog(CloudMap, ColorMap, "选择点云进行圆柱拟合与焊缝约束优化");
+    if (dialog.exec() != QDialog::Accepted) {
+        TeEDebug(">>: 操作取消");
+        return;
+    }
+    if (dialog.getSelectedList().empty()) {
+        TeEDebug(">>: 未选择点云");
+        return;
+    }
+    pcl::PointCloud<pcl::PointXYZ>::Ptr Cloud_Temp = CloudMap[dialog.getSelectedList()[0]];
+
+    // 2. 第一步：初次圆柱拟合（半径约束 RANSAC）
+    Fit_Cylinder fcy(Cloud_Temp);
+    if (fcy.isCancelled) {
+        TeEDebug(">>: 圆柱拟合操作取消");
+        return;
+    }
+
+    // 获取初次拟合结果
+    Eigen::VectorXf coeff1 = fcy.Get_Coeff_in();
+    pcl::ModelCoefficients::Ptr cycoeff1(new pcl::ModelCoefficients);
+    cycoeff1->values.resize(7);
+    for (std::size_t i = 0; i < 7; ++i)
+        cycoeff1->values[i] = coeff1(i);
+
+    pcl::PointCloud<pcl::PointXYZ>::Ptr Cloud_Inliers = fcy.Get_Inliers();
+    pcl::PointCloud<pcl::PointXYZ>::Ptr Cloud_Outliers = fcy.Get_Outliers();
+    ColorManager color_inliers(0, 255, 0);   // 绿色-内点
+    ColorManager color_outliers(255, 0, 0);  // 红色-外点
+    beginUndoBatch("初始圆柱拟合");
+    AddPointCloud("initial_fit_inliers", Cloud_Inliers, color_inliers);
+    AddPointCloud("initial_fit_outliers", Cloud_Outliers, color_outliers);
+    endUndoBatch();
+
+    viewer->addCylinder(*cycoeff1, "initial_fit_cylinder");
+
+    // 输出初次拟合信息
+    Update_CFmes(fcy.message);
+    TeEDebug(">>: 初次圆柱拟合完成。内点(绿)/外点(红)与圆柱体(initial_fit_cylinder)已可视化。");
+
+    Eigen::Vector3f initial_center = fcy.get_center_point();
+    Eigen::Vector3f initial_axis = fcy.get_axis_direction();
+
+    // 3. 优化参数设置
+    ParamDialogMeausreCy pdialog;
+    if (pdialog.exec() != QDialog::Accepted) {
+        TeEDebug(">>: 参数设置取消，优化跳过。初次拟合结果已保存。");
+        addCylinderResult(GenerateRandomName("fitted_cylinder"), cycoeff1);
+        return;
+    }
+
+    double design_radius = pdialog.getParams()[0].toDouble();
+    double tolerance = pdialog.getParams()[1].toDouble();
+    int iters = pdialog.getParams()[2].toInt();
+
+    // 3.5 焊缝检测参数设置（取消则跳过焊缝约束，仅做无约束优化）
+    bool useWeldConstraint = false;
+    ParamDialogWeld wdialog;
+    if (wdialog.exec() == QDialog::Accepted) {
+        useWeldConstraint = true;
+    }
+    else {
+        TeEDebug(">>: 焊缝参数设置取消，跳过焊缝约束。");
+    }
+
+    // 4. 两阶段优化 + 焊缝约束修正（第三阶段）
+    MeasureCylindricity evaluator;
+    evaluator.setInputCloud(Cloud_Temp);
+    evaluator.setDesignRadius(design_radius);
+    evaluator.setTolerance(tolerance);
+    evaluator.setMaxIterations(iters);
+    evaluator.setVerbose(true);
+    evaluator.setInitialLine(initial_center, initial_axis); // 设置初始值
+    if (useWeldConstraint) {
+        evaluator.setWeldThresholdFactor(wdialog.getParams()[0].toDouble());
+        evaluator.setWeldClusterTolerance(wdialog.getParams()[1].toDouble());
+        evaluator.setWeldMinClusterSize(wdialog.getParams()[2].toInt());
+        evaluator.setWeldConstraintWeight(wdialog.getParams()[3].toDouble());
+    }
+
+    auto result = useWeldConstraint ? evaluator.evaluateCylindricityWithWeld()
+                                    : evaluator.evaluateCylindricity();
+
+    // 5. 可视化检测到的焊缝点（橙色），供用户核对
+    auto weld_cloud = evaluator.getWeldPoints();
+    if (weld_cloud && !weld_cloud->empty()) {
+        ColorManager color_weld(255, 128, 0);
+        beginUndoBatch("焊缝点");
+        AddPointCloud("weld_points", weld_cloud, color_weld);
+        endUndoBatch();
+        TeEDebug(">>: 检测到 " + std::to_string(weld_cloud->size()) + " 个焊缝点（橙色），已参与轴向修正。");
+    }
+    else {
+        TeEDebug(">>: 未检测到显著焊缝带，结果为无约束优化。");
+    }
+
+    // 6. 优化后圆柱与轴线可视化
+    Eigen::Vector3f optimized_center = result.getCylinderAxisPoint();
+    Eigen::Vector3f optimized_axis = result.getCylinderAxisDirection();
+
+    pcl::ModelCoefficients::Ptr cycoeff2(new pcl::ModelCoefficients);
+    cycoeff2->values.resize(7);
+    cycoeff2->values[0] = optimized_center.x();
+    cycoeff2->values[1] = optimized_center.y();
+    cycoeff2->values[2] = optimized_center.z();
+    cycoeff2->values[3] = optimized_axis.x();
+    cycoeff2->values[4] = optimized_axis.y();
+    cycoeff2->values[5] = optimized_axis.z();
+    cycoeff2->values[6] = static_cast<float>(design_radius); // 使用设定的设计半径
+
+    viewer->addCylinder(*cycoeff2, "optimized_fit_cylinder");
+
+    vtkSmartPointer<vtkLineSource> lineSource2 = vtkSmartPointer<vtkLineSource>::New();
+    optimized_axis.normalize();
+    float line_length = 800.0f;
+    Eigen::Vector3f p1_opt = optimized_center - optimized_axis * line_length;
+    Eigen::Vector3f p2_opt = optimized_center + optimized_axis * line_length;
+    lineSource2->SetPoint1(p1_opt.x(), p1_opt.y(), p1_opt.z());
+    lineSource2->SetPoint2(p2_opt.x(), p2_opt.y(), p2_opt.z());
+    lineSource2->Update();
+
+    vtkSmartPointer<vtkPolyDataMapper> mapper2 = vtkSmartPointer<vtkPolyDataMapper>::New();
+    mapper2->SetInputConnection(lineSource2->GetOutputPort());
+
+    vtkSmartPointer<vtkActor> lineActor2 = vtkSmartPointer<vtkActor>::New();
+    lineActor2->SetMapper(mapper2);
+    lineActor2->GetProperty()->SetColor(1.0, 0.0, 0.0); // 红色轴线
+    lineActor2->GetProperty()->SetLineWidth(3.0);
+
+    AddActors(GenerateRandomName("axis"), lineActor2);
+
+    ui->winOfAnalyzer->renderWindow()->Render();
+    ui->winOfAnalyzer->update();
+
+    // 7. 存储最终优化结果
+    std::string storedName = GenerateRandomName("optimized_cylinder");
+    addCylinderResult(storedName, cycoeff2);
+
+    std::stringstream ss;
+    ss << "圆柱拟合与焊缝约束优化完成。\n";
+    ss << "初次拟合轴线点: (" << initial_center.x() << ", "
+        << initial_center.y() << ", " << initial_center.z() << ")";
+    ss << "初次拟合轴线方向: (" << initial_axis.x() << ", "
+        << initial_axis.y() << ", " << initial_axis.z() << ")";
+    ss << "优化后轴线点: (" << optimized_center.x() << ", "
+        << optimized_center.y() << ", " << optimized_center.z() << ")";
+    ss << "优化后轴线方向: (" << optimized_axis.x() << ", "
+        << optimized_axis.y() << ", " << optimized_axis.z() << ")";
+    std::string finalMsg = "圆柱拟合与焊缝约束优化完成。\n";
+    finalMsg += "初次拟合：内点(绿)/外点(红)，圆柱体 'initial_fit_cylinder'\n";
+    finalMsg += "优化：圆柱体 'optimized_fit_cylinder'，焊缝点(橙) 'weld_points'\n";
+
+    TeEDebug(">>: 焊缝约束优化完成，几何体已更新。");
+    Update_CFmes(finalMsg + ss.str());
 }
 
 void CloudForgeAnalyzer::Tool_MeasureArc() {

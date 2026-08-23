@@ -1,4 +1,4 @@
-﻿#include "RmCloudDialog.h"
+#include "RmCloudDialog.h"
 #include "SaveCloudDialog.h"
 #include "ParamDialog_ec.h"
 #include "ParamDialog_sor.h"
@@ -17,6 +17,7 @@
 #include "ChoseLineDialog.h"
 #include "ChosePlaneDialog.h"
 #include "ParamDialogMeausreCy.h"
+#include "ParamDialogWeld.h"
 #include "ParamDialogMeasureHeight.h"
 #include "ChoseCyDialog.h"
 #include "ParamDialogMeasureWeldHeight.h"

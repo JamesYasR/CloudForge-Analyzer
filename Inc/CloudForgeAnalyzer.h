@@ -55,6 +55,7 @@ private slots:
     void Slot_ed_redo_Triggered();
     void Slot_fit_cy_Triggered();
     void Slot_fit_cy2_Triggered();
+    void Slot_fit_cy3_Triggered();
     void Slot_fit_plane_Triggered();
     void Slot_fit_line_Triggered();
     void Slot_ph_CurvSeg_Triggered();

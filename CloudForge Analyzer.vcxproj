@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" ToolsVersion="17.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|x64">
@@ -153,6 +153,7 @@
     <ClCompile Include="Src\Dialog\ParamDialogMeaArc.cpp" />
     <ClCompile Include="Src\Dialog\ParamDialogMeaArcB.cpp" />
     <ClCompile Include="Src\Dialog\ParamDialogMeasureCy.cpp" />
+    <ClCompile Include="Src\Dialog\ParamDialogWeld.cpp" />
     <ClCompile Include="Src\Dialog\ParamDialogProtrusion.cpp" />
     <ClCompile Include="Src\Dialog\ParamDialog_FittingLine.cpp" />
     <ClCompile Include="Src\Dialog\ParamDialog_FittingPlane.cpp" />
@@ -214,6 +215,7 @@
     <QtMoc Include="Inc\Dialog\ParamDialog_FittingLine.h" />
     <QtMoc Include="Inc\Dialog\ChoseLineDialog.h" />
     <QtMoc Include="Inc\Dialog\ParamDialogMeausreCy.h" />
+    <QtMoc Include="Inc\Dialog\ParamDialogWeld.h" />
     <QtMoc Include="Inc\Dialog\ChoseCyDialog.h" />
     <QtMoc Include="Inc\Dialog\ParamDialogMeaArc.h" />
     <QtMoc Include="Inc\Dialog\ParamDialogMeaArcB.h" />
