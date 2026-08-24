@@ -10,7 +10,7 @@
 #include "QDebug"
 //QINCLUDEEND
 //PCLINCLUDEHEAD
-#include <Boost/smart_ptr/make_shared.hpp>
+#include <boost/smart_ptr/make_shared.hpp>
 #include <pcl/common/common_headers.h>
 #include <pcl/io/pcd_io.h>
 #include <pcl/point_cloud.h>

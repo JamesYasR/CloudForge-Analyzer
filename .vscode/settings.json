@@ -1,0 +1,13 @@
+{
+  "cmake.buildDirectory": "${workspaceFolder}/build",
+  "cmake.configureOnOpen": false,
+  "cmake.parallelJobs": 0,
+  "cmake.useCMakePresets": "never",
+  "cmake.configureArgs": [
+    "-DCMAKE_BUILD_TYPE=Debug",
+    "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON"
+  ],
+  "files.associations": {
+    "*.nsi": "nsis"
+  }
+}

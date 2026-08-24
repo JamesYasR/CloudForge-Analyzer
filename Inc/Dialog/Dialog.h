@@ -11,7 +11,7 @@
 #include "ParamDialogMeaArc.h"
 #include "ParamDialogMeaArcB.h"
 #include "ParamDialogCurvSeg.h"
-#include "​​ParamDialogProtrusion.h"
+#include "ParamDialogProtrusion.h"
 #include "ParamDialog_FittingLine.h"
 #include "SelectionDialog.h"
 #include "ChoseLineDialog.h"

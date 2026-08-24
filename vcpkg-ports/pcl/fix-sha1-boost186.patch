@@ -1,0 +1,18 @@
+--- a/visualization/src/pcl_visualizer.cpp	2026-08-24 00:55:56.192561444 +0800
++++ b/visualization/src/pcl_visualizer.cpp	2026-08-24 00:55:56.209447305 +0800
+@@ -4590,10 +4590,13 @@
+     // Build camera filename
+     if (valid)
+     {
+-      unsigned int digest[5];
++      unsigned char digest[20];
+       sha1.get_digest (digest);
+       sstream << ".";
+-      sstream << std::hex << digest[0] << digest[1] << digest[2] << digest[3] << digest[4];
++      for (unsigned char c : digest)
++      {
++        sstream << std::hex << static_cast<unsigned int> (c);
++      }
+       sstream << ".cam";
+     }
+   }

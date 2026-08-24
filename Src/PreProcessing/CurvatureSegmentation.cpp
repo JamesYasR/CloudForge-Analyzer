@@ -1,4 +1,4 @@
-#include "preprocessing/CurvatureSegmentation.h"
+#include "PreProcessing/CurvatureSegmentation.h"
 #include <unordered_set>
 #include <pcl/common/common.h> 
 #include <mutex> // 添加此头文件以修复 std::mutex 未定义的问题

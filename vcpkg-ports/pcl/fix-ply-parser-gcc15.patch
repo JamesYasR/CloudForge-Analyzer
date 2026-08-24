@@ -1,0 +1,49 @@
+--- a/io/include/pcl/io/ply/ply_parser.h	2026-08-24 00:50:52.106917867 +0800
++++ b/io/include/pcl/io/ply/ply_parser.h	2026-08-24 00:50:52.121227306 +0800
+@@ -56,6 +56,7 @@
+ #include <boost/mpl/joint_view.hpp> // for joint_view
+ #include <boost/mpl/transform.hpp> // for transform
+ #include <boost/mpl/vector.hpp> // for vector
++#include <functional>
+ 
+ namespace pcl
+ {
+@@ -183,13 +184,13 @@
+           template <typename SizeType, typename ScalarType>
+           struct list_property_definition_callback_type
+           {
+-            using list_property_begin_callback_type = typename list_property_begin_callback_type<SizeType, ScalarType>::type;
+-            using list_property_element_callback_type = typename list_property_element_callback_type<SizeType, ScalarType>::type;
+-            using list_property_end_callback_type = typename list_property_end_callback_type<SizeType, ScalarType>::type;
++            using list_property_begin_callback_t = typename list_property_begin_callback_type<SizeType, ScalarType>::type;
++            using list_property_element_callback_t = typename list_property_element_callback_type<SizeType, ScalarType>::type;
++            using list_property_end_callback_t = typename list_property_end_callback_type<SizeType, ScalarType>::type;
+             using type = std::function<std::tuple<
+-              list_property_begin_callback_type,
+-              list_property_element_callback_type,
+-              list_property_end_callback_type
++              list_property_begin_callback_t,
++              list_property_element_callback_t,
++              list_property_end_callback_t
+               > (const std::string&, const std::string&)>;
+           };
+ 
+@@ -508,12 +509,12 @@
+ {
+   using size_type = SizeType;
+   using scalar_type = ScalarType;
+-  using list_property_definition_callback_type = typename  list_property_definition_callback_type<size_type, scalar_type>::type;
+-  list_property_definition_callback_type& list_property_definition_callback = list_property_definition_callbacks_.get<size_type, scalar_type> ();
+-  using list_property_begin_callback_type = typename list_property_begin_callback_type<size_type, scalar_type>::type;
+-  using list_property_element_callback_type = typename list_property_element_callback_type<size_type, scalar_type>::type;
+-  using list_property_end_callback_type = typename list_property_end_callback_type<size_type, scalar_type>::type;
+-  std::tuple<list_property_begin_callback_type, list_property_element_callback_type, list_property_end_callback_type> list_property_callbacks;
++  using list_property_definition_callback_t = typename list_property_definition_callback_type<size_type, scalar_type>::type;
++  list_property_definition_callback_t& list_property_definition_callback = list_property_definition_callbacks_.get<size_type, scalar_type> ();
++  using list_property_begin_callback_t = typename list_property_begin_callback_type<size_type, scalar_type>::type;
++  using list_property_element_callback_t = typename list_property_element_callback_type<size_type, scalar_type>::type;
++  using list_property_end_callback_t = typename list_property_end_callback_type<size_type, scalar_type>::type;
++  std::tuple<list_property_begin_callback_t, list_property_element_callback_t, list_property_end_callback_t> list_property_callbacks;
+   if (list_property_definition_callback)
+   {
+     list_property_callbacks = list_property_definition_callback (current_element_->name, property_name);

@@ -1114,7 +1114,7 @@ QMenu::item:selected {
   <customwidget>
    <class>QVTKOpenGLNativeWidget</class>
    <extends>QOpenGLWidget</extends>
-   <header>qvtkopenglnativewidget.h</header>
+   <header>QVTKOpenGLNativeWidget.h</header>
   </customwidget>
  </customwidgets>
  <resources>

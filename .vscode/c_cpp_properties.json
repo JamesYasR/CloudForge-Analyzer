@@ -1,0 +1,72 @@
+{
+  "version": 4,
+  "configurations": [
+    {
+      "name": "Ubuntu 26.04 LTS",
+      "compileCommands": "${workspaceFolder}/build/compile_commands.json",
+      "compilerPath": "/usr/bin/g++",
+      "cStandard": "c17",
+      "cppStandard": "c++17",
+      "intelliSenseMode": "linux-gcc-x64",
+      "includePath": [
+        "${workspaceFolder}",
+        "${workspaceFolder}/Inc",
+        "${workspaceFolder}/Src",
+        "${workspaceFolder}/vcpkg_installed/x64-linux/include",
+        "${workspaceFolder}/build/vcpkg_installed/x64-linux/include",
+        "${workspaceFolder}/build/vcpkg_installed/x64-linux/include/pcl-1.14",
+        "${workspaceFolder}/build/vcpkg_installed/x64-linux/include/vtk-9.3",
+        "${workspaceFolder}/vcpkg_installed/x64-linux/include/pcl-1.14",
+        "${workspaceFolder}/vcpkg_installed/x64-linux/include/vtk-9.3",
+        "/usr/local/include/pcl-1.14",
+        "/usr/local/include/vtk-9.3",
+        "/opt/Qt/6.7.3/gcc_64/include",
+        "/opt/Qt/6.7.3/gcc_64/include/QtCore",
+        "/opt/Qt/6.7.3/gcc_64/include/QtGui",
+        "/opt/Qt/6.7.3/gcc_64/include/QtWidgets",
+        "/opt/Qt/6.7.3/gcc_64/include/QtOpenGL",
+        "/opt/Qt/6.7.3/gcc_64/include/QtOpenGLWidgets",
+        "/opt/Qt/6.7.3/gcc_64/include/QtConcurrent",
+        "/home/jamesyasr/Qt/6.7.3/gcc_64/include",
+        "/home/jamesyasr/Qt/6.7.3/gcc_64/include/QtCore",
+        "/home/jamesyasr/Qt/6.7.3/gcc_64/include/QtGui",
+        "/home/jamesyasr/Qt/6.7.3/gcc_64/include/QtWidgets",
+        "/home/jamesyasr/Qt/6.7.3/gcc_64/include/QtOpenGL",
+        "/home/jamesyasr/Qt/6.7.3/gcc_64/include/QtOpenGLWidgets",
+        "/home/jamesyasr/Qt/6.7.3/gcc_64/include/QtConcurrent",
+        "/usr/include/x86_64-linux-gnu/qt6",
+        "/usr/include/x86_64-linux-gnu/qt6/QtCore",
+        "/usr/include/x86_64-linux-gnu/qt6/QtGui",
+        "/usr/include/x86_64-linux-gnu/qt6/QtWidgets",
+        "/usr/include/x86_64-linux-gnu/qt6/QtOpenGL",
+        "/usr/include/x86_64-linux-gnu/qt6/QtOpenGLWidgets",
+        "/usr/include/x86_64-linux-gnu/qt6/QtConcurrent",
+        "/usr/include/eigen3",
+        "/usr/include/boost",
+        "/usr/include/flann",
+        "/usr/include/qhull",
+        "/usr/include/pcl-1.14",
+        "/usr/include/vtk-9.3",
+        "/usr/include/pcl-1.15",
+        "/usr/local/include/pcl-1.15",
+        "/usr/include/vtk-9.5",
+        "/usr/local/include/vtk-9.5"
+      ],
+      "defines": [
+        "_USE_MATH_DEFINES",
+        "NOMINMAX"
+      ],
+      "compilerArgs": [
+        "-fopenmp"
+      ],
+      "browse": {
+        "path": [
+          "${workspaceFolder}",
+          "/usr/include",
+          "/usr/local/include"
+        ],
+        "limitSymbolsToIncludedHeaders": true
+      }
+    }
+  ]
+}

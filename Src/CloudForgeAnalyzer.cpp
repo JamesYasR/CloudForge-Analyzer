@@ -1,6 +1,8 @@
 #include "CloudForgeAnalyzer.h"
 #include "Dialog/ParamDialogMeasureWeldHeight.h"
 #include <thread>
+#include <omp.h> // OpenMP 并行: MSVC(/openmp) 与 GCC(-fopenmp) 双平台兼容
+#include <random> // 线程私有随机数 (std::mt19937)
 
 CloudForgeAnalyzer::CloudForgeAnalyzer(QWidget *parent)
     : QMainWindow(parent)
@@ -1878,6 +1880,9 @@ void CloudForgeAnalyzer::Slot_fi_openSTL_Triggered() {
                 {
                     pcl::PointCloud<pcl::PointXYZ>::Ptr localCloud(new pcl::PointCloud<pcl::PointXYZ>);
 
+                    // 线程私有随机数生成器（rand 线程不安全，双平台 MSVC/GCC 下都有数据竞争）
+                    std::mt19937 rng(std::random_device{}() ^ static_cast<unsigned>(omp_get_thread_num()));
+
 #pragma omp for nowait
                     for (int i = batchStart; i < batchEnd; ++i) {
                         if (mesh.polygons[i].vertices.size() == 3) {
@@ -1907,8 +1912,8 @@ void CloudForgeAnalyzer::Slot_fi_openSTL_Triggered() {
 
                             for (int layer = 0; layer < 3; ++layer) {
                                 for (int j = 0; j < samplesPerTriangle; ++j) {
-                                    float r1 = static_cast<float>(rand()) / RAND_MAX;
-                                    float r2 = static_cast<float>(rand()) / RAND_MAX;
+                                    float r1 = static_cast<float>(rng()) / rng.max();
+                                    float r2 = static_cast<float>(rng()) / rng.max();
 
                                     if (r1 + r2 > 1.0f) {
                                         r1 = 1.0f - r1;

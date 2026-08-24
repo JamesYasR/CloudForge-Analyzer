@@ -3,7 +3,7 @@
 #include <pcl/point_types.h>
 #include <pcl/kdtree/kdtree_flann.h>
 #include <pcl/filters/extract_indices.h>
-#include "Dialog/​​ParamDialogProtrusion.h"
+#include "Dialog/ParamDialogProtrusion.h"
 #include <Eigen/Dense>
 
 class ProtrusionSegmentation {

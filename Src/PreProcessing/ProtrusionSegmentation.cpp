@@ -1,4 +1,4 @@
-#include "preprocessing/ProtrusionSegmentation.h"
+#include "PreProcessing/ProtrusionSegmentation.h"
 #include <pcl/kdtree/kdtree_flann.h>
 #include <pcl/filters/extract_indices.h>
 #include <pcl/segmentation/extract_clusters.h>

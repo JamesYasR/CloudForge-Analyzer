@@ -17,5 +17,5 @@
 #include <pcl/visualization/cloud_viewer.h>
 #include <QtWidgets/QMainWindow>
 #include "CloudForgeAnalyzer.h"
-#include <qstring.h>
-#include <qdebug.h>
+#include <QString>
+#include <QDebug>

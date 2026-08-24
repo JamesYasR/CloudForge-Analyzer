@@ -15,8 +15,8 @@
 #include <QMessageBox>
 #include <pcl/visualization/pcl_visualizer.h>
 #include <pcl/io/pcd_io.h>
-#include <QDIR>
-#include <QFILEDIALOG>
+#include <QDir>
+#include <QFileDialog>
 #include <pcl/common/transforms.h>  // 变换操作
 #include <vtkMatrix4x4.h>           // VTK矩阵
 #include <pcl/point_types_conversion.h> // 点云转换

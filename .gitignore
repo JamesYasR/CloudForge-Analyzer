@@ -386,3 +386,11 @@ FodyWeavers.xsd
 /PCDfiles/savetest2.pcd
 *.pcd
 *.pcd
+
+# CloudForge Analyzer CMake / VS Code / vcpkg local outputs
+/build/
+/build-*/
+/stage/
+/vcpkg_installed/
+/CMakeUserPresets.json
+/.cache/

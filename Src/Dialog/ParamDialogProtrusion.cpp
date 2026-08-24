@@ -1,4 +1,4 @@
-#include "Dialog/​​ParamDialogProtrusion.h"
+#include "Dialog/ParamDialogProtrusion.h"
 
 ParamDialogProtrusion::ParamDialogProtrusion(QWidget* parent)
     : ParamDialogBase(parent)

@@ -1,0 +1,178 @@
+name: build-windows-installer
+
+# 触发方式：
+#   - 推送 v* 标签（如 v1.0.0）自动出安装包
+#   - 在 GitHub 页面手动点击 Run workflow
+# 日常 push 不触发，避免每次提交都全量编译 PCL/VTK/Qt。
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+  actions: write # x-gha 二进制缓存需要 cache/actions 权限
+
+env:
+  VCPKG_ROOT: ${{ github.workspace }}/vcpkg
+  VCPKG_DEFAULT_TRIPLET: x64-windows
+  # vcpkg 二进制缓存：首次构建较慢，命中缓存后 PCL/VTK/Qt 无需重复编译
+  VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
+  # 限制 vcpkg 并行编译数，避免 Windows runner 内存不足
+  VCPKG_MAX_CONCURRENCY: "16"
+  # 与 CMake 的 -DVCPKG_INSTALLED_DIR 保持一致
+  VCPKG_INSTALLED_DIR: ${{ github.workspace }}/vcpkg_installed
+  STAGE_DIR: ${{ github.workspace }}/stage
+  ARTIFACT_DIR: ${{ github.workspace }}/artifacts
+
+jobs:
+  build-windows-installer:
+    runs-on: windows-latest
+    # GitHub Actions 普通 job 上限为 360 分钟；首次全量编译依赖较慢，
+    # 之后依靠 x-gha 二进制缓存加速。
+    timeout-minutes: 360
+
+    steps:
+      # ---------------------------------------------------------------
+      # 1. 拉取本仓库代码
+      # ---------------------------------------------------------------
+      - name: Check out source code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      # ---------------------------------------------------------------
+      # 2. 拉取 vcpkg 并安装 PCL 1.14.0 / VTK 9.3.0 / Qt 6.7.3。
+      #    vcpkgGitCommitId 必须与 vcpkg.json 的 builtin-baseline 一致。
+      #    vcpkg.json 只 override PCL 和 Qt；VTK 使用 vcpkg-ports/vtk
+      #    overlay port，拉取 Kitware/VTK v9.3.0 官方 tag 精确构建。
+      # ---------------------------------------------------------------
+      - name: Setup vcpkg and install dependencies
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgDirectory: "${{ github.workspace }}/vcpkg"
+          vcpkgGitCommitId: "b2cb0da531c2f1f740045bfe7c4dac59f0b2b69c"
+          vcpkgJsonGlob: "**/vcpkg.json"
+          runVcpkgInstall: true
+          doNotCache: false
+
+      # ---------------------------------------------------------------
+      # 3. 校验安装出的 VTK 是官方 9.3.0，而不是 ParaView 补丁版 pv5.12.1
+      # ---------------------------------------------------------------
+      - name: Verify exact VTK version from vcpkg
+        shell: pwsh
+        run: |
+          $vtkLine = & "$env:VCPKG_ROOT\vcpkg.exe" list | Select-String -Pattern '^vtk:'
+          $line = $vtkLine.Line
+          Write-Host "vcpkg vtk line: $line"
+          if (-not $line) {
+            throw "vtk was not found in vcpkg list output"
+          }
+          if ($line -notmatch '9\.3\.0' -or $line -match 'pv5') {
+            throw "Expected exact VTK 9.3.0 from overlay port, got: $line"
+          }
+
+      # ---------------------------------------------------------------
+      # 4. 使用 MSVC(v143) 配置 Release/x64
+      # ---------------------------------------------------------------
+      - name: Configure CMake (MSVC x64 Release)
+        shell: pwsh
+        run: |
+          cmake -S . -B build `
+            -G "Visual Studio 17 2022" `
+            -A x64 `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" `
+            -DVCPKG_INSTALLED_DIR="$env:VCPKG_INSTALLED_DIR" `
+            -DVCPKG_TARGET_TRIPLET=x64-windows `
+            -DVCPKG_OVERLAY_PORTS="$env:GITHUB_WORKSPACE/vcpkg-ports" `
+            -DVCPKG_OVERLAY_TRIPLETS="$env:GITHUB_WORKSPACE/vcpkg-triplets" `
+            -DCMAKE_INSTALL_PREFIX="$env:STAGE_DIR"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      # ---------------------------------------------------------------
+      # 5. MSVC Release 编译
+      # ---------------------------------------------------------------
+      - name: Build Release
+        shell: pwsh
+        run: |
+          cmake --build build --config Release --parallel 16
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      # ---------------------------------------------------------------
+      # 6. 安装到 stage 目录。
+      #    CMake install 会执行：
+      #      a) 安装 exe + PCDfiles
+      #      b) 复制 vcpkg x64-windows/bin 下全部 release DLL
+      #      c) 运行 qt_generate_deploy_app_script 生成的脚本
+      #         （内部调用 windeployqt，补齐 Qt 插件与 MSVC 运行库）
+      # ---------------------------------------------------------------
+      - name: Deploy runtime into stage directory
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path "$env:STAGE_DIR" | Out-Null
+          cmake --install build --config Release --prefix "$env:STAGE_DIR"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Write-Host "=== stage directory ==="
+          Get-ChildItem -Recurse "$env:STAGE_DIR" | Select-Object FullName | Format-Table -AutoSize
+
+      # ---------------------------------------------------------------
+      # 7. 计算安装包版本号
+      # ---------------------------------------------------------------
+      - name: Compute package version
+        id: version
+        shell: pwsh
+        run: |
+          $v = "${{ github.ref_name }}"
+          if ($v -match '^v?(\d+\.\d+\.\d+)') {
+            $v = $Matches[1]
+          } else {
+            $v = "1.0.0"
+          }
+          "APP_VERSION=$v" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "version=$v" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          Write-Host "APP_VERSION=$v"
+
+      # ---------------------------------------------------------------
+      # 8. 准备 NSIS 并打包
+      #    NSIS 脚本本身还会执行一次 VCPKG_BIN_DIR -> stage 的 DLL 全量
+      #    收集（幂等），确保即使 CMake 部署步骤被裁剪也能独立运行。
+      # ---------------------------------------------------------------
+      - name: Build NSIS installer
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path "$env:ARTIFACT_DIR" | Out-Null
+
+          $makensis = "C:\Program Files (x86)\NSIS\makensis.exe"
+          if (!(Test-Path $makensis)) {
+            Write-Host "NSIS not found, installing via Chocolatey..."
+            choco install nsis --no-progress -y
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+
+          $vcpkgBin = Join-Path $env:VCPKG_INSTALLED_DIR "x64-windows\bin"
+          if (!(Test-Path $vcpkgBin)) {
+            throw "vcpkg bin directory not found: $vcpkgBin"
+          }
+
+          & $makensis /V2 `
+            "/DAPP_VERSION=$env:APP_VERSION" `
+            "/DAPP_BUILD_DIR=$env:STAGE_DIR" `
+            "/DVCPKG_BIN_DIR=$vcpkgBin" `
+            "/DOUTPUT_DIR=$env:ARTIFACT_DIR" `
+            "$env:GITHUB_WORKSPACE\cmake\nsis\CloudForgeAnalyzer.nsi"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+          Get-ChildItem "$env:ARTIFACT_DIR" | Select-Object Name, Length
+
+      # ---------------------------------------------------------------
+      # 9. 上传安装包
+      # ---------------------------------------------------------------
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: CloudForgeAnalyzer-Windows-x64-Installer-${{ steps.version.outputs.version }}
+          path: ${{ github.workspace }}/artifacts/*.exe
+          if-no-files-found: error
+          retention-days: 30

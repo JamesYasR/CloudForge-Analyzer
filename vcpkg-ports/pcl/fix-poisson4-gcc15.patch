@@ -1,0 +1,49 @@
+--- a/surface/include/pcl/surface/3rdparty/poisson4/sparse_matrix.hpp	2026-08-24 01:06:13.541957808 +0800
++++ b/surface/include/pcl/surface/3rdparty/poisson4/sparse_matrix.hpp	2026-08-24 01:06:13.549091136 +0800
+@@ -1,3 +1,4 @@
++#include <algorithm>
+ /*
+ Copyright (c) 2006, Michael Kazhdan and Matthew Bolitho
+ All rights reserved.
+@@ -228,14 +229,17 @@
+     template<class T>
+     void SparseMatrix<T>::SetZero()
+     {
+-      Resize(this->m_N, this->m_M);
++      for (int i=0; i<rows; i++)
++      {
++        for(int ii=0;ii<rowSizes[i];ii++){m_ppElements[i][ii].Value=T(0);}
++      }
+     }
+ 
+     template<class T>
+     void SparseMatrix<T>::SetIdentity()
+     {
+       SetZero();
+-      for(int ij=0; ij < Min( this->Rows(), this->Columns() ); ij++)
++      for(int ij=0; ij < std::min<int>( rows, _maxEntriesPerRow ); ij++)
+         (*this)(ij,ij) = T(1);
+     }
+ 
+@@ -388,7 +392,7 @@
+       T alpha,beta,rDotR;
+       int i;
+ 
+-      solution.Resize(M.Columns());
++      solution.Resize(bb.Dimensions());
+       solution.SetZero();
+ 
+       d=r=bb;
+--- /tmp/a/surface/include/pcl/surface/3rdparty/poisson4/octree_poisson.hpp	2026-08-24 01:06:02.637757832 +0800
++++ /tmp/b/surface/include/pcl/surface/3rdparty/poisson4/octree_poisson.hpp	2026-08-24 01:06:02.644257140 +0800
+--- a/surface/include/pcl/surface/3rdparty/poisson4/octree_poisson.hpp	2026-08-24 01:06:02.637757832 +0800
++++ b/surface/include/pcl/surface/3rdparty/poisson4/octree_poisson.hpp	2026-08-24 01:06:02.644257140 +0800
+@@ -807,7 +807,7 @@
+       children=NULL;
+ 
+       d=node.depth ();
+-      for(i=0;i<DIMENSION;i++){this->offset[i] = node.offset[i];}
++      for(i=0;i<DIMENSION;i++){this->off[i] = node.off[i];}
+       if(node.children){
+         initChildren();
+         for(i=0;i<Cube::CORNERS;i++){children[i] = node.children[i];}
