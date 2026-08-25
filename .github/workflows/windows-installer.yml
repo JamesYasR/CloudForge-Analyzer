@@ -17,8 +17,10 @@ permissions:
 env:
   VCPKG_ROOT: ${{ github.workspace }}/vcpkg
   VCPKG_DEFAULT_TRIPLET: x64-windows
-  # vcpkg 二进制缓存：首次构建较慢，命中缓存后 PCL/VTK/Qt 无需重复编译
-  VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
+  # 注意：不要用 x-gha 二进制缓存，它需要 run-vcpkg 注入的
+  # ACTIONS_RUNTIME_TOKEN / ACTIONS_CACHE_URL 环境变量；裸 vcpkg 命令下没有，
+  # 会报错 "GHA binary source requires the ACTIONS_RUNTIME_TOKEN..."。
+  # 这里留空走默认（纯本地构建，无缓存复用）。
   # 限制 vcpkg 并行编译数，避免 Windows runner 内存不足
   VCPKG_MAX_CONCURRENCY: "16"
   # 与 CMake 的 -DVCPKG_INSTALLED_DIR 保持一致
