@@ -61,6 +61,9 @@ jobs:
         shell: pwsh
         run: |
           cd "$env:GITHUB_WORKSPACE"
+          # 强制清空 binary sources，避免 runner 环境带入 x-gha 缓存配置
+          # （x-gha 需要 ACTIONS_RUNTIME_TOKEN/ACTIONS_CACHE_URL，裸 vcpkg 下没有会报错）
+          $env:VCPKG_BINARY_SOURCES = "clear"
           # 详细日志：输出到 vcpkg-install.log，失败时打印关键错误段
           & "$env:VCPKG_ROOT\vcpkg.exe" install `
             --triplet "$env:VCPKG_DEFAULT_TRIPLET" `
