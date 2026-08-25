@@ -53,7 +53,10 @@ jobs:
         with:
           vcpkgDirectory: "${{ github.workspace }}/vcpkg"
           vcpkgGitCommitId: "b2cb0da531c2f1f740045bfe7c4dac59f0b2b69c"
-          vcpkgJsonGlob: "**/vcpkg.json"
+          # 精确指向根目录唯一的 vcpkg.json（不能用 **/，否则会误匹配
+          # vcpkg-ports/pcl|vtk/vcpkg.json 这两个 overlay 元数据文件）
+          vcpkgJsonGlob: "vcpkg.json"
+          workingDirectory: "${{ github.workspace }}"
           runVcpkgInstall: true
           doNotCache: false
 
