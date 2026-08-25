@@ -21,6 +21,9 @@ env:
   VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
   # 限制 vcpkg 并行编译数，避免 Windows runner 内存不足
   VCPKG_MAX_CONCURRENCY: "16"
+  # 下载失败自动重试更多次，减轻 Windows runner 上 GitHub/源站下载抖动
+  VCPKG_DOWNLOAD_RETRIES: "5"
+  VCPKG_FORCE_SYSTEM_BINARIES: "1"
   # 与 CMake 的 -DVCPKG_INSTALLED_DIR 保持一致
   VCPKG_INSTALLED_DIR: ${{ github.workspace }}/vcpkg_installed
   STAGE_DIR: ${{ github.workspace }}/stage
