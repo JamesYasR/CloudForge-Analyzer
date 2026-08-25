@@ -59,10 +59,27 @@ jobs:
         shell: pwsh
         run: |
           cd "$env:GITHUB_WORKSPACE"
+          # 详细日志：输出到 vcpkg-install.log，失败时打印关键错误段
           & "$env:VCPKG_ROOT\vcpkg.exe" install `
             --triplet "$env:VCPKG_DEFAULT_TRIPLET" `
-            --x-install-root "$env:VCPKG_INSTALLED_DIR"
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            --x-install-root "$env:VCPKG_INSTALLED_DIR" 2>&1 | Tee-Object -FilePath "$env:GITHUB_WORKSPACE\vcpkg-install.log"
+          $code = $LASTEXITCODE
+          Write-Host "=== vcpkg install exit code: $code ==="
+          if ($code -ne 0) {
+            Write-Host "===== 最近的错误日志 (倒数 60 行) ====="
+            Get-Content "$env:GITHUB_WORKSPACE\vcpkg-install.log" -Tail 60 | ForEach-Object { Write-Host $_ }
+            Write-Host "===== 找 error/FAILED 关键行 ====="
+            Select-String -Path "$env:GITHUB_WORKSPACE\vcpkg-install.log" -Pattern "error:|FAILED:|Download failed|BUILD_FAILED|CMake Error" | Select-Object -Last 20 | ForEach-Object { Write-Host $_.Line }
+            exit $code
+          }
+
+      - name: Upload vcpkg install log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vcpkg-install-log
+          path: ${{ github.workspace }}/vcpkg-install.log
+          if-no-files-found: warn
 
       # ---------------------------------------------------------------
       # 3. 校验安装出的 VTK 是官方 9.3.0，而不是 ParaView 补丁版 pv5.12.1
