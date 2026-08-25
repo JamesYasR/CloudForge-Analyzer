@@ -43,22 +43,26 @@ jobs:
           submodules: recursive
 
       # ---------------------------------------------------------------
-      # 2. 拉取 vcpkg 并安装 PCL 1.14.0 / VTK 9.3.0 / Qt 6.7.3。
+      # 2. 拉取 vcpkg 并安装依赖。改成标准 vcpkg 命令，让真实报错直接显示在日志里
+      #    （原 lukka/run-vcpkg 封装会吞掉 vcpkg install 的具体错误，难以诊断）。
       #    vcpkgGitCommitId 必须与 vcpkg.json 的 builtin-baseline 一致。
-      #    vcpkg.json 只 override PCL 和 Qt；VTK 使用 vcpkg-ports/vtk
-      #    overlay port，拉取 Kitware/VTK v9.3.0 官方 tag 精确构建。
       # ---------------------------------------------------------------
-      - name: Setup vcpkg and install dependencies
-        uses: lukka/run-vcpkg@v11
-        with:
-          vcpkgDirectory: "${{ github.workspace }}/vcpkg"
-          vcpkgGitCommitId: "b2cb0da531c2f1f740045bfe7c4dac59f0b2b69c"
-          # 精确指向根目录唯一的 vcpkg.json（不能用 **/，否则会误匹配
-          # vcpkg-ports/pcl|vtk/vcpkg.json 这两个 overlay 元数据文件）。
-          # 注意: run-vcpkg 不支持 workingDirectory 输入，勿加。
-          vcpkgJsonGlob: "vcpkg.json"
-          runVcpkgInstall: true
-          doNotCache: false
+      - name: Setup vcpkg (clone + bootstrap)
+        shell: pwsh
+        run: |
+          git clone https://github.com/microsoft/vcpkg.git "$env:VCPKG_ROOT"
+          cd "$env:VCPKG_ROOT"
+          git checkout b2cb0da531c2f1f740045bfe7c4dac59f0b2b69c
+          .\bootstrap-vcpkg.bat -disableMetrics
+
+      - name: Install dependencies (vcpkg install)
+        shell: pwsh
+        run: |
+          cd "$env:GITHUB_WORKSPACE"
+          & "$env:VCPKG_ROOT\vcpkg.exe" install `
+            --triplet "$env:VCPKG_DEFAULT_TRIPLET" `
+            --x-install-root "$env:VCPKG_INSTALLED_DIR"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       # ---------------------------------------------------------------
       # 3. 校验安装出的 VTK 是官方 9.3.0，而不是 ParaView 补丁版 pv5.12.1
