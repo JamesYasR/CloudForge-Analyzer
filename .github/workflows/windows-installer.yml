@@ -55,6 +55,15 @@ jobs:
           git clone https://github.com/microsoft/vcpkg.git "$env:VCPKG_ROOT"
           cd "$env:VCPKG_ROOT"
           git checkout b2cb0da531c2f1f740045bfe7c4dac59f0b2b69c
+          # 修复: vcpkg baseline(2024-11) 锁定的 msys2-runtime 3.5.4-2 已从 msys2
+          # 滚动仓库消失(所有镜像 404)。替换为现存版本 3.6.4-1 (SHA512 已实测)。
+          $msys = "$env:VCPKG_ROOT\scripts\cmake\vcpkg_acquire_msys.cmake"
+          (Get-Content $msys -Raw) `
+            -replace [regex]::Escape('https://mirror.msys2.org/msys/x86_64/msys2-runtime-3.5.4-2-x86_64.pkg.tar.zst'), 'https://mirror.msys2.org/msys/x86_64/msys2-runtime-3.6.4-1-x86_64.pkg.tar.zst' `
+            -replace [regex]::Escape('070aeb43385beb0e3f8d5fb28909469765116c222d53c2614f5f080be879eef0b78258334b35e8cda7625d8704efc89133f8b8fa78f309c5d680ae270efdaba8'), '65de2d7c7fa3fb2996e6c29e1d400a3da51b02a1aaa7ad192214c7e5d4ae27fa835b84577eff707d6944931b26df764f76379d20751f1a510f9b77777422a8b2' |
+            Set-Content $msys -NoNewline
+          Write-Host "=== msys2-runtime 替换后确认 ==="
+          Select-String -Path $msys -Pattern "msys2-runtime-3" | ForEach-Object { Write-Host $_.Line.Trim() }
           .\bootstrap-vcpkg.bat -disableMetrics
 
       - name: Install dependencies (vcpkg install)
