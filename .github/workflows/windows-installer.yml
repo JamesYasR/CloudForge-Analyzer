@@ -64,7 +64,7 @@ jobs:
             -replace [regex]::Escape('https://mirror.msys2.org/msys/x86_64/msys2-runtime-3.5.4-2-x86_64.pkg.tar.zst'), 'https://mirror.msys2.org/msys/x86_64/msys2-runtime-3.6.4-1-x86_64.pkg.tar.zst' `
             -replace [regex]::Escape('070aeb43385beb0e3f8d5fb28909469765116c222d53c2614f5f080be879eef0b78258334b35e8cda7625d8704efc89133f8b8fa78f309c5d680ae270efdaba8'), '65de2d7c7fa3fb2996e6c29e1d400a3da51b02a1aaa7ad192214c7e5d4ae27fa835b84577eff707d6944931b26df764f76379d20751f1a510f9b77777422a8b2' `
             -replace [regex]::Escape('https://mirror.msys2.org/msys/x86_64/libtool-2.4.7-4-x86_64.pkg.tar.zst'), 'https://mirror.msys2.org/msys/x86_64/libtool-2.5.4-1-x86_64.pkg.tar.zst' `
-            -replace [regex]::Escape('fa2f0d4ac3a5aca38988d6f901407c14185238e6554894fd0b1ebe35ee836388c3649c5547cf529778e2a62ce5a3dafae15568b33c0e5d5535b67bb9c46ac37a'), '40c3ad7bc712134524885eba8c8b86b3acfc9fe1e19ef057e46ce3437a8cf986e5d07e9b4c7719b02db1f700c88040c66842eeab346e4ec96e0eb1bbbe682623' |
+            -replace [regex]::Escape('fa2f0d4ac3a5aca38988d6f901407c14185238e6554894fd0b1ebe35ee836388c3649c5547cf529778e2a62ce5a3dafae15568b33c0e5d5535b67bb9c46ac37a'), '65bdd278c19a6f32094d9944ac87418f38966e453f5fca60b2e00966731af88b119b94ef3cb6a68a9fd9a183f846d08a6524b9f273d311987acc308e84e3cf00' |
             Set-Content $msys -NoNewline
           Write-Host "=== msys2 包替换后确认 ==="
           Select-String -Path $msys -Pattern "msys2-runtime-3|libtool-" | ForEach-Object { Write-Host $_.Line.Trim() }
