@@ -135,8 +135,8 @@ jobs:
       - name: Configure CMake (MSVC x64 Release)
         shell: pwsh
         run: |
+          # runner 已升级到 VS 18 (Enterprise)，不再硬编码 VS17 2022，避免 generator 找不到实例。
           cmake -S . -B build `
-            -G "Visual Studio 17 2022" `
             -A x64 `
             -DCMAKE_BUILD_TYPE=Release `
             -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" `
