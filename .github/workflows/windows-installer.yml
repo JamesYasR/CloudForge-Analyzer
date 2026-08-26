@@ -172,9 +172,11 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           # VS18/CMake4.4 下 qt_generate_deploy_app_script 可能未生成 deploy 脚本，
           # 这里手动运行 windeployqt 兜底/补充 Qt 插件与运行库。
-          $windeployqt = Get-ChildItem "$env:VCPKG_INSTALLED_DIR\tools" -Recurse -Filter windeployqt.exe -ErrorAction SilentlyContinue | Select-Object -First 1
+          # vcpkg 安装树实际为 $env:VCPKG_INSTALLED_DIR\x64-windows\tools\Qt6\bin\windeployqt.exe，
+          # 因此从 VCPKG_INSTALLED_DIR 整树递归查找。
+          $windeployqt = Get-ChildItem "$env:VCPKG_INSTALLED_DIR" -Recurse -Filter windeployqt.exe -ErrorAction SilentlyContinue | Select-Object -First 1
           if (-not $windeployqt) {
-            throw "windeployqt.exe not found under $env:VCPKG_INSTALLED_DIR\tools"
+            throw "windeployqt.exe not found under $env:VCPKG_INSTALLED_DIR"
           }
           Write-Host "Using windeployqt: $($windeployqt.FullName)"
           & $windeployqt.FullName --release --no-translations "$env:STAGE_DIR\CloudForgeAnalyzer.exe"
