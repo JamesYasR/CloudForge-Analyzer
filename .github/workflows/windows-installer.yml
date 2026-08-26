@@ -170,6 +170,15 @@ jobs:
           New-Item -ItemType Directory -Force -Path "$env:STAGE_DIR" | Out-Null
           cmake --install build --config Release --prefix "$env:STAGE_DIR"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          # VS18/CMake4.4 下 qt_generate_deploy_app_script 可能未生成 deploy 脚本，
+          # 这里手动运行 windeployqt 兜底/补充 Qt 插件与运行库。
+          $windeployqt = Get-ChildItem "$env:VCPKG_INSTALLED_DIR\tools" -Recurse -Filter windeployqt.exe -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $windeployqt) {
+            throw "windeployqt.exe not found under $env:VCPKG_INSTALLED_DIR\tools"
+          }
+          Write-Host "Using windeployqt: $($windeployqt.FullName)"
+          & $windeployqt.FullName --release --no-translations "$env:STAGE_DIR\CloudForgeAnalyzer.exe"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           Write-Host "=== stage directory ==="
           Get-ChildItem -Recurse "$env:STAGE_DIR" | Select-Object FullName | Format-Table -AutoSize
 

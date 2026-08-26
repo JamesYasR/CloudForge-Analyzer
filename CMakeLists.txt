@@ -256,7 +256,12 @@ if(WIN32 AND COMMAND qt_generate_deploy_app_script)
         OUTPUT_SCRIPT "${_cfa_deploy_script}"
         NO_UNSUPPORTED_PLATFORM_ERROR
     )
-    install(SCRIPT "${_cfa_deploy_script}")
+    # VS18/CMake4.4 下该脚本可能未实际生成；只有存在时才安装，缺失时由 workflow 手动 windeployqt 兜底。
+    if(EXISTS "${_cfa_deploy_script}")
+        install(SCRIPT "${_cfa_deploy_script}")
+    else()
+        message(WARNING "qt_generate_deploy_app_script did not produce ${_cfa_deploy_script}; workflow will run windeployqt manually.")
+    endif()
 elseif(WIN32)
     message(WARNING "qt_generate_deploy_app_script not available; run windeployqt manually before packaging.")
 endif()
