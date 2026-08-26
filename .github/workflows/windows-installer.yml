@@ -60,6 +60,7 @@ jobs:
           #   msys2-runtime 3.5.4-2 -> 3.6.4-1
           #   libtool       2.4.7-4 -> 2.5.4-1
           #   file          5.45-3  -> 5.48-1
+          #   autoconf2.72  2.72-1  -> 2.72-3
           $msys = "$env:VCPKG_ROOT\scripts\cmake\vcpkg_acquire_msys.cmake"
           (Get-Content $msys -Raw) `
             -replace [regex]::Escape('https://mirror.msys2.org/msys/x86_64/msys2-runtime-3.5.4-2-x86_64.pkg.tar.zst'), 'https://mirror.msys2.org/msys/x86_64/msys2-runtime-3.6.4-1-x86_64.pkg.tar.zst' `
@@ -67,10 +68,12 @@ jobs:
             -replace [regex]::Escape('https://mirror.msys2.org/msys/x86_64/libtool-2.4.7-4-x86_64.pkg.tar.zst'), 'https://mirror.msys2.org/msys/x86_64/libtool-2.5.4-1-x86_64.pkg.tar.zst' `
             -replace [regex]::Escape('fa2f0d4ac3a5aca38988d6f901407c14185238e6554894fd0b1ebe35ee836388c3649c5547cf529778e2a62ce5a3dafae15568b33c0e5d5535b67bb9c46ac37a'), '65bdd278c19a6f32094d9944ac87418f38966e453f5fca60b2e00966731af88b119b94ef3cb6a68a9fd9a183f846d08a6524b9f273d311987acc308e84e3cf00' `
             -replace [regex]::Escape('https://mirror.msys2.org/msys/x86_64/file-5.45-3-x86_64.pkg.tar.zst'), 'https://mirror.msys2.org/msys/x86_64/file-5.48-1-x86_64.pkg.tar.zst' `
+            -replace [regex]::Escape('https://mirror.msys2.org/msys/x86_64/autoconf2.72-2.72-1-any.pkg.tar.zst'), 'https://mirror.msys2.org/msys/x86_64/autoconf2.72-2.72-3-any.pkg.tar.zst' `
+            -replace [regex]::Escape('c8dc3e317dc4befc5f2848ac339a74f9dc8f021767aadb3d2c50b13869e0ef49fb48c62a0a1df5176a15a4f10196fcd2307efb83ff143ba1d20301882ba8dd1e'), '307751b00b6a9729673d0af35ccf327041880f20498143100053a9d914927e86dd20a4aa4cd9e83e3d4e7e27c2d068cfc0313c6cab4f103955e4dafede22f4d0' `
             -replace [regex]::Escape('14f6bb0a19f8c74d5b3fe4e95fcf013c0db3bb270c795009f315a2207ca099efc32a9ab487dee72603c0adbe2949337724bbb28b779c71bbf9c1045ad6e23e72'), 'a44e90c23b768c10cf7efa4f4610a630508b1eba2f21e1f1e35082e751e5a710974cee278c3930a739411c8f3c50e8b8416be1f19531c0e4166ade63426fbb7d' |
             Set-Content $msys -NoNewline
           Write-Host "=== msys2 包替换后确认 ==="
-          Select-String -Path $msys -Pattern "msys2-runtime-3|libtool-|file-" | ForEach-Object { Write-Host $_.Line.Trim() }
+          Select-String -Path $msys -Pattern "msys2-runtime-3|libtool-|file-|autoconf2.72-" | ForEach-Object { Write-Host $_.Line.Trim() }
           .\bootstrap-vcpkg.bat -disableMetrics
 
       - name: Install dependencies (vcpkg install)
