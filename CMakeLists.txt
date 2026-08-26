@@ -62,6 +62,10 @@ endif()
 find_package(Eigen3 3.3 REQUIRED NO_MODULE)
 
 # OpenMP：项目多个文件使用 omp parallel for / critical
+# MSVC 新版对 reduction(min/max) 要求 /openmp:llvm，旧版 /openmp 会报 C7660。
+if(MSVC)
+    set(OpenMP_RUNTIME_MSVC llvm)
+endif()
 find_package(OpenMP REQUIRED COMPONENTS CXX)
 
 # 先找 PCL：PCLConfig 会自动定位其编译时使用的 VTK，避免混用两套 VTK。
