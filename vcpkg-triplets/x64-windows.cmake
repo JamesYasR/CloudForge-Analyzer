@@ -6,6 +6,10 @@ set(VCPKG_LIBRARY_LINKAGE dynamic)
 # 通过该选项让旧端口在 CMake 4 上也能继续 configure。
 set(VCPKG_CMAKE_CONFIGURE_OPTIONS "-DCMAKE_POLICY_VERSION_MINIMUM=3.5")
 
+# 安装包只需 Release；只构建 release 可缩短一半编译时间，
+# 并规避 VTK Debug 构建失败(2026-08-26 run 32922804024 于 vtk Debug 阶段 BUILD_FAILED)。
+set(VCPKG_BUILD_TYPE release)
+
 # 限制 vcpkg 并行编译数为 16，避免 Windows runner 内存不足。
 set(VCPKG_CONCURRENCY 16)
 

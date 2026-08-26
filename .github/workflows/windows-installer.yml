@@ -94,6 +94,14 @@ jobs:
             Get-Content "$env:GITHUB_WORKSPACE\vcpkg-install.log" -Tail 60 | ForEach-Object { Write-Host $_ }
             Write-Host "===== 找 error/FAILED 关键行 ====="
             Select-String -Path "$env:GITHUB_WORKSPACE\vcpkg-install.log" -Pattern "error:|FAILED:|Download failed|BUILD_FAILED|CMake Error" | Select-Object -Last 20 | ForEach-Object { Write-Host $_.Line }
+            Write-Host "===== vcpkg buildtrees 详细日志 (最近修改的 out/err log 各尾 150 行) ====="
+            Get-ChildItem "$env:VCPKG_ROOT\buildtrees" -Recurse -Include *-out.log,*-err.log -ErrorAction SilentlyContinue |
+              Sort-Object LastWriteTime -Descending |
+              Select-Object -First 8 |
+              ForEach-Object {
+                Write-Host "--- $($_.FullName) ---"
+                Get-Content $_.FullName -Tail 150 -ErrorAction SilentlyContinue | ForEach-Object { Write-Host $_ }
+              }
             exit $code
           }
 
