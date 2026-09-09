@@ -1,0 +1,105 @@
+{
+  "version": 3,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 24,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "windows-vcpkg-base",
+      "hidden": true,
+      "generator": "Visual Studio 17 2022",
+      "architecture": {
+        "value": "x64",
+        "strategy": "set"
+      },
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
+        "VCPKG_TARGET_TRIPLET": "x64-windows",
+        "VCPKG_OVERLAY_PORTS": "${sourceDir}/vcpkg-ports",
+        "VCPKG_OVERLAY_TRIPLETS": "${sourceDir}/vcpkg-triplets",
+        "VCPKG_INSTALLED_DIR": "${sourceDir}/build/vcpkg_installed"
+      }
+    },
+    {
+      "name": "windows-vcpkg-debug",
+      "hidden": true,
+      "inherits": "windows-vcpkg-base",
+      "displayName": "Windows vcpkg Debug (VS2022 x64)",
+      "description": "PCL 1.14.0 / VTK 9.3.0 / Qt 6.7.3, 依赖来自 vcpkg manifest (需先重建 C:\\vcpkg, 平时勿选)"
+    },
+    {
+      "name": "windows-vcpkg-release",
+      "hidden": true,
+      "inherits": "windows-vcpkg-base",
+      "displayName": "Windows vcpkg Release (VS2022 x64)",
+      "description": "PCL 1.14.0 / VTK 9.3.0 / Qt 6.7.3, 依赖来自 vcpkg manifest (需先重建 C:\\vcpkg, 平时勿选)"
+    },
+    {
+      "name": "windows-local-base",
+      "hidden": true,
+      "generator": "Visual Studio 17 2022",
+      "architecture": {
+        "value": "x64",
+        "strategy": "set"
+      },
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_PREFIX_PATH": "$env{QTDIR};$env{PCL_ROOT};$env{PCL_ROOT}/3rdParty/Eigen3"
+      }
+    },
+    {
+      "name": "windows-local-debug",
+      "inherits": "windows-local-base",
+      "displayName": "Windows Local Debug (本机 PCL/QT)",
+      "description": "依赖: $env{PCL_ROOT}(含 VTK9.3/Eigen/Boost) + $env{QTDIR}, 秒级配置, 适合日常调试"
+    },
+    {
+      "name": "windows-local-release",
+      "inherits": "windows-local-base",
+      "displayName": "Windows Local Release (本机 PCL/QT)",
+      "description": "依赖: $env{PCL_ROOT}(含 VTK9.3/Eigen/Boost) + $env{QTDIR}, 秒级配置"
+    },
+    {
+      "hidden": true,
+      "name": "Qt",
+      "cacheVariables": {
+        "CMAKE_PREFIX_PATH": "$env{QTDIR}"
+      },
+      "vendor": {
+        "qt-project.org/Qt": {
+          "checksum": "wVa86FgEkvdCTVp1/nxvrkaemJc="
+        }
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "windows-vcpkg-debug",
+      "configurePreset": "windows-vcpkg-debug",
+      "configuration": "Debug"
+    },
+    {
+      "name": "windows-vcpkg-release",
+      "configurePreset": "windows-vcpkg-release",
+      "configuration": "Release"
+    },
+    {
+      "name": "windows-local-debug",
+      "configurePreset": "windows-local-debug",
+      "configuration": "Debug"
+    },
+    {
+      "name": "windows-local-release",
+      "configurePreset": "windows-local-release",
+      "configuration": "Release"
+    }
+  ],
+  "vendor": {
+    "qt-project.org/Presets": {
+      "checksum": "ojuvrgqlUXATZ1oLVRHyh1UwQk8="
+    }
+  }
+}

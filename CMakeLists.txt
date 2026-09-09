@@ -194,6 +194,39 @@ if(MSVC)
     target_link_options(${PROJECT_NAME} PRIVATE "/STACK:16777216,1048576")
 endif()
 
+# VS 调试属性：仅在 MSVC 生成器（sln/Open Folder）下生效，Linux 无影响。
+# 1) 工作目录设为源码根，保证相对路径 PCDfiles/rabbit.pcd 可加载；
+# 2) Debug 运行库目录注入 PATH（Qt/PCL/VTK/OpenNI2 的调试 DLL），免系统环境变量。
+if(MSVC)
+    set(CFA_DEBUG_DIRS "")
+    if(DEFINED Qt6_DIR)
+        # Qt6_DIR = <prefix>/lib/cmake/Qt6，回推到 <prefix>/bin
+        get_filename_component(_cfa_qt_bin "${Qt6_DIR}/../../../bin" ABSOLUTE)
+        if(EXISTS "${_cfa_qt_bin}")
+            list(APPEND CFA_DEBUG_DIRS "${_cfa_qt_bin}")
+        endif()
+        unset(_cfa_qt_bin)
+    endif()
+    foreach(_cfa_p
+            "${PCL_DIR}/../bin"
+            "${VTK_DIR}/../../../bin"
+            "${PCL_DIR}/../3rdParty/OpenNI2/Redist")
+        get_filename_component(_cfa_abs "${_cfa_p}" ABSOLUTE)
+        if(EXISTS "${_cfa_abs}")
+            list(APPEND CFA_DEBUG_DIRS "${_cfa_abs}")
+        endif()
+    endforeach()
+    list(JOIN CFA_DEBUG_DIRS ";" CFA_DEBUG_PATH)
+    set_target_properties(${PROJECT_NAME} PROPERTIES
+        VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+        VS_DEBUGGER_ENVIRONMENT "PATH=${CFA_DEBUG_PATH};$(PATH)"
+    )
+    unset(_cfa_p)
+    unset(_cfa_abs)
+    unset(CFA_DEBUG_DIRS)
+    unset(CFA_DEBUG_PATH)
+endif()
+
 if(WIN32)
     # 与原 CloudForgeAnalyzer.props 保持一致的 Windows 宏
     target_compile_definitions(${PROJECT_NAME} PRIVATE
