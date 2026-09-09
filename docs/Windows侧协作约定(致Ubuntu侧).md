@@ -46,6 +46,14 @@ Windows 本地开发**不依赖** vcpkg（其本地工具 clone 已删除）。�
 源文件收集为 `GLOB ... CONFIGURE_DEPENDS`：Ubuntu 侧新增/删除 `.cpp/.h` 正常提交，
 Windows 侧 pull 后构建时自动重新发现，无需任何登记。
 
+### 2.7 根目录 gen-sln.cmd 是 Windows 专用脚本，勿动
+
+2026-09-09 新增（提交 6658848）。双击即可在 Windows 上生成 `build/sln`
+（VS 解决方案，Windows 侧主线流程的一步），实现是纯 cmd 批处理 +
+vswhere，只在 Windows 下运行，与 Linux 构建流程零交集。
+Ubuntu 侧无需理会，也请勿删除或改动它（cmd 批处理对括号路径极敏感，
+脚本内的写法是踩坑后的结果，勿"顺手优化"）。
+
 ## 3. Windows 侧详细文档
 
 完整环境说明、构建工作流、踩坑对照表在 Windows 工作机的 `E:\文档\` 下两份文档
