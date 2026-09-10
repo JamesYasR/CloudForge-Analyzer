@@ -3,6 +3,7 @@
 #include <thread>
 #include <omp.h> // OpenMP 并行: MSVC(/openmp) 与 GCC(-fopenmp) 双平台兼容
 #include <random> // 线程私有随机数 (std::mt19937)
+#include <QElapsedTimer>
 
 CloudForgeAnalyzer::CloudForgeAnalyzer(QWidget *parent)
     : QMainWindow(parent)
@@ -346,11 +347,14 @@ void CloudForgeAnalyzer::Slot_fit_cy2_Triggered() {
     pcl::PointCloud<pcl::PointXYZ>::Ptr Cloud_Temp = CloudMap[dialog.getSelectedList()[0]];
 
     // 2. 第一步：使用Fit_Cylinder进行初次圆柱拟合
+    QElapsedTimer tStage1;
+    tStage1.start();
     Fit_Cylinder fcy(Cloud_Temp);
     if (fcy.isCancelled) {
         TeEDebug(">>: 圆柱拟合操作取消");
         return;
     }
+    qDebug().noquote() << "[Perf] 第一阶段Fit_Cylinder总耗时:" << tStage1.elapsed() << "ms";
 
     // 获取初次拟合结果
     Eigen::VectorXf coeff1 = fcy.Get_Coeff_in();
@@ -363,12 +367,16 @@ void CloudForgeAnalyzer::Slot_fit_cy2_Triggered() {
     pcl::PointCloud<pcl::PointXYZ>::Ptr Cloud_Outliers = fcy.Get_Outliers();
     ColorManager color_inliers(0, 255, 0);   // 绿色-内点
     ColorManager color_outliers(255, 0, 0);  // 红色-外点
+    QElapsedTimer tViz; tViz.start();
     beginUndoBatch("初始圆柱拟合");
     AddPointCloud("initial_fit_inliers", Cloud_Inliers, color_inliers);
+    qDebug().noquote() << "[Perf] AddPointCloud(内点" << Cloud_Inliers->size() << ")耗时:" << tViz.restart() << "ms";
     AddPointCloud("initial_fit_outliers", Cloud_Outliers, color_outliers);
+    qDebug().noquote() << "[Perf] AddPointCloud(外点" << Cloud_Outliers->size() << ")耗时:" << tViz.restart() << "ms";
     endUndoBatch();
 
     viewer->addCylinder(*cycoeff1, "initial_fit_cylinder");
+    qDebug().noquote() << "[Perf] addCylinder(initial)耗时:" << tViz.restart() << "ms";
 
     vtkSmartPointer<vtkLineSource> lineSource1 = vtkSmartPointer<vtkLineSource>::New();
     Eigen::Vector3f axis_point(coeff1[0], coeff1[1], coeff1[2]);

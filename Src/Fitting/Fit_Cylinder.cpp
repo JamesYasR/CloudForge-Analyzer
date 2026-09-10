@@ -1,5 +1,16 @@
 #include "Fitting/Fit_Cylinder.h"
 #include <omp.h>
+#include <algorithm>
+#include <chrono>
+#include <QElapsedTimer>
+
+namespace {
+static QElapsedTimer g_fitTimer;
+#define FIT_LOG(msg) do { \
+    if (!g_fitTimer.isValid()) g_fitTimer.start(); \
+    qDebug().noquote() << "[FitCyl]" << msg << "+" << g_fitTimer.restart() << "ms"; \
+} while(0)
+}
 
 Fit_Cylinder::Fit_Cylinder(pcl::PointCloud<pcl::PointXYZ>::Ptr InputC) :
 	dialog(new ParamDialog_FittingCylinder())
@@ -36,14 +47,30 @@ Fit_Cylinder::Fit_Cylinder(pcl::PointCloud<pcl::PointXYZ>::Ptr InputC) :
 Fit_Cylinder::~Fit_Cylinder() = default;
 
 void Fit_Cylinder::Proc() {
+	if (!cloud_input || cloud_input->empty()) {
+		qDebug() << "点云为空，无法进行圆柱拟合";
+		return;
+	}
+
+	// 法线估计：限制线程数，避免 Windows Release 下首次 OpenMP 线程池初始化导致卡顿/异常
+	const int hardware_threads = omp_get_max_threads();
+	const int normal_threads = std::max(1, std::min(hardware_threads, 4));
 	pcl::NormalEstimationOMP<pcl::PointXYZ, pcl::Normal> n;
-	n.setNumberOfThreads(omp_get_max_threads());
+	n.setNumberOfThreads(normal_threads);
 	pcl::PointCloud<pcl::Normal>::Ptr normals(new pcl::PointCloud<pcl::Normal>);
 	pcl::search::KdTree<pcl::PointXYZ>::Ptr tree(new pcl::search::KdTree<pcl::PointXYZ>());
 	n.setInputCloud(cloud_input);
 	n.setSearchMethod(tree);
 	n.setKSearch(KSearch);
+	FIT_LOG("kdtree+setInput 完成, 开始法线估计");
 	n.compute(*normals);
+	FIT_LOG(QString("法线估计完成(线程=%1)").arg(normal_threads));
+	if (normals->size() != cloud_input->size()) {
+		qDebug() << "法线估计失败：法线数量与输入点云不一致";
+		cloud_inliers->clear();
+		*cloud_outliers = *cloud_input;
+		return;
+	}
 
 	pcl::SampleConsensusModelCylinder<pcl::PointXYZ, pcl::Normal >::Ptr model(new pcl::SampleConsensusModelCylinder<pcl::PointXYZ, pcl::Normal >(cloud_input));
 	model->setInputNormals(normals);
@@ -53,18 +80,24 @@ void Fit_Cylinder::Proc() {
 		model->setRadiusLimits(InitialRadius * 0.998, InitialRadius * 1.002);  // 设置半径搜索范围
 	}
 
-
 	pcl::RandomSampleConsensus<pcl::PointXYZ> ransac(model);	// 定义RANSAC算法对象
-
 	ransac.setDistanceThreshold(DistanceThreshold);							// 设置距离阈值
 	ransac.setMaxIterations(MaxIterations);								// 设置最大迭代次数
-	ransac.computeModel();
+
+	// RANSAC 只执行一次，避免重复计算和状态不一致
+	FIT_LOG("模型/RANSAC对象就绪, 开始computeModel");
+	if (!ransac.computeModel()) {
+		qDebug() << "RANSAC 圆柱拟合失败：未找到有效模型";
+		cloud_inliers->clear();
+		*cloud_outliers = *cloud_input;
+		return;
+	}
 	ransac.getModelCoefficients(coeff_in);							// 参数
 	std::vector<int> ranSacInliers;                                                 // 获取属于拟合出的内点
 	ransac.getInliers(ranSacInliers);
+	FIT_LOG(QString("RANSAC完成 内点=%1").arg(ranSacInliers.size()));
 	pcl::copyPointCloud(*cloud_input, ranSacInliers, *cloud_inliers);
-	ransac.computeModel();
-	ransac.getModelCoefficients(coeff_in);
+	FIT_LOG("copyPointCloud内点完成");
 
 	// 添加安全检查
 	if (coeff_in.size() < 7) {
@@ -75,7 +108,7 @@ void Fit_Cylinder::Proc() {
 	}
 
 	// 检查半径是否有效
-	if (coeff_in[6] <= 0) {
+	if (coeff_in[6] <= 0 || !std::isfinite(coeff_in[6])) {
 		qDebug() << "圆柱拟合失败：无效的半径值";
 		cloud_inliers->clear();
 		*cloud_outliers = *cloud_input;
@@ -86,16 +119,24 @@ void Fit_Cylinder::Proc() {
 		<< "\n圆柱轴方向的x为：" << coeff_in[3] << "\n圆柱轴方向的y为：" << coeff_in[4] << "\n圆柱轴方向的z为：" << coeff_in[5]
 		<< "\n圆柱半径为：" << coeff_in[6];
 
+	// 外点提取：使用 O(N) 标记法替代原来的 O(N*M) std::find，避免点云较大时卡顿
 	cloud_outliers->clear();
-	int total_points = cloud_input->size();
-	cloud_outliers->reserve(total_points - ranSacInliers.size());
+	const int total_points = static_cast<int>(cloud_input->size());
+	cloud_outliers->reserve(total_points - static_cast<int>(ranSacInliers.size()));
+
+	std::vector<char> is_inlier(total_points, 0);
+	for (int idx : ranSacInliers) {
+		if (idx >= 0 && idx < total_points) {
+			is_inlier[idx] = 1;
+		}
+	}
 
 #pragma omp parallel
 	{
 		std::vector<pcl::PointXYZ> local_outliers;
 #pragma omp for nowait
 		for (int i = 0; i < total_points; ++i) {
-			if (std::find(ranSacInliers.begin(), ranSacInliers.end(), i) == ranSacInliers.end()) {
+			if (!is_inlier[i]) {
 				local_outliers.push_back((*cloud_input)[i]);
 			}
 		}
@@ -105,6 +146,7 @@ void Fit_Cylinder::Proc() {
 			cloud_outliers->insert(cloud_outliers->end(), local_outliers.begin(), local_outliers.end());
 		}
 	}
+	FIT_LOG(QString("外点提取完成 外点=%1").arg(cloud_outliers->size()));
 
 	// 新增：输出百分比信息
 	qDebug() << "内点数量：" << cloud_inliers->size() << "，占总点数的：" << Get_Inliers_Percentage() << "%";
