@@ -405,3 +405,15 @@ analysis/**/samples_realistic/
 analysis/**/real_probe/*.npy
 docs/**/ppt_assets/png/
 docs/**/ppt_assets/preview/
+
+# ---- 文档不纳入版本库（保留在本地磁盘）----
+*.md
+!/README.md
+# 分析产生的图件(报告插图)不入库, 应用图标资源 Icons/ 保留
+analysis/**/*.png
+analysis/**/*.jpg
+analysis/**/*.jpeg
+*.pptx
+*.pdf
+/docs/
+/AGENTS.md
