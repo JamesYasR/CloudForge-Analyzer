@@ -15,8 +15,21 @@
 
 class Fit_Plane {
 public:
+    // 新增：拟合参数(用于后台计算: 参数已在界面线程收集完毕, 不再弹对话框)
+    struct FitParams {
+        float LocalRadius = 5.0f;        // 局部拟合半径(mm)
+        float AnomalyThreshold = 1.0f;   // 异常点判定阈值(mm)
+        float PlaneFitThreshold = 1.0f;  // 平面拟合距离阈值(mm)
+        int MaxIterations = 1000;        // RANSAC最大迭代次数
+    };
+
     Fit_Plane(pcl::PointCloud<pcl::PointXYZ>::Ptr InputC);
+    // 新增：已知参数构造(不弹参数对话框, 不自动计算) —— 配合 compute() 在工作线程中执行
+    Fit_Plane(pcl::PointCloud<pcl::PointXYZ>::Ptr InputC, const FitParams& params);
     ~Fit_Plane();
+
+    // 新增：执行平面拟合计算(可被工作线程调用)
+    void compute();
 
     pcl::PointCloud<pcl::PointXYZ>::Ptr Get_Inliers();
     pcl::PointCloud<pcl::PointXYZ>::Ptr Get_Outliers();

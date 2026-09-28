@@ -16,6 +16,7 @@ Filter_sor::Filter_sor(pcl::PointCloud<pcl::PointXYZ>::Ptr Input_c) :
 		std_dev_mul_thresh = param2.toFloat(&ok2);
 		if (!ok1 && !ok2) {
 			qDebug() << "无效数字";
+			isCancelled = true;
 			return;
 		}
 		qDebug() << "参数：" << param1 << param2;
@@ -23,6 +24,7 @@ Filter_sor::Filter_sor(pcl::PointCloud<pcl::PointXYZ>::Ptr Input_c) :
 	else
 	{
 		qDebug() << "取消操作";
+		isCancelled = true;
 		return;
 	}
 	Input_cloud = Input_c;
@@ -30,6 +32,22 @@ Filter_sor::Filter_sor(pcl::PointCloud<pcl::PointXYZ>::Ptr Input_c) :
 	sor_std_dev_mul_thresh = std_dev_mul_thresh;
 	Proc();
 }
+
+Filter_sor::Filter_sor(pcl::PointCloud<pcl::PointXYZ>::Ptr Input_c, const Params& params)
+	: Input_cloud(new pcl::PointCloud<pcl::PointXYZ>)
+	, Output_cloud(new pcl::PointCloud<pcl::PointXYZ>)
+	, paramDialog(nullptr)
+{
+	// 参数由界面线程收集, 此处仅保存输入(不弹框、不计算)
+	Input_cloud = Input_c;
+	sor_mean_k = params.mean_k;
+	sor_std_dev_mul_thresh = params.std_dev_mul_thresh;
+}
+
+void Filter_sor::compute() {
+	Proc();
+}
+
 Filter_sor::~Filter_sor() = default;
 
 void Filter_sor::Proc() {

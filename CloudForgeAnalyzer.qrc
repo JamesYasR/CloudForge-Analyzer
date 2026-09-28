@@ -14,6 +14,9 @@
         <file>Icons/icons_geodetic.png</file>
         <file>Icons/icons_arc.png</file>
         <file>Icons/icons_Vertical.png</file>
-	<file>Icons/icon_weldheight.png</file>
+        <file>Icons/icon_weldheight.png</file>
+        <file>Icons/icon_Pothole.png</file>
+        <file>Icons/icon_WeldStep.png</file>
+        <file>Icons/icon_WeldGap.png</file>
     </qresource>
 </RCC>

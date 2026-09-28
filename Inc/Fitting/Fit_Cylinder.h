@@ -14,8 +14,20 @@
 
 class Fit_Cylinder {
 public:
+	// 新增：拟合参数(用于后台计算: 参数已在界面线程收集完毕, 不再弹对话框)
+	struct FitParams {
+		int KSearch = 60;
+		float DistanceThreshold = 3.0f;
+		int MaxIterations = 1000;
+		float InitialRadius = 1940.0f;
+	};
+
 	Fit_Cylinder(pcl::PointCloud<pcl::PointXYZ>::Ptr InputC);
+	// 新增：已知参数构造(不弹参数对话框, 不自动计算) —— 配合 compute() 在工作线程中执行
+	Fit_Cylinder(pcl::PointCloud<pcl::PointXYZ>::Ptr InputC, const FitParams& params);
 	~Fit_Cylinder();
+	// 新增：执行拟合计算(可被工作线程调用)
+	void compute();
 	pcl::PointCloud<pcl::PointXYZ>::Ptr Get_Inliers();
 	pcl::PointCloud<pcl::PointXYZ>::Ptr Get_Outliers();
 	Eigen::VectorXf Get_Coeff_in();

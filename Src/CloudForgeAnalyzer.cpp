@@ -4,6 +4,9 @@
 #include <omp.h> // OpenMP 并行: MSVC(/openmp) 与 GCC(-fopenmp) 双平台兼容
 #include <random> // 线程私有随机数 (std::mt19937)
 #include <QElapsedTimer>
+#include <vtkPoints.h>
+#include <vtkCellArray.h>
+#include <vtkPolyData.h>
 
 CloudForgeAnalyzer::CloudForgeAnalyzer(QWidget *parent)
     : QMainWindow(parent)
@@ -30,6 +33,14 @@ CloudForgeAnalyzer::CloudForgeAnalyzer(QWidget *parent)
 
 CloudForgeAnalyzer::~CloudForgeAnalyzer()
 {
+    // 等待后台计算结束, 避免工作线程访问已析构对象
+    m_shuttingDown.store(true);
+    if (m_asyncState) {
+        m_asyncState->cancelRequested.store(true);
+    }
+    if (m_asyncFuture.isRunning()) {
+        m_asyncFuture.waitForFinished();
+    }
     viewer.reset();
     delete ui;
 }
@@ -99,6 +110,10 @@ void CloudForgeAnalyzer::InitalizeConnects() {
     connect(ui->measure_angleP2P, &QAction::triggered, this, &CloudForgeAnalyzer::Tool_MeasureAngleP2P);
     connect(ui->measure_Cylindricity, &QAction::triggered, this, &CloudForgeAnalyzer::Tool_MeasureCylindricity);
     connect(ui->measure_weldheight, &QAction::triggered, this, &CloudForgeAnalyzer::Tool_MeasureWeldHeight);
+    connect(ui->measure_pothole, &QAction::triggered, this, &CloudForgeAnalyzer::Tool_MeasurePothole);
+    connect(ui->measure_weld_prep, &QAction::triggered, this, &CloudForgeAnalyzer::Tool_MeasureWeldPreparation);
+    connect(ui->action_cancel_task, &QAction::triggered, this, &CloudForgeAnalyzer::CancelCurrentTask);
+    ui->action_cancel_task->setEnabled(false);   // 无任务时不可用
     connect(ui->action_Clip, &QAction::triggered, this, &CloudForgeAnalyzer::Tool_Clip);
 }
 
@@ -118,6 +133,10 @@ bool CloudForgeAnalyzer::showConfirmationDialog(const QString& title, const QStr
 
 ////////////////////////////////////////////////////////////////////////////////////////////////*槽函数start*/
 void CloudForgeAnalyzer::Slot_fit_plane_Triggered() {
+    if (IsTaskRunning()) {
+        TeEDebug(">>: 已有计算任务进行中，请等待完成或点击工具栏“取消计算”。");
+        return;
+    }
     ChoseCloudDialog dialog(CloudMap, ColorMap, "选择点云进行平面拟合");
     if (dialog.exec() != QDialog::Accepted) {
         TeEDebug(">>: 操作取消");
@@ -128,14 +147,59 @@ void CloudForgeAnalyzer::Slot_fit_plane_Triggered() {
         return;
     }
     pcl::PointCloud<pcl::PointXYZ>::Ptr Cloud_Temp = CloudMap[dialog.getSelectedList()[0]];
-	Fit_Plane fp(Cloud_Temp);
-    if (fp.isCancelled) {
+
+    // 参数对话框在界面线程弹出(原先在 Fit_Plane 构造函数里弹框)
+    ParamDialog_FittingPlane fitDialog;
+    if (fitDialog.exec() != QDialog::Accepted) {
+        TeEDebug(">>: 参数设置取消");
+        return;
+    }
+    bool ok1, ok2, ok3, ok4;
+    Fit_Plane::FitParams fp;
+    fp.LocalRadius = fitDialog.getParams()[0].toFloat(&ok1);
+    fp.AnomalyThreshold = fitDialog.getParams()[1].toFloat(&ok2);
+    fp.PlaneFitThreshold = fitDialog.getParams()[2].toFloat(&ok3);
+    fp.MaxIterations = fitDialog.getParams()[3].toInt(&ok4);
+    if (!ok1 || !ok2 || !ok3 || !ok4) {
+        TeEDebug(">>: 无效数字");
+        return;
+    }
+
+    // 后台执行平面拟合(异常点检测+RANSAC), 完成后回到界面线程可视化
+    auto fpHolder = std::make_shared<std::shared_ptr<Fit_Plane>>();
+    RunAsyncVoid("平面拟合",
+        [this, fpHolder, Cloud_Temp, fp]() {
+            if (!PostProgress(0, 0, "平面拟合: 异常点检测与RANSAC...")) {
+                PostLog(">>: 平面拟合已取消。");
+                return;
+            }
+            // 计算类在工作线程中构造(参数构造函数只保存参数, 点云拷贝也在此完成)并执行
+            *fpHolder = std::make_shared<Fit_Plane>(Cloud_Temp, fp);
+            (*fpHolder)->compute();
+            PostLog((*fpHolder)->message);
+            PostProgress(100, 100, "平面拟合完成");
+        },
+        [this, fpHolder, Cloud_Temp]() {
+    if (!*fpHolder) {
+        return;   // 工作线程未执行(开始前已取消)
+    }
+    if (m_asyncState && m_asyncState->cancelRequested.load()) {
+        TeEDebug(">>: 平面拟合已取消，不再显示本次结果。");
+        return;
+    }
+    Fit_Plane& planeFitter = **fpHolder;
+    if (planeFitter.isCancelled) {
         TeEDebug(">>: 平面拟合操作取消");
         return;
     }
-	pcl::PointCloud<pcl::PointXYZ>::Ptr Cloud_inliers = fp.Get_Inliers();
-	pcl::PointCloud<pcl::PointXYZ>::Ptr Cloud_outliers = fp.Get_Outliers();
-	pcl::PointCloud<pcl::PointXYZ>::Ptr Cloud_anomaly = fp.Get_AnomalyPoints();
+    if (planeFitter.Get_Coeff_in().size() < 4) {
+        TeEDebug(">>: 平面拟合失败：未能获得有效的平面模型系数");
+        Update_CFmes(planeFitter.message);
+        return;
+    }
+	pcl::PointCloud<pcl::PointXYZ>::Ptr Cloud_inliers = planeFitter.Get_Inliers();
+	pcl::PointCloud<pcl::PointXYZ>::Ptr Cloud_outliers = planeFitter.Get_Outliers();
+	pcl::PointCloud<pcl::PointXYZ>::Ptr Cloud_anomaly = planeFitter.Get_AnomalyPoints();
 
 	ColorManager color_inliers(0, 255, 0);   // 绿色-内点
 	ColorManager color_outliers(255, 0, 0);  // 红色-外点
@@ -147,8 +211,8 @@ void CloudForgeAnalyzer::Slot_fit_plane_Triggered() {
     AddPointCloud("plane_fit_anomaly", Cloud_anomaly, color_anomaly);
 	endUndoBatch();
 
-	std::string message = fp.message;
-    Eigen::Vector4f coeff_vec = fp.Get_Coeff_in(); // [A, B, C, D]
+	std::string message = planeFitter.message;
+    Eigen::Vector4f coeff_vec = planeFitter.Get_Coeff_in(); // [A, B, C, D]
 
     // 3. 直接转换为 pcl::ModelCoefficients::Ptr 并存储
     pcl::ModelCoefficients::Ptr plane_coeff(new pcl::ModelCoefficients());
@@ -161,9 +225,14 @@ void CloudForgeAnalyzer::Slot_fit_plane_Triggered() {
     visualizeFittedPlane(Cloud_Temp,plane_coeff, planeName);
 	Update_CFmes(message);
 	TeEDebug(">>: 平面拟合完成。内点(绿)/外点(红)已可视化。");
+        });
 }
 
 void CloudForgeAnalyzer::Tool_MeasurePlanarity() {
+    if (IsTaskRunning()) {
+        TeEDebug(">>: 已有计算任务进行中，请等待完成或点击工具栏“取消计算”。");
+        return;
+    }
     // 1. 选择待评估的点云
     ChoseCloudDialog dialog(CloudMap, ColorMap, "选择待评估平面度的点云");
     if (dialog.exec() != QDialog::Accepted) {
@@ -214,18 +283,25 @@ void CloudForgeAnalyzer::Tool_MeasurePlanarity() {
     };
 
 
-    // 5. 创建评估器并设置参数
-    MeasurePlanarity evaluator;
-    evaluator.setInputCloud(target_cloud);
-    evaluator.setPlaneParameters(selected_plane);
+    // 5. 创建评估器并设置参数, 在后台线程执行评估(界面保持响应)
+    auto evaluator = std::make_shared<MeasurePlanarity>();
+    auto resultPtr = std::make_shared<MeasurePlanarity::AssessmentResult>();
 
-    // 6. 执行评估
-    auto result = evaluator.evaluatePlanarity();
+    RunAsyncVoid("平面度评估",
+        [this, evaluator, resultPtr, target_cloud, selected_plane]() {
+            PostProgress(0, 0, "平面度评估: 逐点计算到基准平面的距离...");
+            evaluator->setInputCloud(target_cloud);
+            evaluator->setPlaneParameters(selected_plane);
+            *resultPtr = evaluator->evaluatePlanarity();
+            PostLog(resultPtr->assessment_message);
+        },
+        [this, evaluator, resultPtr, selectedPlaneName]() {
+    const auto& result = *resultPtr;
 
     // 7. 生成并可视化热力图
-    auto heatmap_cloud = evaluator.getHeatMapCloud();
+    auto heatmap_cloud = evaluator->getHeatMapCloud();
     double min_distance, max_distance;
-    evaluator.getDistanceRange(min_distance, max_distance);
+    evaluator->getDistanceRange(min_distance, max_distance);
 
     // 调用自定义热力图可视化函数
     visualizePlanarityHeatMap(heatmap_cloud, min_distance, max_distance, selectedPlaneName);
@@ -238,6 +314,7 @@ void CloudForgeAnalyzer::Tool_MeasurePlanarity() {
     // 9. 刷新视图
     ui->winOfAnalyzer->renderWindow()->Render();
     ui->winOfAnalyzer->update();
+        });
 }
 
 void CloudForgeAnalyzer::visualizePlanarityHeatMap(
@@ -334,6 +411,10 @@ void CloudForgeAnalyzer::visualizePlanarityHeatMap(
 
 
 void CloudForgeAnalyzer::Slot_fit_cy2_Triggered() {
+    if (IsTaskRunning()) {
+        TeEDebug(">>: 已有计算任务进行中，请等待完成或点击工具栏“取消计算”。");
+        return;
+    }
     // 1. 选择点云
     ChoseCloudDialog dialog(CloudMap, ColorMap, "选择点云进行圆柱拟合与优化");
     if (dialog.exec() != QDialog::Accepted) {
@@ -346,71 +427,69 @@ void CloudForgeAnalyzer::Slot_fit_cy2_Triggered() {
     }
     pcl::PointCloud<pcl::PointXYZ>::Ptr Cloud_Temp = CloudMap[dialog.getSelectedList()[0]];
 
-    // 2. 第一步：使用Fit_Cylinder进行初次圆柱拟合
-    QElapsedTimer tStage1;
-    tStage1.start();
-    Fit_Cylinder fcy(Cloud_Temp);
-    if (fcy.isCancelled) {
-        TeEDebug(">>: 圆柱拟合操作取消");
+    // 2. 先收集初始拟合参数（原先在 Fit_Cylinder 构造函数里弹框，移到界面线程）
+    ParamDialog_FittingCylinder fitDialog;
+    if (fitDialog.exec() != QDialog::Accepted) {
+        TeEDebug(">>: 参数设置取消");
         return;
     }
-    qDebug().noquote() << "[Perf] 第一阶段Fit_Cylinder总耗时:" << tStage1.elapsed() << "ms";
+    bool ok1, ok2, ok3, ok4;
+    Fit_Cylinder::FitParams fp;
+    fp.KSearch = fitDialog.getParams()[0].toInt(&ok1);
+    fp.DistanceThreshold = fitDialog.getParams()[1].toFloat(&ok2);
+    fp.MaxIterations = fitDialog.getParams()[2].toInt(&ok3);
+    fp.InitialRadius = fitDialog.getParams()[3].toFloat(&ok4);
+    if (!ok1 || !ok2 || !ok3 || !ok4) {
+        TeEDebug(">>: 无效数字");
+        return;
+    }
 
-    // 获取初次拟合结果
-    Eigen::VectorXf coeff1 = fcy.Get_Coeff_in();
+    // 3. 后台执行初次拟合(法线估计+RANSAC), 完成后回到界面线程继续
+    auto fcy = std::make_shared<Fit_Cylinder>(Cloud_Temp, fp);
+    RunAsyncVoid("圆柱初次拟合",
+        [this, fcy]() {
+            QElapsedTimer tStage1;
+            tStage1.start();
+            PostProgress(0, 0, "初次拟合: 法线估计与RANSAC...");
+            fcy->compute();
+            PostLog("[Perf] 第一阶段Fit_Cylinder总耗时: " + std::to_string(tStage1.elapsed()) + " ms");
+        },
+        [this, fcy, Cloud_Temp]() {
+            if (fcy->isCancelled || fcy->Get_Coeff_in().size() < 7) {
+                TeEDebug(">>: 初次圆柱拟合未获得有效结果，流程结束。");
+                return;
+            }
+            ContinueFitCy2AfterInitialFit(fcy, Cloud_Temp);
+        });
+}
+
+// 初次拟合完成后的界面部分: 可视化 + 收集优化参数 + 启动后台优化
+void CloudForgeAnalyzer::ContinueFitCy2AfterInitialFit(std::shared_ptr<Fit_Cylinder> fcy,
+                                                       pcl::PointCloud<pcl::PointXYZ>::Ptr Cloud_Temp)
+{
+    Eigen::VectorXf coeff1 = fcy->Get_Coeff_in();
     pcl::ModelCoefficients::Ptr cycoeff1(new pcl::ModelCoefficients);
     cycoeff1->values.resize(7);
     for (std::size_t i = 0; i < 7; ++i)
         cycoeff1->values[i] = coeff1(i);
 
-    pcl::PointCloud<pcl::PointXYZ>::Ptr Cloud_Inliers = fcy.Get_Inliers();
-    pcl::PointCloud<pcl::PointXYZ>::Ptr Cloud_Outliers = fcy.Get_Outliers();
+    pcl::PointCloud<pcl::PointXYZ>::Ptr Cloud_Inliers = fcy->Get_Inliers();
+    pcl::PointCloud<pcl::PointXYZ>::Ptr Cloud_Outliers = fcy->Get_Outliers();
     ColorManager color_inliers(0, 255, 0);   // 绿色-内点
     ColorManager color_outliers(255, 0, 0);  // 红色-外点
-    QElapsedTimer tViz; tViz.start();
     beginUndoBatch("初始圆柱拟合");
     AddPointCloud("initial_fit_inliers", Cloud_Inliers, color_inliers);
-    qDebug().noquote() << "[Perf] AddPointCloud(内点" << Cloud_Inliers->size() << ")耗时:" << tViz.restart() << "ms";
     AddPointCloud("initial_fit_outliers", Cloud_Outliers, color_outliers);
-    qDebug().noquote() << "[Perf] AddPointCloud(外点" << Cloud_Outliers->size() << ")耗时:" << tViz.restart() << "ms";
     endUndoBatch();
 
     viewer->addCylinder(*cycoeff1, "initial_fit_cylinder");
-    qDebug().noquote() << "[Perf] addCylinder(initial)耗时:" << tViz.restart() << "ms";
+    float line_length = 800.0f;
+    Eigen::Vector3f initial_center = fcy->get_center_point();
+    Eigen::Vector3f initial_axis = fcy->get_axis_direction();
 
-    vtkSmartPointer<vtkLineSource> lineSource1 = vtkSmartPointer<vtkLineSource>::New();
-    Eigen::Vector3f axis_point(coeff1[0], coeff1[1], coeff1[2]);
-    Eigen::Vector3f axis_dir(coeff1[3], coeff1[4], coeff1[5]);
-    axis_dir.normalize(); // 确保方向向量是单位向量
-    float line_length = 800.0f; 
-    ///////////////////////////////////////////////////////////////////////////////////////////////////////////
-    //Eigen::Vector3f p1 = axis_point - axis_dir * line_length;
-    //Eigen::Vector3f p2 = axis_point + axis_dir * line_length;
-
-    //lineSource1->SetPoint1(p1.x(), p1.y(), p1.z());
-    //lineSource1->SetPoint2(p2.x(), p2.y(), p2.z());
-    //lineSource1->Update();
-
-    //vtkSmartPointer<vtkPolyDataMapper> mapper1 = vtkSmartPointer<vtkPolyDataMapper>::New();
-    //mapper1->SetInputConnection(lineSource1->GetOutputPort());
-
-    //vtkSmartPointer<vtkActor> lineActor1 = vtkSmartPointer<vtkActor>::New();
-    //lineActor1->SetMapper(mapper1);
-    //lineActor1->GetProperty()->SetColor(0.0, 1.0, 0.0); // 绿色
-    //lineActor1->GetProperty()->SetLineWidth(3.0); // 设置线粗为3
-
-    //AddActors(GenerateRandomName("axis"), lineActor1);
-
-    //ui->winOfAnalyzer->renderWindow()->Render();
-    //ui->winOfAnalyzer->update();`
-    //////////////////////////////////////////////////////////////////////////////////////////////////////////
     // 输出初次拟合信息
-    Update_CFmes(fcy.message);
+    Update_CFmes(fcy->message);
     TeEDebug(">>: 初次圆柱拟合完成。内点(绿)/外点(红)与圆柱体(initial_fit_cylinder)已可视化。");
-
-    Eigen::Vector3f initial_center = fcy.get_center_point();
-    Eigen::Vector3f initial_axis = fcy.get_axis_direction();
-    float initial_radius = coeff1(6); 
 
     ParamDialogMeausreCy pdialog;
     if (pdialog.exec() != QDialog::Accepted) {
@@ -424,18 +503,40 @@ void CloudForgeAnalyzer::Slot_fit_cy2_Triggered() {
     int iters = pdialog.getParams()[2].toInt();
 
     // 创建圆柱度评估器，并以初次拟合结果为初始值
-    MeasureCylindricity evaluator;
-    evaluator.setInputCloud(Cloud_Temp);
-    evaluator.setDesignRadius(design_radius);
-    evaluator.setTolerance(tolerance);
-    evaluator.setMaxIterations(iters);
-    evaluator.setVerbose(true);
-    evaluator.setInitialLine(initial_center, initial_axis); // 设置初始值
+    auto evaluator = std::make_shared<MeasureCylindricity>();
+    evaluator->setInputCloud(Cloud_Temp);
+    evaluator->setDesignRadius(design_radius);
+    evaluator->setTolerance(tolerance);
+    evaluator->setMaxIterations(iters);
+    evaluator->setVerbose(false);
+    evaluator->setInitialLine(initial_center, initial_axis); // 设置初始值
+    evaluator->setProgressCallback(WorkerProgressCallback());
 
-    auto result = evaluator.evaluateCylindricity(); 
+    // 后台执行轴线优化(第二阶段粗到精搜索), 界面保持响应
+    auto resultPtr = std::make_shared<MeasureCylindricity::AssessmentResult>();
+    RunAsyncVoid("圆柱轴线优化",
+        [evaluator, resultPtr]() {
+            *resultPtr = evaluator->evaluateCylindricity();
+        },
+        [this, resultPtr, evaluator, initial_center, initial_axis, design_radius]() {
+            if (evaluator->isCancelled()) {
+                TeEDebug(">>: 圆柱轴线优化已取消，未保存结果。");
+                return;
+            }
+            FinishFitCy2(resultPtr, evaluator, initial_center, initial_axis, design_radius);
+        });
+}
 
-    Eigen::Vector3f optimized_center = result.getCylinderAxisPoint();
-    Eigen::Vector3f optimized_axis = result.getCylinderAxisDirection();
+// 优化完成后的界面部分: 可视化优化圆柱与轴线 + 保存结果 + 报告
+void CloudForgeAnalyzer::FinishFitCy2(const std::shared_ptr<MeasureCylindricity::AssessmentResult>& result,
+                                      const std::shared_ptr<MeasureCylindricity>& evaluator,
+                                      const Eigen::Vector3f& initial_center,
+                                      const Eigen::Vector3f& initial_axis,
+                                      double design_radius)
+{
+    const float line_length = 800.0f;
+    Eigen::Vector3f optimized_center = result->getCylinderAxisPoint();
+    Eigen::Vector3f optimized_axis = result->getCylinderAxisDirection();
 
     pcl::ModelCoefficients::Ptr cycoeff2(new pcl::ModelCoefficients);
     cycoeff2->values.resize(7);
@@ -448,13 +549,11 @@ void CloudForgeAnalyzer::Slot_fit_cy2_Triggered() {
     cycoeff2->values[6] = static_cast<float>(design_radius); // 使用设定的设计半径
 
     viewer->addCylinder(*cycoeff2, "optimized_fit_cylinder");
-    vtkSmartPointer<vtkLineSource> lineSource2 = vtkSmartPointer<vtkLineSource>::New();
-
-    optimized_axis.normalize(); 
-
+    optimized_axis.normalize();
     Eigen::Vector3f p1_opt = optimized_center - optimized_axis * line_length;
     Eigen::Vector3f p2_opt = optimized_center + optimized_axis * line_length;
 
+    vtkSmartPointer<vtkLineSource> lineSource2 = vtkSmartPointer<vtkLineSource>::New();
     lineSource2->SetPoint1(p1_opt.x(), p1_opt.y(), p1_opt.z());
     lineSource2->SetPoint2(p2_opt.x(), p2_opt.y(), p2_opt.z());
     lineSource2->Update();
@@ -465,7 +564,7 @@ void CloudForgeAnalyzer::Slot_fit_cy2_Triggered() {
     vtkSmartPointer<vtkActor> lineActor2 = vtkSmartPointer<vtkActor>::New();
     lineActor2->SetMapper(mapper2);
     lineActor2->GetProperty()->SetColor(1.0, 0.0, 0.0); //red
-    lineActor2->GetProperty()->SetLineWidth(3.0); 
+    lineActor2->GetProperty()->SetLineWidth(3.0);
 
     AddActors(GenerateRandomName("axis"), lineActor2);
 
@@ -476,15 +575,15 @@ void CloudForgeAnalyzer::Slot_fit_cy2_Triggered() {
     std::string storedName = GenerateRandomName("optimized_cylinder");
     addCylinderResult(storedName, cycoeff2);
 
-	std::stringstream ss;
-	ss << "圆柱拟合与优化完成。\n";
+    std::stringstream ss;
+    ss << "圆柱拟合与优化完成。\n";
     // 此处显示的是优化过程产生的评估信息，仅为参考。正式的评估应由Tool_MeasureCylindricity完成
-    ss<< "初次拟合轴线点: (" << initial_center.x() << ", "
-             << initial_center.y() << ", " << initial_center.z() << ")";
-    ss<< "初次拟合轴线方向: (" << initial_axis.x() << ", "
+    ss << "初次拟合轴线点: (" << initial_center.x() << ", "
+        << initial_center.y() << ", " << initial_center.z() << ")";
+    ss << "初次拟合轴线方向: (" << initial_axis.x() << ", "
         << initial_axis.y() << ", " << initial_axis.z() << ")";
-    ss<< "二次优化后轴线点: (" << optimized_center.x() << ", "
-             << optimized_center.y() << ", " << optimized_center.z() << ")";
+    ss << "二次优化后轴线点: (" << optimized_center.x() << ", "
+        << optimized_center.y() << ", " << optimized_center.z() << ")";
     ss << "二次优化轴线方向: (" << optimized_axis.x() << ", "
         << optimized_axis.y() << ", " << optimized_axis.z() << ")";
     std::string finalMsg = "圆柱拟合与优化完成。\n";
@@ -492,10 +591,14 @@ void CloudForgeAnalyzer::Slot_fit_cy2_Triggered() {
     finalMsg += "二次优化：圆柱体 'optimized_fit_cylinder'\n";
 
     TeEDebug(">>: 二次优化完成，几何体已更新。");
-    Update_CFmes(finalMsg+ss.str());
+    Update_CFmes(finalMsg + ss.str());
 }
 
 void CloudForgeAnalyzer::Slot_fit_cy3_Triggered() {
+    if (IsTaskRunning()) {
+        TeEDebug(">>: 已有计算任务进行中，请等待完成或点击工具栏“取消计算”。");
+        return;
+    }
     // 1. 选择点云（含焊缝的原始壁面点云）
     ChoseCloudDialog dialog(CloudMap, ColorMap, "选择点云进行圆柱拟合与焊缝约束优化");
     if (dialog.exec() != QDialog::Accepted) {
@@ -508,22 +611,51 @@ void CloudForgeAnalyzer::Slot_fit_cy3_Triggered() {
     }
     pcl::PointCloud<pcl::PointXYZ>::Ptr Cloud_Temp = CloudMap[dialog.getSelectedList()[0]];
 
-    // 2. 第一步：初次圆柱拟合（半径约束 RANSAC）
-    Fit_Cylinder fcy(Cloud_Temp);
-    if (fcy.isCancelled) {
-        TeEDebug(">>: 圆柱拟合操作取消");
+    // 2. 先收集初始拟合参数（原先在 Fit_Cylinder 构造函数里弹框，移到界面线程）
+    ParamDialog_FittingCylinder fitDialog;
+    if (fitDialog.exec() != QDialog::Accepted) {
+        TeEDebug(">>: 参数设置取消");
+        return;
+    }
+    bool ok1, ok2, ok3, ok4;
+    Fit_Cylinder::FitParams fp;
+    fp.KSearch = fitDialog.getParams()[0].toInt(&ok1);
+    fp.DistanceThreshold = fitDialog.getParams()[1].toFloat(&ok2);
+    fp.MaxIterations = fitDialog.getParams()[2].toInt(&ok3);
+    fp.InitialRadius = fitDialog.getParams()[3].toFloat(&ok4);
+    if (!ok1 || !ok2 || !ok3 || !ok4) {
+        TeEDebug(">>: 无效数字");
         return;
     }
 
-    // 获取初次拟合结果
-    Eigen::VectorXf coeff1 = fcy.Get_Coeff_in();
+    // 3. 后台执行初次拟合(法线估计+RANSAC), 完成后回到界面线程继续
+    auto fcy = std::make_shared<Fit_Cylinder>(Cloud_Temp, fp);
+    RunAsyncVoid("圆柱初次拟合",
+        [this, fcy]() {
+            PostProgress(0, 0, "初次拟合: 法线估计与RANSAC...");
+            fcy->compute();
+        },
+        [this, fcy, Cloud_Temp]() {
+            if (fcy->isCancelled || fcy->Get_Coeff_in().size() < 7) {
+                TeEDebug(">>: 初次圆柱拟合未获得有效结果，流程结束。");
+                return;
+            }
+            ContinueFitCy3AfterInitialFit(fcy, Cloud_Temp);
+        });
+}
+
+// 初次拟合完成后的界面部分: 可视化 + 收集优化/焊缝参数 + 启动后台优化
+void CloudForgeAnalyzer::ContinueFitCy3AfterInitialFit(std::shared_ptr<Fit_Cylinder> fcy,
+                                                       pcl::PointCloud<pcl::PointXYZ>::Ptr Cloud_Temp)
+{
+    Eigen::VectorXf coeff1 = fcy->Get_Coeff_in();
     pcl::ModelCoefficients::Ptr cycoeff1(new pcl::ModelCoefficients);
     cycoeff1->values.resize(7);
     for (std::size_t i = 0; i < 7; ++i)
         cycoeff1->values[i] = coeff1(i);
 
-    pcl::PointCloud<pcl::PointXYZ>::Ptr Cloud_Inliers = fcy.Get_Inliers();
-    pcl::PointCloud<pcl::PointXYZ>::Ptr Cloud_Outliers = fcy.Get_Outliers();
+    pcl::PointCloud<pcl::PointXYZ>::Ptr Cloud_Inliers = fcy->Get_Inliers();
+    pcl::PointCloud<pcl::PointXYZ>::Ptr Cloud_Outliers = fcy->Get_Outliers();
     ColorManager color_inliers(0, 255, 0);   // 绿色-内点
     ColorManager color_outliers(255, 0, 0);  // 红色-外点
     beginUndoBatch("初始圆柱拟合");
@@ -534,11 +666,11 @@ void CloudForgeAnalyzer::Slot_fit_cy3_Triggered() {
     viewer->addCylinder(*cycoeff1, "initial_fit_cylinder");
 
     // 输出初次拟合信息
-    Update_CFmes(fcy.message);
+    Update_CFmes(fcy->message);
     TeEDebug(">>: 初次圆柱拟合完成。内点(绿)/外点(红)与圆柱体(initial_fit_cylinder)已可视化。");
 
-    Eigen::Vector3f initial_center = fcy.get_center_point();
-    Eigen::Vector3f initial_axis = fcy.get_axis_direction();
+    Eigen::Vector3f initial_center = fcy->get_center_point();
+    Eigen::Vector3f initial_axis = fcy->get_axis_direction();
 
     // 3. 优化参数设置
     ParamDialogMeausreCy pdialog;
@@ -555,33 +687,59 @@ void CloudForgeAnalyzer::Slot_fit_cy3_Triggered() {
     // 3.5 焊缝检测参数设置（取消则跳过焊缝约束，仅做无约束优化）
     bool useWeldConstraint = false;
     ParamDialogWeld wdialog;
+    double weldThrFactor = 0.0, weldClusterTol = 0.0, weldLambda = 0.0;
+    int weldMinCluster = 0;
     if (wdialog.exec() == QDialog::Accepted) {
         useWeldConstraint = true;
+        weldThrFactor = wdialog.getParams()[0].toDouble();
+        weldClusterTol = wdialog.getParams()[1].toDouble();
+        weldMinCluster = wdialog.getParams()[2].toInt();
+        weldLambda = wdialog.getParams()[3].toDouble();
     }
     else {
         TeEDebug(">>: 焊缝参数设置取消，跳过焊缝约束。");
     }
 
-    // 4. 两阶段优化 + 焊缝约束修正（第三阶段）
-    MeasureCylindricity evaluator;
-    evaluator.setInputCloud(Cloud_Temp);
-    evaluator.setDesignRadius(design_radius);
-    evaluator.setTolerance(tolerance);
-    evaluator.setMaxIterations(iters);
-    evaluator.setVerbose(true);
-    evaluator.setInitialLine(initial_center, initial_axis); // 设置初始值
+    // 4. 两阶段优化 + 焊缝约束修正（第三阶段）—— 放到后台线程执行
+    auto evaluator = std::make_shared<MeasureCylindricity>();
+    evaluator->setInputCloud(Cloud_Temp);
+    evaluator->setDesignRadius(design_radius);
+    evaluator->setTolerance(tolerance);
+    evaluator->setMaxIterations(iters);
+    evaluator->setVerbose(false);
+    evaluator->setInitialLine(initial_center, initial_axis); // 设置初始值
     if (useWeldConstraint) {
-        evaluator.setWeldThresholdFactor(wdialog.getParams()[0].toDouble());
-        evaluator.setWeldClusterTolerance(wdialog.getParams()[1].toDouble());
-        evaluator.setWeldMinClusterSize(wdialog.getParams()[2].toInt());
-        evaluator.setWeldConstraintWeight(wdialog.getParams()[3].toDouble());
+        evaluator->setWeldThresholdFactor(weldThrFactor);
+        evaluator->setWeldClusterTolerance(weldClusterTol);
+        evaluator->setWeldMinClusterSize(weldMinCluster);
+        evaluator->setWeldConstraintWeight(weldLambda);
     }
+    evaluator->setProgressCallback(WorkerProgressCallback());
 
-    auto result = useWeldConstraint ? evaluator.evaluateCylindricityWithWeld()
-                                    : evaluator.evaluateCylindricity();
+    auto resultPtr = std::make_shared<MeasureCylindricity::AssessmentResult>();
+    RunAsyncVoid("圆柱轴线优化(含焊缝约束)",
+        [evaluator, resultPtr, useWeldConstraint]() {
+            *resultPtr = useWeldConstraint ? evaluator->evaluateCylindricityWithWeld()
+                                           : evaluator->evaluateCylindricity();
+        },
+        [this, resultPtr, evaluator, initial_center, initial_axis, design_radius]() {
+            if (evaluator->isCancelled()) {
+                TeEDebug(">>: 圆柱轴线优化已取消，未保存结果。");
+                return;
+            }
+            FinishFitCy3(resultPtr, evaluator, initial_center, initial_axis, design_radius);
+        });
+}
 
+// 优化完成后的界面部分: 焊缝点/优化圆柱/轴线可视化 + 保存结果 + 报告
+void CloudForgeAnalyzer::FinishFitCy3(const std::shared_ptr<MeasureCylindricity::AssessmentResult>& result,
+                                      const std::shared_ptr<MeasureCylindricity>& evaluator,
+                                      const Eigen::Vector3f& initial_center,
+                                      const Eigen::Vector3f& initial_axis,
+                                      double design_radius)
+{
     // 5. 可视化检测到的焊缝点（橙色），供用户核对
-    auto weld_cloud = evaluator.getWeldPoints();
+    auto weld_cloud = evaluator->getWeldPoints();
     if (weld_cloud && !weld_cloud->empty()) {
         ColorManager color_weld(255, 128, 0);
         beginUndoBatch("焊缝点");
@@ -594,8 +752,8 @@ void CloudForgeAnalyzer::Slot_fit_cy3_Triggered() {
     }
 
     // 6. 优化后圆柱与轴线可视化
-    Eigen::Vector3f optimized_center = result.getCylinderAxisPoint();
-    Eigen::Vector3f optimized_axis = result.getCylinderAxisDirection();
+    Eigen::Vector3f optimized_center = result->getCylinderAxisPoint();
+    Eigen::Vector3f optimized_axis = result->getCylinderAxisDirection();
 
     pcl::ModelCoefficients::Ptr cycoeff2(new pcl::ModelCoefficients);
     cycoeff2->values.resize(7);
@@ -654,6 +812,10 @@ void CloudForgeAnalyzer::Slot_fit_cy3_Triggered() {
 }
 
 void CloudForgeAnalyzer::Tool_MeasureArc() {
+    if (IsTaskRunning()) {
+        TeEDebug(">>: 已有计算任务进行中，请等待完成或点击工具栏“取消计算”。");
+        return;
+    }
     ChoseCloudDialog dialog(CloudMap, ColorMap, "选择被测点云");
     if (dialog.exec() != QDialog::Accepted) {
         TeEDebug(">>:操作取消");
@@ -690,7 +852,9 @@ void CloudForgeAnalyzer::Tool_MeasureArc() {
     qDebug() << "点云点数:" << Cloud_Temp->size();
 
 	MeasureArc::FitMethod fitMethod = MeasureArc::BSPLINE_LSQ;
-    pcl::PointXYZ* interest_point = nullptr;
+    // 手动拾取的测量位置点: 用 shared_ptr 承载, 供工作线程期间保持生命周期
+    auto interestPointPtr = std::make_shared<pcl::PointXYZ>();
+    bool hasInterestPoint = false;
 
     OptionBox box({ "Cardinal样条(插值)", "B样条逼近(平滑)" }, nullptr);
     box.setTitle("选择拟合方法");
@@ -726,7 +890,7 @@ void CloudForgeAnalyzer::Tool_MeasureArc() {
         QString text = box1.getSelectedText();
 
         if (index == 0) {
-            interest_point = nullptr;
+            hasInterestPoint = false;
             qDebug() << "测量中线";
             TeEDebug("测量中线");
         }
@@ -741,7 +905,8 @@ void CloudForgeAnalyzer::Tool_MeasureArc() {
                 TeEDebug("点选择已取消或不足一个点");
                 return;
             }
-            interest_point = new pcl::PointXYZ(pts_pcl[0]);//之前写法：interest_point = &pts_pcl[0]; mgr.GetPickedPCLPoints();返回的是临时变量，在此语块后被释放造成错误
+            *interestPointPtr = pts_pcl[0];//之前写法：interest_point = &pts_pcl[0]; mgr.GetPickedPCLPoints();返回的是临时变量，在此语块后被释放造成错误
+            hasInterestPoint = true;
         }
     }
     else {
@@ -750,15 +915,77 @@ void CloudForgeAnalyzer::Tool_MeasureArc() {
         return;
     }
 
-
-    MeasureArc measurer(Cloud_Temp, cy_Temp, interest_point, fitMethod);
-    if (measurer.isCancelled) {
-        TeEDebug(">>: 操作取消");
-        return;
+    // 拟合参数对话框在界面线程弹出(原先在 MeasureArc 构造函数里弹框)
+    MeasureArc::ArcParams arcParams;
+    arcParams.method = fitMethod;
+    if (fitMethod == MeasureArc::CARDINAL_SPLINE) {
+        ParamDialogMeaArc arcDialog;
+        if (arcDialog.exec() != QDialog::Accepted) {
+            TeEDebug(">>: 参数设置取消");
+            return;
+        }
+        bool ok1, ok2, ok3, ok4;
+        arcParams.sliceThicknessFactor = arcDialog.getParams()[0].toDouble(&ok1);
+        arcParams.integrationTolerance = arcDialog.getParams()[1].toDouble(&ok2);
+        arcParams.downsampleTargetSize = arcDialog.getParams()[2].toInt(&ok3);
+        arcParams.virtualPointExtrapolation = arcDialog.getParams()[3].toDouble(&ok4);
+        if (!ok1 || !ok2 || !ok3 || !ok4) {
+            TeEDebug(">>: 无效数字");
+            return;
+        }
+    }
+    else {
+        ParamDialogMeaArcB arcDialog;
+        if (arcDialog.exec() != QDialog::Accepted) {
+            TeEDebug(">>: 参数设置取消");
+            return;
+        }
+        bool ok1, ok2, ok3, ok4, ok5;
+        arcParams.sliceThicknessFactor = arcDialog.getParams()[0].toDouble(&ok1);
+        arcParams.integrationTolerance = arcDialog.getParams()[1].toDouble(&ok2);
+        arcParams.bsplineDegree = arcDialog.getParams()[2].toInt(&ok3);
+        arcParams.bsplineControlPoints = arcDialog.getParams()[3].toInt(&ok4);
+        arcParams.bsplineSmoothingFactor = arcDialog.getParams()[4].toDouble(&ok5);
+        if (!ok1 || !ok2 || !ok3 || !ok4 || !ok5) {
+            TeEDebug(">>: 无效数字");
+            return;
+        }
     }
 
+    // 后台执行弧长计算(切片投影+样条拟合+积分), 完成后回到界面线程添加曲线Actor
+    auto measurerHolder = std::make_shared<std::shared_ptr<MeasureArc>>();
+    RunAsyncVoid("圆弧测量",
+        [this, measurerHolder, Cloud_Temp, cy_Temp, interestPointPtr, hasInterestPoint, arcParams]() {
+            if (!PostProgress(0, 0, "圆弧测量: 切片投影与样条拟合...")) {
+                PostLog(">>: 圆弧测量已取消。");
+                return;
+            }
+            pcl::PointXYZ* interest_point = hasInterestPoint ? interestPointPtr.get() : nullptr;
+            // 参数构造函数不再弹框、不再自动计算, 由工作线程显式调用 compute()
+            *measurerHolder = std::make_shared<MeasureArc>(Cloud_Temp, cy_Temp, interest_point, arcParams);
+            (*measurerHolder)->setAutoBuildActor(false);   // VTK Actor 改为在界面线程创建
+            (*measurerHolder)->compute();
+            const MeasureArc& m = **measurerHolder;
+            if (m.success) {
+                PostLog("截面弧长: " + std::to_string(m.arcLength) + " mm");
+            }
+            else {
+                PostLog(">>: 弧长计算失败: " + m.message);
+            }
+            PostProgress(100, 100, "圆弧测量完成");
+        },
+        [this, measurerHolder]() {
+    if (!*measurerHolder) {
+        return;   // 工作线程未执行(开始前已取消)
+    }
+    if (m_asyncState && m_asyncState->cancelRequested.load()) {
+        TeEDebug(">>: 圆弧测量已取消，不再显示本次结果。");
+        return;
+    }
+    MeasureArc& measurer = **measurerHolder;
     if (measurer.success && (!measurer.isCancelled)) {
-        // 1. 获取计算生成的曲线Actor
+        // 1. 获取计算生成的曲线Actor（VTK 对象在界面线程创建）
+        measurer.buildVisualizationActor();
         vtkSmartPointer<vtkActor> splineActor = measurer.getVisualizationActor();
 
         if (splineActor) {
@@ -781,6 +1008,7 @@ void CloudForgeAnalyzer::Tool_MeasureArc() {
     }
 
     TeEDebug(measurer.message);
+        });
 }
 
 
@@ -876,6 +1104,10 @@ void CloudForgeAnalyzer::visualizeCylindricityHeatMap(
 
 void CloudForgeAnalyzer::Tool_MeasureCylindricity()
 {
+    if (IsTaskRunning()) {
+        TeEDebug(">>: 已有计算任务进行中，请等待完成或点击工具栏“取消计算”。");
+        return;
+    }
     // 1. 选择待评估的点云
     ChoseCloudDialog dialog(CloudMap, ColorMap, "选择待评估圆柱度的点云");
     if (dialog.exec() != QDialog::Accepted) {
@@ -924,26 +1156,39 @@ void CloudForgeAnalyzer::Tool_MeasureCylindricity()
     double tolerance = pdialog.getParams()[1].toDouble();
     int iters = pdialog.getParams()[2].toInt(); // 此处的迭代次数对直接评估影响有限，可保留
 
-    // 5. 创建评估器并设置参数
-    MeasureCylindricity evaluator;
-    evaluator.setInputCloud(target_cloud);
-    evaluator.setDesignRadius(cylinder_design_radius);
-    evaluator.setTolerance(tolerance);
-    evaluator.setMaxIterations(iters);
-    evaluator.setVerbose(true);
+    // 5. 创建评估器并设置参数(计算在后台线程执行, 界面保持响应)
+    auto evaluator = std::make_shared<MeasureCylindricity>();
+    evaluator->setInputCloud(target_cloud);
+    evaluator->setDesignRadius(cylinder_design_radius);
+    evaluator->setTolerance(tolerance);
+    evaluator->setMaxIterations(iters);
+    evaluator->setVerbose(false);
+    evaluator->setProgressCallback(WorkerProgressCallback());
 
     // 关键步骤：直接传入圆柱轴线参数，跳过优化阶段的参数寻优
-    evaluator.setInitialLineFromCoeffs(axis_coeffs);
+    evaluator->setInitialLineFromCoeffs(axis_coeffs);
 
-    // 6. 执行评估。这里需要调用一个不进行优化、仅基于给定直线评估的函数。
-    Eigen::Vector3f center(axis_coeffs[0], axis_coeffs[1], axis_coeffs[2]);
-    Eigen::Vector3f axis(axis_coeffs[3], axis_coeffs[4], axis_coeffs[5]);
-    auto result = evaluator.evaluateGivenLine(center, axis); // 使用此函数直接评估，不优化
+    // 6. 后台执行评估（该函数不进行优化，仅基于给定直线评估）
+    auto resultPtr = std::make_shared<MeasureCylindricity::AssessmentResult>();
+    RunAsyncVoid("圆柱度评估",
+        [this, evaluator, resultPtr, axis_coeffs]() {
+            PostProgress(0, 0, "圆柱度评估: 基于给定轴线计算偏差...");
+            Eigen::Vector3f center(axis_coeffs[0], axis_coeffs[1], axis_coeffs[2]);
+            Eigen::Vector3f axis(axis_coeffs[3], axis_coeffs[4], axis_coeffs[5]);
+            *resultPtr = evaluator->evaluateGivenLine(center, axis); // 使用此函数直接评估，不优化
+            PostLog(resultPtr->assessment_message);
+        },
+        [this, evaluator, resultPtr]() {
+    if (evaluator->isCancelled()) {
+        TeEDebug(">>: 圆柱度评估已取消，未保存结果。");
+        return;
+    }
+    const auto& result = *resultPtr;
 
     // 7. 生成并可视化热力图 (即使不优化，也需要基于给定直线生成热力图)
-    auto heatmap_cloud = evaluator.getHeatMapCloud();
+    auto heatmap_cloud = evaluator->getHeatMapCloud();
     double min_distance, max_distance;
-    evaluator.getDistanceRange(min_distance, max_distance);
+    evaluator->getDistanceRange(min_distance, max_distance);
 
     visualizeCylindricityHeatMap(heatmap_cloud, min_distance, max_distance);
 
@@ -955,10 +1200,15 @@ void CloudForgeAnalyzer::Tool_MeasureCylindricity()
     // 9. 刷新视图
     ui->winOfAnalyzer->renderWindow()->Render();
     ui->winOfAnalyzer->update();
+        });
 }
 
 void CloudForgeAnalyzer::Tool_MeasureWeldHeight()
 {
+    if (IsTaskRunning()) {
+        TeEDebug(">>: 已有计算任务进行中，请等待完成或点击工具栏“取消计算”。");
+        return;
+    }
     // === 1. 选择焊缝点云（支持勾选多个）===
     ChoseCloudDialog dialogWeld(CloudMap, ColorMap, "选择焊缝点云（可勾选多个）");
     if (dialogWeld.exec() != QDialog::Accepted) {
@@ -1000,41 +1250,83 @@ void CloudForgeAnalyzer::Tool_MeasureWeldHeight()
         return;
     }
 
-    // === 4. 对每个焊缝点云独立处理 ===
+    // === 4. 收集待处理的焊缝点云（保持原有顺序与下标，命名与原先一致）===
+    std::vector<std::pair<std::string, pcl::PointCloud<pcl::PointXYZ>::Ptr>> weldClouds;
+    weldClouds.reserve(weldNames.size());
+    for (const auto& weldName : weldNames) {
+        weldClouds.emplace_back(weldName, CloudMap[weldName]);
+    }
+
+    // 每条焊缝的后台计算结果(评估结果 + 热力图 + 高度范围), 由 worker 与 onFinished 共享
+    struct WeldOutcome {
+        std::string weldName;
+        std::string prefix;
+        MeasureWeldHeight::AssessmentResult result;
+        pcl::PointCloud<pcl::PointXYZRGB>::Ptr heatmap;
+        double minH = 0.0;
+        double maxH = 0.0;
+        double maxAbsH = 0.0;
+    };
+    auto outcomes = std::make_shared<std::vector<WeldOutcome>>();
+
+    // === 5. 后台执行测量（界面保持响应；可在工具栏“取消计算”中止）===
+    RunAsyncVoid("焊缝高度测量",
+        [this, outcomes, weldClouds, baseCloud, searchR, regionSz, ransacTh, minNei]() {
+            const int total = static_cast<int>(weldClouds.size());
+            for (int wi = 0; wi < total; ++wi) {
+                const std::string& weldName = weldClouds[wi].first;
+                pcl::PointCloud<pcl::PointXYZ>::Ptr weldCloud = weldClouds[wi].second;
+                // 进度回报: 返回 false 表示用户点击了“取消计算”
+                if (!PostProgress(wi, total, "焊缝高度测量: " + weldName)) {
+                    PostLog(">>: 焊缝高度测量已取消。");
+                    break;
+                }
+                if (!weldCloud || weldCloud->empty()) {
+                    PostLog(">>: 焊缝点云 '" + weldName + "' 为空，跳过");
+                    continue;
+                }
+                PostLog(">>: 正在评估焊缝 '" + weldName + "' ...");
+
+                WeldOutcome outcome;
+                outcome.weldName = weldName;
+                outcome.prefix = "weld_" + std::to_string(wi) + "_";
+
+                MeasureWeldHeight measurer;
+                measurer.setWeldCloud(weldCloud);
+                measurer.setBaseCloud(baseCloud);
+                measurer.setSearchRadius(searchR);
+                measurer.setRegionSize(regionSz);
+                measurer.setRansacThreshold(ransacTh);
+                measurer.setMinNeighbors(minNei);
+                measurer.setVerbose(false);
+
+                outcome.result = measurer.evaluate();
+                outcome.heatmap = measurer.getHeatMapCloud();
+                measurer.getHeightRange(outcome.minH, outcome.maxH);
+                outcome.maxAbsH = measurer.getMaxAbsHeight();
+
+                PostLog(outcome.result.assessment_message);
+                outcomes->push_back(outcome);
+            }
+            PostProgress(total, total, "焊缝高度测量完成");
+        },
+        [this, outcomes, regionSz]() {
+    // === 6. 可视化与报告（仅在 GUI 线程执行）===
     m_weldMeasureShapeIds.clear();
     std::string allReports;
-    for (size_t wi = 0; wi < weldNames.size(); ++wi) {
-        const std::string& weldName = weldNames[wi];
-        pcl::PointCloud<pcl::PointXYZ>::Ptr weldCloud = CloudMap[weldName];
-        if (!weldCloud || weldCloud->empty()) {
-            TeEDebug(">>: 焊缝点云 '" + weldName + "' 为空，跳过");
-            continue;
-        }
-
-        std::string prefix = "weld_" + std::to_string(wi) + "_";
-        TeEDebug(">>: 正在评估焊缝 '" + weldName + "' ...");
+    for (const auto& outcome : *outcomes) {
+        const std::string& weldName = outcome.weldName;
+        const std::string& prefix = outcome.prefix;
+        const auto& result = outcome.result;
+        auto heatmap = outcome.heatmap;
+        double minH = outcome.minH;
+        double maxH = outcome.maxH;
+        double maxAbsH = outcome.maxAbsH;
 
         // 追踪形状 ID，供撤销时清理
         m_weldMeasureShapeIds.push_back(prefix + "heatmap");
         m_weldMeasureShapeIds.push_back(prefix + "sphere_high");
         m_weldMeasureShapeIds.push_back(prefix + "text_high");
-
-        MeasureWeldHeight measurer;
-        measurer.setWeldCloud(weldCloud);
-        measurer.setBaseCloud(baseCloud);
-        measurer.setSearchRadius(searchR);
-        measurer.setRegionSize(regionSz);
-        measurer.setRansacThreshold(ransacTh);
-        measurer.setMinNeighbors(minNei);
-        measurer.setVerbose(true);
-
-        auto result = measurer.evaluate();
-
-        // --- 4a. 热力图可视化 ---
-        auto heatmap = measurer.getHeatMapCloud();
-        double minH, maxH;
-        measurer.getHeightRange(minH, maxH);
-        double maxAbsH = measurer.getMaxAbsHeight();
 
         if (heatmap && !heatmap->empty()) {
             std::string heatmap_id = prefix + "heatmap";
@@ -1161,9 +1453,615 @@ void CloudForgeAnalyzer::Tool_MeasureWeldHeight()
     ui->winOfAnalyzer->renderWindow()->Render();
     ui->winOfAnalyzer->update();
     TeEDebug(">>: 焊缝高度测量完成。");
+        });
+}
+
+void CloudForgeAnalyzer::Tool_MeasurePothole()
+{
+    if (IsTaskRunning()) {
+        TeEDebug(">>: 已有计算任务进行中，请等待完成或点击工具栏“取消计算”。");
+        return;
+    }
+    // 1. 选择待测点云（含凹塘/凹坑的多片拼接区域）
+    ChoseCloudDialog dialog(CloudMap, ColorMap, "选择待测量凹塘的点云（建议为多片拼接区域）");
+    if (dialog.exec() != QDialog::Accepted) {
+        TeEDebug(">>: 操作取消");
+        return;
+    }
+    if (dialog.getSelectedList().empty()) {
+        TeEDebug(">>: 未选择点云");
+        return;
+    }
+    pcl::PointCloud<pcl::PointXYZ>::Ptr target_cloud = CloudMap[dialog.getSelectedList()[0]];
+
+    // 2. 选择已保存的圆柱拟合结果作为理想柱面（与圆柱度测量一致：先拟合、后测量）
+    //    注意: 基础"拟合圆柱"不保存结果，请使用"二次优化圆柱"或"焊缝约束优化"入口
+    ChoseCyDialog dialog1(cylinderResultsMap);
+    if (dialog1.getSelectedList().empty()) {
+        TeEDebug(">>: 未选择圆柱拟合结果");
+        return;
+    }
+
+    std::string selectedCylinderName = dialog1.getSelectedList()[0];
+    pcl::ModelCoefficients::Ptr selected_cylinder = cylinderResultsMap[selectedCylinderName];
+
+    // 参考圆柱可视化（青色，以示区别）
+    std::string visualization_id = "pothole_ref_" + selectedCylinderName;
+    viewer->removeShape(visualization_id);
+    viewer->addCylinder(*selected_cylinder, visualization_id);
+    viewer->setShapeRenderingProperties(pcl::visualization::PCL_VISUALIZER_COLOR,
+        0.0, 1.0, 1.0, visualization_id);
+    TeEDebug(">>: 参考圆柱几何体 '" + selectedCylinderName + "' 已可视化(青色)。");
+
+    // 3. 测量参数（阈值/容差为0时自动）
+    ParamDialog_Pothole pdialog;
+    if (pdialog.exec() != QDialog::Accepted) {
+        TeEDebug(">>: 操作取消");
+        return;
+    }
+    bool ok1, ok2, ok3;
+    double thr = pdialog.getParams()[0].toDouble(&ok1);
+    double ctol = pdialog.getParams()[1].toDouble(&ok2);
+    int minpts = pdialog.getParams()[2].toInt(&ok3);
+    if (!ok1 || !ok2 || !ok3 || thr < 0 || ctol < 0 || minpts <= 0) {
+        TeEDebug(">>: 无效参数");
+        return;
+    }
+    // 形面趋势处理模式与点群面积占比上限(新增)
+    const QString trendStr = pdialog.getParams().size() > 3 ? pdialog.getParams()[3] : QString("0");
+    const QString areaStr = pdialog.getParams().size() > 4 ? pdialog.getParams()[4] : QString("20");
+    bool okT = true, okA = true;
+    int trendMode = trendStr.toInt(&okT);
+    double areaPct = areaStr.toDouble(&okA);
+    if (!okT || trendMode < 0 || trendMode > 2) trendMode = 0;
+    if (!okA || areaPct <= 0 || areaPct > 100) areaPct = 20.0;
+
+    // 局部基准(口径B)参数: 窗口 W / 局部阈值 T_local / 是否启用 / 热力图显示场(新增, 追加在末尾)
+    const QString winStr = pdialog.getParams().size() > 5 ? pdialog.getParams()[5] : QString("90");
+    const QString lthrStr = pdialog.getParams().size() > 6 ? pdialog.getParams()[6] : QString("0.35");
+    const QString useLocalStr = pdialog.getParams().size() > 7 ? pdialog.getParams()[7] : QString("1");
+    const QString heatStr = pdialog.getParams().size() > 8 ? pdialog.getParams()[8] : QString("0");
+    bool okW = true, okL = true, okU = true, okH = true;
+    double localWindow = winStr.toDouble(&okW);
+    double localThr = lthrStr.toDouble(&okL);
+    int useLocal = useLocalStr.toInt(&okU);
+    int heatField = heatStr.toInt(&okH);
+    if (!okW || localWindow <= 0) localWindow = 90.0;
+    if (!okL || localThr < 0) localThr = 0.35;
+    if (!okU || (useLocal != 0 && useLocal != 1)) useLocal = 1;
+    if (!okH || (heatField != 0 && heatField != 1)) heatField = 0;
+
+    // 4. 后台执行测量（界面保持响应；可在工具栏“取消计算”中止）
+    auto potholePtr = std::make_shared<MeasurePothole>();
+    auto pitResult = std::make_shared<MeasurePothole::PitResult>();
+    RunAsyncVoid("凹塘测量",
+        [this, potholePtr, pitResult, target_cloud, selected_cylinder, thr, ctol, minpts,
+         trendMode, areaPct, localWindow, localThr, useLocal, heatField]() {
+            PostProgress(0, 0, "凹塘测量: 残差与点群聚类...");
+            potholePtr->setInputCloud(target_cloud);
+            potholePtr->setCylinder(selected_cylinder);
+            potholePtr->setDistanceThreshold(thr);
+            potholePtr->setClusterTolerance(ctol);
+            potholePtr->setMinClusterSize(minpts);
+            potholePtr->setTrendMode(trendMode);
+            potholePtr->setMaxAreaFraction(areaPct / 100.0);
+            potholePtr->setUseLocalBaseline(useLocal != 0);
+            potholePtr->setLocalWindow(localWindow);
+            potholePtr->setLocalThreshold(localThr);
+            potholePtr->setBoundaryExclude(true);
+            potholePtr->setHeatMapField(heatField);
+            potholePtr->setVerbose(false);
+            *pitResult = potholePtr->evaluate();
+            // 调试框只留一行结论: 个数/主坑深度/全局最大距离/判定
+            {
+                int okCount = 0;
+                for (const auto& it : pitResult->pits) if (it.valid) ++okCount;
+                std::ostringstream oss;
+                oss << std::fixed << std::setprecision(3);
+                oss << ">> [凹塘] 检出 " << pitResult->pit_count << " 个（通过 " << okCount
+                    << "） | 主坑深 " << pitResult->local_max_depth
+                    << " mm | 到理想柱面最大距离 " << pitResult->max_depth
+                    << " mm | W=" << pitResult->local_window << " mm"
+                    << " | " << (pitResult->valid ? "检出有效凹塘" : "未判定为凹塘");
+                PostLog(oss.str());
+            }
+        },
+        [this, potholePtr, pitResult]() {
+            const auto& result = *pitResult;
+
+    // 5. 残差热力图（蓝=凹，白=0，红=凸）
+    auto heatmap_cloud = potholePtr->getHeatMapCloud();
+    if (heatmap_cloud && !heatmap_cloud->empty()) {
+        viewer->removePointCloud("pothole_heatmap");
+        viewer->addPointCloud<pcl::PointXYZRGB>(heatmap_cloud, "pothole_heatmap");
+        viewer->setPointCloudRenderingProperties(
+            pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 2, "pothole_heatmap");
+        RGBCloudMap.erase("pothole_heatmap");
+        RGBCloudMap.emplace("pothole_heatmap", heatmap_cloud);
+        TeEDebug(std::string(">>: 热力图已显示（蓝=凹，红=凸）；当前显示 ")
+            + (potholePtr->getHeatMapFieldUsed() == 0 ? "局部凹陷深度（相对局部基准）"
+                                                      : "到理想柱面距离"));
+    }
+
+    // 6. 凹塘点群（橙色）
+    auto pit_cloud = potholePtr->getPitCloud();
+    if (pit_cloud && !pit_cloud->empty()) {
+        ColorManager color_pit(255, 128, 0);
+        beginUndoBatch("凹塘点群");
+        AddPointCloud("pothole_pit_cloud", pit_cloud, color_pit);
+        endUndoBatch();
+        TeEDebug(">>: 凹塘点群已显示（橙色）。");
+    }
+
+    // 6.5 场景尺度: 3D 文字与标记球按补丁大小自适应
+    //     旧实现 textScale 固定 0.5: 在 300 mm 级补丁上不足 2 个像素高, 实际看不见;
+    //     这里取包围盒对角线的 2.2%(6~14 mm 兜底), 保证标签在整幅视图下清晰可读。
+    double textScale = 10.0;   // 3D 文字高度(mm)
+    double markScale = 4.0;    // 标记球基础半径(mm)
+    {
+        pcl::PointXYZRGB lo, hi;   // 热力图是 XYZRGB, 包围盒类型需与点云一致
+        if (heatmap_cloud && !heatmap_cloud->empty()) {
+            pcl::getMinMax3D(*heatmap_cloud, lo, hi);
+            const double diag = (hi.getVector3fMap() - lo.getVector3fMap()).norm();
+            textScale = std::min(std::max(0.022 * diag, 6.0), 14.0);
+            // 球只是"定位点", 取 0.6% 对角线(约 φ6 mm): 再大就会把小坑整个盖住(φ11 坑短轴仅 6 mm)
+            markScale = std::min(std::max(0.006 * diag, 2.0), 4.5);
+        }
+    }
+
+    // 7. 最深点标注（球 + 3D文字）
+    if (result.fit_ok) {
+        const auto& dp = result.deepest_point;
+        std::string sphere_id = "pothole_sphere_deepest";
+        std::string text_id = "pothole_text_deepest";
+        viewer->removeShape(sphere_id);
+        viewer->removeText3D(text_id);
+
+        double marker_size = std::max(markScale, result.max_depth * 0.5);
+        viewer->addSphere(dp, marker_size, 0.0, 1.0, 1.0, sphere_id);
+        viewer->setShapeRenderingProperties(
+            pcl::visualization::PCL_VISUALIZER_COLOR, 0.0, 1.0, 1.0, sphere_id);
+        viewer->setShapeRenderingProperties(
+            pcl::visualization::PCL_VISUALIZER_OPACITY, 0.9, sphere_id);
+
+        std::stringstream depthSS;
+        depthSS << std::fixed << std::setprecision(3) << result.max_depth;
+        std::string labelText = "MAX dist " + depthSS.str() + " mm";
+        // 这个点常常就在主坑最深处旁边(实测只差几个毫米), 若与各坑标签同高必然叠字。
+        // 所以: 各坑标签抬 1.15 倍字高, 本条抬 2.6 倍字高(二者错开约 1.5 倍字高),
+        // 并画一条引线连回球心, 保证"哪句话说的是哪个点"一目了然。
+        const pcl::PointXYZ maxLabelPos(dp.x, dp.y, dp.z + marker_size + 2.6 * textScale);
+        const std::string line_id = "pothole_line_deepest";
+        viewer->removeShape(line_id);
+        viewer->addLine<pcl::PointXYZ>(dp, maxLabelPos, 0.1, 1.0, 1.0, line_id);
+        viewer->setShapeRenderingProperties(
+            pcl::visualization::PCL_VISUALIZER_LINE_WIDTH, 2, line_id);
+        viewer->addText3D(labelText, maxLabelPos,
+            textScale, 0.1, 1.0, 1.0, text_id);
+    }
+
+    // 7b. 多凹坑逐个标注(每个坑一个球 + 编号文字): 主坑洋红, 其余橙色;
+    //     校验未通过的坑用灰白色球提示"该坑不判定"(仍给出编号与深度, 便于人工复核).
+    //     PitItem::index 与报告中的坑编号一一对应.
+    if (!result.pits.empty()) {
+        for (int i = 0; i < static_cast<int>(result.pits.size()); ++i) {
+            const auto& it = result.pits[i];
+            if (!std::isfinite(it.centroid.x)) continue;
+            const std::string tag = std::to_string(it.index);
+            const std::string sphere_id = "pothole_pit_sphere_" + tag;
+            const std::string text_id = "pothole_pit_text_" + tag;
+            viewer->removeShape(sphere_id);
+            viewer->removeText3D(text_id);
+
+            // 标注位置: 优先用该坑最深点, 缺失时退化到质心
+            pcl::PointXYZ mk = std::isfinite(it.deepest_point.x) ? it.deepest_point : it.centroid;
+            const double depthForSize = it.judged_by_local ? it.local_max_depth : it.global_max_depth;
+            const double marker_size = std::max(markScale, depthForSize * 0.5);
+
+            // 球体颜色 = 状态; 文字颜色单独取高对比度(未通过的球是浅灰, 文字必须用深灰才看得清)
+            double cr = 1.0, cg = 1.0, cb = 1.0;   // 未通过校验: 灰白
+            double tr = 0.30, tg = 0.30, tb = 0.30;
+            if (it.valid && it.is_main) { cr = 1.0; cg = 0.0; cb = 1.0; tr = 1.0; tg = 0.15; tb = 1.0; }
+            else if (it.valid) { cr = 1.0; cg = 0.65; cb = 0.0; tr = 1.0; tg = 0.62; tb = 0.0; }
+            viewer->addSphere(mk, marker_size, cr, cg, cb, sphere_id);
+            viewer->setShapeRenderingProperties(
+                pcl::visualization::PCL_VISUALIZER_COLOR, cr, cg, cb, sphere_id);
+            viewer->setShapeRenderingProperties(
+                pcl::visualization::PCL_VISUALIZER_OPACITY, 0.9, sphere_id);
+
+            // 文字: 只保留"编号 + 主坑标记 + 深度(2 位小数)", 放大到 textScale
+            std::stringstream pitSS;
+            pitSS << std::fixed << std::setprecision(2);
+            pitSS << "PIT " << it.index << (it.is_main ? " (MAIN)" : "")
+                  << "  " << depthForSize << " mm" << (it.valid ? "" : "  reject");
+            viewer->addText3D(pitSS.str(),
+                pcl::PointXYZ(mk.x, mk.y, mk.z + marker_size + 1.15 * textScale),
+                textScale, tr, tg, tb, text_id);
+        }
+        {
+            std::string msg = ">>: 已逐个标注 " + std::to_string(result.pits.size())
+                + " 个凹塘（文字=编号+深度，字高 "
+                + std::to_string(static_cast<int>(textScale + 0.5))
+                + " mm；球色区分主坑/其余/未通过）";
+            TeEDebug(msg);
+        }
+    }
+
+    // 8. 椭圆可视化（闭合折线，已回投到柱面）: 逐个绘制，仅绘制校验通过的坑；
+    //    主坑青色，其余黄色(与球的橙色区分)。
+    //    校验不通过的坑不画椭圆: 画出会把参考面偏差或边界缺失误示为凹坑。
+    {
+        int drawn = 0, skipped = 0;
+        for (const auto& it : result.pits) {
+            if (it.ellipse_points.empty()) { ++skipped; continue; }
+            if (!it.valid) { ++skipped; continue; }
+
+            vtkSmartPointer<vtkPoints> points = vtkSmartPointer<vtkPoints>::New();
+            vtkSmartPointer<vtkCellArray> lines = vtkSmartPointer<vtkCellArray>::New();
+            std::vector<vtkIdType> ids;
+            ids.reserve(it.ellipse_points.size());
+            for (const auto& p : it.ellipse_points) {
+                ids.push_back(points->InsertNextPoint(p.x(), p.y(), p.z()));
+            }
+            lines->InsertNextCell(static_cast<vtkIdType>(ids.size()), ids.data());
+
+            vtkSmartPointer<vtkPolyData> poly = vtkSmartPointer<vtkPolyData>::New();
+            poly->SetPoints(points);
+            poly->SetLines(lines);
+
+            vtkSmartPointer<vtkPolyDataMapper> mapper = vtkSmartPointer<vtkPolyDataMapper>::New();
+            mapper->SetInputData(poly);
+
+            vtkSmartPointer<vtkActor> ellipseActor = vtkSmartPointer<vtkActor>::New();
+            ellipseActor->SetMapper(mapper);
+            if (it.is_main) ellipseActor->GetProperty()->SetColor(0.0, 1.0, 1.0);   // 主坑: 青色
+            else            ellipseActor->GetProperty()->SetColor(1.0, 1.0, 0.0);   // 其余: 黄色
+            ellipseActor->GetProperty()->SetLineWidth(3.0);
+
+            AddActors(GenerateRandomName("pothole_ellipse_" + std::to_string(it.index)),
+                ellipseActor);
+            ++drawn;
+        }
+        {
+            std::string msg = ">>: 凹塘轮廓椭圆已显示 " + std::to_string(drawn)
+                + " 个（主坑青色 / 其余黄色）";
+            if (skipped > 0) msg += "，另有 " + std::to_string(skipped) + " 个未绘制（未通过校验或椭圆拟合失败）";
+            TeEDebug(msg);
+        }
+    }
+
+    // 9. 输出报告并刷新视图
+    Update_CFmes(result.assessment_message);
+    TeEDebug(">>: 凹塘测量完成。");
+    ui->winOfAnalyzer->renderWindow()->Render();
+    ui->winOfAnalyzer->update();
+        });
+}
+
+// ============================================================
+// 焊前装配阶差(1.3) / 焊前装配间隙(1.4)
+// 依据: docs/当前需新增功能/焊前装配阶差与间隙-独立执行方案.md §6/§7
+//
+// 操作路径(§7): 选两件 → 定接缝区域/测量段 → 确认近远角色(Z 均值) → 设 R 与测量方向
+//              → 后台计算 → 检查边缘及极值。
+// 约束: 计算只在 worker 线程; Qt/VTK actor/点云表/撤销只在 GUI 线程;
+//       结果用 std::shared_ptr 回传(沿用 RunAsyncVoid / WorkerProgressCallback)。
+// ============================================================
+void CloudForgeAnalyzer::Tool_MeasureWeldPreparation()
+{
+    // 口径(2026-09 统一): 阶差 = 径向(近件在外为正); 间隙 = 沿跨缝方向(环缝=轴向)。
+    // 两个量由同一次配对同时得到, 因此只有一个入口、一次计算、一份报告。
+    const std::string metricName = "焊前装配测量";
+
+    if (IsTaskRunning()) {
+        TeEDebug(">>: 已有计算任务进行中，请等待完成或点击工具栏“取消计算”。");
+        return;
+    }
+    if (CloudMap.size() < 2) {
+        TeEDebug(">>: 焊前测量需要两份点云(近件与远件); 当前点云数量不足两份。");
+        return;
+    }
+
+    // ---- 1. 选择已保存的圆柱基准(轴线 + 设计半径) ----
+    // 本功能不做任何圆柱拟合: 基准由"圆柱拟合/圆柱度"功能产生并全局保存, 这里只选它。
+    if (cylinderResultsMap.empty()) {
+        TeEDebug(">>: 还没有可用的圆柱基准。请先用圆柱拟合/圆柱度功能拟合远件并保存结果，再回到本功能选择它。");
+        return;
+    }
+    // 注意: ChoseCyDialog 在构造函数内部已经 exec(), 这里不能再 exec()(否则会要求选两次)
+    ChoseCyDialog dCy(cylinderResultsMap);
+    if (dCy.getSelectedList().empty()) { TeEDebug(">>: 未选择圆柱基准, 操作取消"); return; }
+    pcl::ModelCoefficients::Ptr cyl = cylinderResultsMap[dCy.getSelectedList()[0]];
+    if (!cyl || cyl->values.size() < 7) {
+        TeEDebug(">>: 所选圆柱结果缺少轴线或设计半径，无法作为基准。");
+        return;
+    }
+    Eigen::Vector3d axisPoint(cyl->values[0], cyl->values[1], cyl->values[2]);
+    Eigen::Vector3d axisDir(cyl->values[3], cyl->values[4], cyl->values[5]);
+    const double designR = cyl->values[6];
+    if (!axisDir.allFinite() || axisDir.norm() < 1e-9 || !(designR > 0.0)) {
+        TeEDebug(">>: 所选圆柱结果的轴线或设计半径无效。");
+        return;
+    }
+    axisDir.normalize();
+
+    // ---- 2. 选择远件试样 ----
+    ChoseCloudDialog dFar(CloudMap, ColorMap, "焊前装配测量: 选择【远件】试样点云");
+    if (dFar.exec() != QDialog::Accepted) { TeEDebug(">>: 操作取消"); return; }
+    if (dFar.getSelectedList().empty()) { TeEDebug(">>: 未选择远件点云"); return; }
+    const std::string farName = dFar.getSelectedList()[0];
+    pcl::PointCloud<pcl::PointXYZ>::Ptr farCloud = CloudMap[farName];
+    if (!farCloud || farCloud->empty()) { TeEDebug(">>: 远件点云为空"); return; }
+
+    // ---- 3. 选择近件试样 ----
+    ChoseCloudDialog dNear(CloudMap, ColorMap, "焊前装配测量: 选择【近件】试样点云");
+    if (dNear.exec() != QDialog::Accepted) { TeEDebug(">>: 操作取消"); return; }
+    if (dNear.getSelectedList().empty()) { TeEDebug(">>: 未选择近件点云"); return; }
+    const std::string nearName = dNear.getSelectedList()[0];
+    pcl::PointCloud<pcl::PointXYZ>::Ptr nearCloud = CloudMap[nearName];
+    if (!nearCloud || nearCloud->empty()) { TeEDebug(">>: 近件点云为空"); return; }
+    if (nearName == farName) { TeEDebug(">>: 近件与远件不能是同一份点云。"); return; }
+
+    // ---- 4. 计算(参数全部自动, 不弹参数对话框; 只考虑环缝) ----
+    MeasureWeldPreparation::Params wp;
+    wp.design_radius = designR;                                  // 来自所选圆柱结果
+    wp.metric = MeasureWeldPreparation::Metric::Both;            // 一次配对同时给出阶差与间隙
+    wp.gap_direction = MeasureWeldPreparation::GapDirection::Axial;  // 环缝: 跨缝方向固定为轴向
+    auto mp = std::make_shared<MeasureWeldPreparation>();
+    auto wpResult = std::make_shared<MeasureWeldPreparation::Result>();
+    mp->setNearCloud(nearCloud, nearName);
+    mp->setFarCloud(farCloud, farName);
+    mp->setParams(wp);
+    mp->setFixedReferenceAxis(axisPoint, axisDir);               // 不拟合, 直接用已保存的基准
+    mp->setRoleOverride(MeasureWeldPreparation::Role::Near,
+                        MeasureWeldPreparation::Role::Far, "用户在对话框中指定");
+
+    RunAsyncVoid(QString::fromStdString(metricName),
+        [this, mp, wpResult]() {
+            mp->setProgressCallback(WorkerProgressCallback());
+            *wpResult = mp->evaluate();
+            // 调试框只留一行结论(完整报告在结束后写入报告区)
+            {
+                std::ostringstream oss;
+                oss.setf(std::ios::fixed); oss.precision(3);
+                // 只报结果, 不输出状态枚举/方法性说明
+                oss << ">> 焊前装配测量: ";
+                if (wpResult->maximum_step.ok || wpResult->maximum.ok) {
+                    if (wpResult->maximum_step.ok)
+                        oss << "径向阶差 " << wpResult->maximum_step.value << " mm";
+                    if (wpResult->maximum.ok) {
+                        if (wpResult->maximum_step.ok) oss << " | ";
+                        oss << (wpResult->gap_direction == MeasureWeldPreparation::GapDirection::Axial
+                                    ? "轴向间隙 " : "接缝法向间隙 ")
+                            << wpResult->maximum.value << " mm";
+                    }
+                }
+                else {
+                    oss << "不可测";
+                    if (!wpResult->reason.empty()) oss << "(" << wpResult->reason << ")";
+                }
+                PostLog(oss.str());
+            }
+        },
+        [this, mp, wpResult]() {
+            const auto& result = *wpResult;
+            if (result.status == MeasureWeldPreparation::Status::Cancelled) {
+                TeEDebug(">>: 焊前测量已取消, 不保存半成品结果。");
+                return;
+            }
+            Update_CFmes(result.report);
+            VisualizeWeldPreparation(result, mp->frame());
+            TeEDebug(">>: 焊前测量完成。");
+            ui->winOfAnalyzer->renderWindow()->Render();
+            ui->winOfAnalyzer->update();
+        });
+}
+
+
+// ============================================================
+// 焊前装配测量 三维标注(只在 GUI 线程调用; 数据全部来自 Result + 参考圆柱框架)
+//   ① 两条缝边: 醒目折线(近件绿 / 远件黄)
+//   ② 点对点映射: 稀疏青色直线(有间距, 用于检查配对是否出错)
+//   ③ 最大值处: 间隙=一小段弧线(红); 阶差=径向直线(蓝);
+//      两边母材对应点的映射连线(橙); 各带空间文本标注
+// ============================================================
+void CloudForgeAnalyzer::cleanWeldPrepVisuals()
+{
+    // 直线段: 走全局注册(LineMap), 用工程既有 DeleteLine 移除
+    for (const auto& id : m_weldPrepLineIds) DeleteLine(id);
+    m_weldPrepLineIds.clear();
+    // 三维文字: 工程无封装, 与凹塘一致 -> 记 id + removeText3D
+    for (const auto& id : m_weldPrepShapeIds) {
+        viewer->removeShape(id);
+        viewer->removePointCloud(id);
+        viewer->removeText3D(id);
+    }
+    m_weldPrepShapeIds.clear();
+    vtkRenderer* renderer = viewer->getRendererCollection()->GetFirstRenderer();
+    for (const auto& id : m_weldPrepActorIds) {
+        auto it = ActorMap.find(id);
+        if (it != ActorMap.end()) {
+            if (renderer) renderer->RemoveActor(it->second);
+            ActorMap.erase(it);
+        }
+    }
+    m_weldPrepActorIds.clear();
+}
+
+void CloudForgeAnalyzer::VisualizeWeldPreparation(const MeasureWeldPreparation::Result& result,
+                                                 const CylinderSurfaceFrame& frame)
+{
+    cleanWeldPrepVisuals();
+    if (result.near_edge.refined.empty() && result.far_edge.refined.empty()) return;
+
+    const auto proj = [&](double a, double s, double e) { return frame.unproject(a, s, e); };
+    const auto radialDir = [&](double a, double s) {
+        return (frame.unproject(a, s, 1.0) - frame.unproject(a, s, 0.0)).normalized();
+    };
+
+    // 字高/标记按场景尺度自适应(与其它测量一致)
+    double textScale = 10.0, markScale = 3.0;
+    {
+        Eigen::Vector3d lo = Eigen::Vector3d::Zero(), hi = Eigen::Vector3d::Zero();
+        bool first = true;
+        for (const auto& e : { &result.near_edge, &result.far_edge }) {
+            for (const auto& p : e->points) {
+                if (!p.valid) continue;
+                if (first) { lo = hi = p.xyz; first = false; }
+                else { lo = lo.cwiseMin(p.xyz); hi = hi.cwiseMax(p.xyz); }
+            }
+        }
+        if (!first) {
+            const double diag = (hi - lo).norm();
+            textScale = std::min(std::max(0.022 * diag, 6.0), 14.0);
+            markScale = std::min(std::max(0.006 * diag, 2.0), 4.5);
+        }
+    }
+
+    auto addPolyline = [&](const std::vector<Eigen::Vector3d>& pts, const std::string& id,
+                           double r, double g, double b, double width) {
+        if (pts.size() < 2) return;
+        vtkSmartPointer<vtkPoints> vpts = vtkSmartPointer<vtkPoints>::New();
+        vtkSmartPointer<vtkCellArray> cells = vtkSmartPointer<vtkCellArray>::New();
+        std::vector<vtkIdType> ids;
+        ids.reserve(pts.size());
+        for (const auto& p : pts) ids.push_back(vpts->InsertNextPoint(p.x(), p.y(), p.z()));
+        cells->InsertNextCell(static_cast<vtkIdType>(ids.size()), ids.data());
+        vtkSmartPointer<vtkPolyData> poly = vtkSmartPointer<vtkPolyData>::New();
+        poly->SetPoints(vpts);
+        poly->SetLines(cells);
+        vtkSmartPointer<vtkPolyDataMapper> mapper = vtkSmartPointer<vtkPolyDataMapper>::New();
+        mapper->SetInputData(poly);
+        vtkSmartPointer<vtkActor> actor = vtkSmartPointer<vtkActor>::New();
+        actor->SetMapper(mapper);
+        actor->GetProperty()->SetColor(r, g, b);
+        actor->GetProperty()->SetLineWidth(width);
+        AddActors(id, actor);
+        m_weldPrepActorIds.push_back(id);
+    };
+    // 多条线段合成一个 actor: AddLine 每次都会 Render(), 几十条会明显卡顿
+    auto addSegments = [&](const std::vector<std::pair<Eigen::Vector3d, Eigen::Vector3d>>& segs,
+                           const std::string& id, double r, double g, double b, double width) {
+        if (segs.empty()) return;
+        vtkSmartPointer<vtkPoints> vpts = vtkSmartPointer<vtkPoints>::New();
+        vtkSmartPointer<vtkCellArray> cells = vtkSmartPointer<vtkCellArray>::New();
+        for (const auto& s : segs) {
+            const vtkIdType i0 = vpts->InsertNextPoint(s.first.x(), s.first.y(), s.first.z());
+            const vtkIdType i1 = vpts->InsertNextPoint(s.second.x(), s.second.y(), s.second.z());
+            cells->InsertNextCell(2);
+            cells->InsertCellPoint(i0);
+            cells->InsertCellPoint(i1);
+        }
+        vtkSmartPointer<vtkPolyData> poly = vtkSmartPointer<vtkPolyData>::New();
+        poly->SetPoints(vpts);
+        poly->SetLines(cells);
+        vtkSmartPointer<vtkPolyDataMapper> mapper = vtkSmartPointer<vtkPolyDataMapper>::New();
+        mapper->SetInputData(poly);
+        vtkSmartPointer<vtkActor> actor = vtkSmartPointer<vtkActor>::New();
+        actor->SetMapper(mapper);
+        actor->GetProperty()->SetColor(r, g, b);
+        actor->GetProperty()->SetLineWidth(width);
+        AddActors(id, actor);
+        m_weldPrepActorIds.push_back(id);
+    };
+
+    // 直线段一律走工程既有封装 AddLine -> 注册进 LineMap(可被 DeleteLine/ClearAllLines 管理)。
+    // 注意: AddLine 内部按 color.r/255.0 取色, 因此 ColorManager 传 0~255。
+    auto addSegment = [&](const Eigen::Vector3d& p0, const Eigen::Vector3d& p1,
+                          const std::string& id, double r255, double g255, double b255, double width) {
+        const pcl::PointXYZ a(static_cast<float>(p0.x()), static_cast<float>(p0.y()), static_cast<float>(p0.z()));
+        const pcl::PointXYZ c(static_cast<float>(p1.x()), static_cast<float>(p1.y()), static_cast<float>(p1.z()));
+        AddLine(id, a, c, ColorManager(r255, g255, b255), width);
+        m_weldPrepLineIds.push_back(id);
+    };
+
+    // ---- ① 两条缝边(醒目折线) ----
+    for (size_t i = 0; i < result.near_edge.refined.size(); ++i) {
+        std::vector<Eigen::Vector3d> poly;
+        for (const auto& q : result.near_edge.refined[i]) poly.push_back(proj(q.x(), q.y(), 0.0));
+        addPolyline(poly, "weldprep_near_edge_" + std::to_string(i), 0.10, 1.00, 0.20, 3.0);
+    }
+    for (size_t i = 0; i < result.far_edge.refined.size(); ++i) {
+        std::vector<Eigen::Vector3d> poly;
+        for (const auto& q : result.far_edge.refined[i]) poly.push_back(proj(q.x(), q.y(), 0.0));
+        addPolyline(poly, "weldprep_far_edge_" + std::to_string(i), 1.00, 0.80, 0.05, 3.0);
+    }
+
+    // ---- ② 点对点映射: 稀疏直线(约 36 条, 不密集) ----
+    {
+        std::vector<const MeasureWeldPreparation::Match*> v;
+        for (const auto& m : result.matches) if (m.valid) v.push_back(&m);
+        if (!v.empty()) {
+            const int stride = std::max<int>(1, static_cast<int>(v.size()) / 36);
+            std::vector<std::pair<Eigen::Vector3d, Eigen::Vector3d>> segs;
+            for (size_t i = 0; i < v.size(); i += stride) {
+                const auto* m = v[i];
+                segs.emplace_back(m->near_xyz, proj(m->far_a, m->far_s, m->far_e));
+            }
+            addSegments(segs, "weldprep_map", 0.10, 0.70, 0.90, 1.0);   // 单个 actor, 一次重绘
+        }
+    }
+
+    // ---- ③ 最大值处标注 ----
+    auto findMatch = [&](int nearIndex) -> const MeasureWeldPreparation::Match* {
+        for (const auto& m : result.matches) if (m.valid && m.near_index == nearIndex) return &m;
+        return nullptr;
+    };
+    auto annotate = [&](const MeasureWeldPreparation::MaxItem& mx, bool isGap,
+                        const char* qty, double median) {
+        if (!mx.ok) return;
+        const auto* mm = findMatch(mx.near_index);
+        if (!mm) return;
+        const std::string tag = isGap ? "gap" : "step";
+        if (isGap) {
+            // 间隙: 参考柱面上的一小段弧线(点对映射路径)
+            std::vector<Eigen::Vector3d> arc;
+            const int n = 24;
+            for (int i = 0; i <= n; ++i) {
+                const double f = static_cast<double>(i) / n;
+                arc.push_back(proj(mx.near_a + f * (mx.far_a - mx.near_a),
+                                   mx.near_s + f * (mx.far_s - mx.near_s), 0.0));
+            }
+            addPolyline(arc, "weldprep_" + tag + "_arc", 1.00, 0.15, 0.15, 4.0);
+        }
+        else {
+            // 阶差: 同一站位上的径向直线, 从远件材料面到近件材料面
+            const Eigen::Vector3d pf = proj(mm->near_a, mm->near_s, mm->far_e);
+            const Eigen::Vector3d pn = proj(mm->near_a, mm->near_s, mm->near_e);
+            addSegment(pf, pn, "weldprep_" + tag + "_radial", 51.0, 115.0, 255.0, 4.0);
+        }
+        // 两边母材对应点的映射连线(橙色)
+        const Eigen::Vector3d qMat = proj(mm->far_a, mm->far_s, mm->far_e);
+        addSegment(mm->near_xyz, qMat, "weldprep_" + tag + "_link", 255.0, 140.0, 0.0, 3.0);
+
+        // 空间文本标注(径向向外偏移 + 引线)
+        std::ostringstream lab;
+        lab.setf(std::ios::fixed); lab.precision(3);
+        lab << qty << " max " << mx.value << " mm  中值 " << median << " mm";
+        const Eigen::Vector3d base = mm->near_xyz;
+        const Eigen::Vector3d off = radialDir(mm->near_a, mm->near_s) * (markScale + 2.4 * textScale);
+        const Eigen::Vector3d txt = base + off;
+        const std::string tid = "weldprep_" + tag + "_text";
+        viewer->removeText3D(tid);
+        viewer->addText3D(lab.str(), pcl::PointXYZ(static_cast<float>(txt.x()), static_cast<float>(txt.y()),
+                                                   static_cast<float>(txt.z())),
+                          textScale, isGap ? 1.0 : 0.35, isGap ? 0.25 : 0.65, isGap ? 0.25 : 1.0, tid);
+        m_weldPrepShapeIds.push_back(tid);
+        addSegment(base, txt, "weldprep_" + tag + "_leader",
+                   isGap ? 255.0 : 90.0, isGap ? 64.0 : 165.0, isGap ? 64.0 : 255.0, 1.0);
+    };
+    if (result.maximum.ok) annotate(result.maximum, true, "间隙", result.gap_median);
+    if (result.maximum_step.ok) annotate(result.maximum_step, false, "阶差", result.step_median);
+
+    TeEDebug(">>: 焊前装配标注完成: 近件缝边(绿) / 远件缝边(黄) / 稀疏映射线(青) / "
+             "间隙弧(红) / 阶差径向线(蓝) / 对应点连线(橙)。");
 }
 
 void CloudForgeAnalyzer::Tool_MeasureHeight() {
+    if (IsTaskRunning()) {
+        TeEDebug(">>: 已有计算任务进行中，请等待完成或点击工具栏“取消计算”。");
+        return;
+    }
     ChoseCloudDialog dialogMeasure(CloudMap, ColorMap,"选择-测量对象");
     if (dialogMeasure.exec() != QDialog::Accepted) {
         TeEDebug(">>:操作取消");
@@ -1208,27 +2106,42 @@ void CloudForgeAnalyzer::Tool_MeasureHeight() {
         return;
     }
 
-    // 执行迭代测量
-    MeasureHeight measurer(measureCloud, refCloud);
-    std::vector<double> avgDistances;
-    if (!measurer.measureIterative(avgDistances, HEIGHT_NEIGHBOR_COUNT, HEIGHT_ITERATIONS)) {
+    // 后台执行迭代测量(界面保持响应; 可在工具栏“取消计算”中止)
+    auto measurerHolder = std::make_shared<std::shared_ptr<MeasureHeight>>();
+    auto avgDistances = std::make_shared<std::vector<double>>();
+    auto measureOk = std::make_shared<bool>(false);
+
+    RunAsyncVoid("高度测量",
+        [this, measurerHolder, avgDistances, measureOk, measureCloud, refCloud,
+         HEIGHT_NEIGHBOR_COUNT, HEIGHT_ITERATIONS]() {
+            PostProgress(0, 0, "高度测量: 拟合参考平面与迭代测量...");
+            // 计算类在工作线程中构造并执行(构造函数不弹框)
+            *measurerHolder = std::make_shared<MeasureHeight>(measureCloud, refCloud);
+            *measureOk = (*measurerHolder)->measureIterative(
+                *avgDistances, HEIGHT_NEIGHBOR_COUNT, HEIGHT_ITERATIONS);
+            if (!*measureOk) {
+                PostLog(">>: 测高失败：无法拟合参考平面或点云无效");
+            }
+        },
+        [this, measurerHolder, avgDistances, measureOk, measureCloud, refCloud,
+         HEIGHT_ITERATIONS]() {
+    if (!*measureOk) {
         TeEDebug("测高失败：无法拟合参考平面或点云无效");
         return;
     }
 
     // 依次输出每次迭代结果
-    for (size_t i = 0; i < avgDistances.size(); ++i) {
+    for (size_t i = 0; i < avgDistances->size(); ++i) {
         char buf[128];
         snprintf(buf, sizeof(buf), "测高[%zu/%d]: 平均距离 = %.4f",
-            i + 1, HEIGHT_ITERATIONS, avgDistances[i]);
+            i + 1, HEIGHT_ITERATIONS, (*avgDistances)[i]);
         TeEDebug(buf);
         Update_CFmes(buf);
     }
 
-    // 可视化（在独立线程中运行，不阻塞主线程）
-    std::thread([measurer, measureCloud, refCloud]() mutable {
-        CloudForgeAnalyzer::visualizeMeasurementResults(measurer, measureCloud, refCloud);
-    }).detach();
+    // 可视化(在 GUI 线程执行, VTK 不能在工作线程调用)
+    visualizeMeasurementResults(**measurerHolder, measureCloud, refCloud);
+        });
 }
 void CloudForgeAnalyzer::Tool_MeasureAngleP2P() {
     ChosePlaneDialog dialog(planeResultsMap);
@@ -1312,6 +2225,10 @@ void CloudForgeAnalyzer::Tool_MeasureParallel() {
 }
 
 void CloudForgeAnalyzer::Tool_Clip() {
+    if (IsTaskRunning()) {
+        TeEDebug(">>: 已有计算任务进行中，请等待完成或点击工具栏“取消计算”。");
+        return;
+    }
     ChoseCloudDialog dialog(CloudMap, ColorMap);
     if (dialog.exec() != QDialog::Accepted) { 
         TeEDebug(">>:操作取消");
@@ -1321,38 +2238,56 @@ void CloudForgeAnalyzer::Tool_Clip() {
         TeEDebug(">>:没有点云被选中");
         return;
     }
+    const std::string clippedSourceName = dialog.getSelectedList()[0];
     pcl::PointCloud<pcl::PointXYZ>::Ptr tempcloud1(new pcl::PointCloud<pcl::PointXYZ>);
-    pcl::PointCloud<pcl::PointXYZ>::Ptr tempcloud2 = CloudMap[dialog.getSelectedList()[0]];
+    pcl::PointCloud<pcl::PointXYZ>::Ptr tempcloud2 = CloudMap[clippedSourceName];
     *tempcloud1 = *tempcloud2;
     
 	interactivePolygonCut(tempcloud1);
     bool result = showConfirmationDialog("确认裁切", "您确定要执行此操作吗？");
-    if (result) {
-		DelePointCloud(dialog.getSelectedList()[0]);
-        pcl::PointCloud<pcl::PointXYZ>::Ptr clipedin(new pcl::PointCloud<pcl::PointXYZ>);
-        pcl::PointCloud<pcl::PointXYZ>::Ptr clipedout(new pcl::PointCloud<pcl::PointXYZ>);
-        if (pcl::io::loadPCDFile("PCDfiles/temp/cut/inside_points.pcd", *clipedin) == -1) {
-            TeEDebug(">>:无法加载点云文件clipedin");
-            return;
-        }
-        if (pcl::io::loadPCDFile("PCDfiles/temp/cut/outside_points.pcd", *clipedout) == -1) {
-            TeEDebug(">>:无法加载点云文件clipedin");
-            return;
-        }
-        ColorManager color1;
-        ColorManager color2;
-	beginUndoBatch("裁剪点云");
-		AddPointCloud(GenerateRandomName(dialog.getSelectedList()[0] + "_clippedin"), clipedin, color1);
-        AddPointCloud(GenerateRandomName(dialog.getSelectedList()[0] + "_clippedout"), clipedout, color2);
-	endUndoBatch();
-    }
-    else {
+    if (!result) {
         TeEDebug(">>:操作取消");
+        return;
     }
-    
+
+    // 裁切结果文件已由交互裁切工具写入, 后台读取(界面保持响应)
+    auto clipedin = std::make_shared<pcl::PointCloud<pcl::PointXYZ>>();
+    auto clipedout = std::make_shared<pcl::PointCloud<pcl::PointXYZ>>();
+    auto clipLoaded = std::make_shared<bool>(false);
+
+    RunAsyncVoid("裁切点云",
+        [this, clipedin, clipedout, clipLoaded]() {
+            PostProgress(0, 0, "裁切: 读取裁切结果点云...");
+            if (pcl::io::loadPCDFile("PCDfiles/temp/cut/inside_points.pcd", *clipedin) == -1) {
+                PostLog(">>:无法加载点云文件clipedin");
+                return;
+            }
+            if (pcl::io::loadPCDFile("PCDfiles/temp/cut/outside_points.pcd", *clipedout) == -1) {
+                PostLog(">>:无法加载点云文件clipedin");
+                return;
+            }
+            *clipLoaded = true;
+        },
+        [this, clipedin, clipedout, clipLoaded, clippedSourceName]() {
+    if (!*clipLoaded) {
+        TeEDebug(">>:无法加载裁切结果点云");
+        return;
+    }
+    DelePointCloud(clippedSourceName);
+    ColorManager color1;
+    ColorManager color2;
+    beginUndoBatch("裁剪点云");
+    AddPointCloud(GenerateRandomName(clippedSourceName + "_clippedin"), clipedin, color1);
+    AddPointCloud(GenerateRandomName(clippedSourceName + "_clippedout"), clipedout, color2);
+    endUndoBatch();
+        });
 }
 
 void CloudForgeAnalyzer::Slot_ph_ProtruSeg_Triggered() {
+    if (IsTaskRunning()) {
+        TeEDebug(">>: 已有计算任务进行中，请等待完成或点击工具栏“取消计算”。");
+        return;
+    }
     ChoseCloudDialog dialog(CloudMap, ColorMap);
     if (dialog.exec() != QDialog::Accepted) {
         TeEDebug(">>:操作取消");
@@ -1362,8 +2297,47 @@ void CloudForgeAnalyzer::Slot_ph_ProtruSeg_Triggered() {
         return;
     }
     pcl::PointCloud<pcl::PointXYZ>::Ptr tempcloud = CloudMap[dialog.getSelectedList()[0]];
-    ProtrusionSegmentation ps(tempcloud);
-    ps.segment();
+
+    // 参数对话框在界面线程弹出(原先在 ProtrusionSegmentation 构造函数里弹框)
+    ParamDialogProtrusion psDialog;
+    if (psDialog.exec() != QDialog::Accepted) {
+        TeEDebug(">>: 参数设置取消");
+        return;
+    }
+    bool ok1, ok2, ok3;
+    ProtrusionSegmentation::Params params;
+    params.heightThreshold = psDialog.getParams()[0].toFloat(&ok1);
+    params.searchRadius = psDialog.getParams()[1].toFloat(&ok2);
+    params.minClusterSize = psDialog.getParams()[2].toInt(&ok3);
+    if (!ok1 || !ok2 || !ok3) {
+        TeEDebug(">>: 无效数字");
+        return;
+    }
+
+    // 后台执行突起分割, 完成后回到界面线程可视化
+    auto psHolder = std::make_shared<std::shared_ptr<ProtrusionSegmentation>>();
+    RunAsyncVoid("凸起/平面分割",
+        [this, psHolder, tempcloud, params]() {
+            if (!PostProgress(0, 0, "凸起/平面分割: 局部拟合与聚类...")) {
+                PostLog(">>: 凸起/平面分割已取消。");
+                return;
+            }
+            pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_in = tempcloud;  // 构造函数形参为非const引用, 需要左值
+            *psHolder = std::make_shared<ProtrusionSegmentation>(cloud_in, params);
+            (*psHolder)->compute();
+            PostLog("凸起/平面分割完成, 平面点数: " + std::to_string((*psHolder)->getPlanarCloud()->size())
+                + ", 突起点数: " + std::to_string((*psHolder)->getProtrusionCloud()->size()));
+            PostProgress(100, 100, "凸起/平面分割完成");
+        },
+        [this, psHolder]() {
+    if (!*psHolder) {
+        return;   // 工作线程未执行(开始前已取消)
+    }
+    if (m_asyncState && m_asyncState->cancelRequested.load()) {
+        TeEDebug(">>: 凸起/平面分割已取消，不再显示本次结果。");
+        return;
+    }
+    ProtrusionSegmentation& ps = **psHolder;
     pcl::PointCloud<pcl::PointXYZ>::Ptr planar = ps.getPlanarCloud();
     pcl::PointCloud<pcl::PointXYZ>::Ptr nonplanar = ps.getProtrusionCloud();
     ColorManager c1(255, 0, 0);
@@ -1372,18 +2346,25 @@ void CloudForgeAnalyzer::Slot_ph_ProtruSeg_Triggered() {
     AddPointCloud("planar", planar, c1);
     AddPointCloud("nonplanar", nonplanar, c2);
     endUndoBatch();
+        });
 }
 
 void CloudForgeAnalyzer::Slot_ph_CurvSeg_Triggered() {
+    if (IsTaskRunning()) {
+        TeEDebug(">>: 已有计算任务进行中，请等待完成或点击工具栏“取消计算”。");
+        return;
+    }
 	ChoseCloudDialog dialog(CloudMap, ColorMap);
     if (dialog.exec() != QDialog::Accepted) {
         TeEDebug(">>:操作取消");
         return;
     }
-    pcl::PointCloud<pcl::PointXYZ>::Ptr tempcloud = CloudMap[dialog.getSelectedList()[0]];
     if (dialog.getSelectedList().empty()) {
         return;
 	}
+    pcl::PointCloud<pcl::PointXYZ>::Ptr tempcloud = CloudMap[dialog.getSelectedList()[0]];
+
+    // 交互拾取点与参数对话框都留在界面线程
     TeEDebug("请选择点 (左键选点，Enter确认，ESC取消)");
     PointPickerMgr mgr(ui->winOfAnalyzer->interactor(), 1);
     const auto& pts = mgr.GetPickedPoints();
@@ -1394,12 +2375,52 @@ void CloudForgeAnalyzer::Slot_ph_CurvSeg_Triggered() {
     }
 
     pcl::PointXYZ picked_point = pts_pcl[0];
-    CurvatureSegmentation cs(tempcloud,picked_point);
+
+    // 参数对话框在界面线程弹出(原先在 CurvatureSegmentation 构造函数里弹框)
+    ParamDialogCurvSeg csDialog;
+    if (csDialog.exec() != QDialog::Accepted) {
+        TeEDebug(">>: 参数设置取消");
+        return;
+    }
+    bool ok1, ok2, ok3, ok4;
+    CurvatureSegmentation::CurvParams params;
+    params.kSearch = csDialog.getParams()[0].toInt(&ok1);
+    params.smoothThreshold = csDialog.getParams()[1].toFloat(&ok2);
+    params.curvatureThreshold = csDialog.getParams()[2].toFloat(&ok3);
+    params.minClusterSize = csDialog.getParams()[3].toInt(&ok4);
+    if (!ok1 || !ok2 || !ok3 || !ok4) {
+        TeEDebug(">>: 无效数字");
+        return;
+    }
+
+    // 后台执行曲率区域生长分割, 完成后回到界面线程可视化
+    auto csHolder = std::make_shared<std::shared_ptr<CurvatureSegmentation>>();
+    RunAsyncVoid("曲率分割",
+        [this, csHolder, tempcloud, picked_point, params]() {
+            if (!PostProgress(0, 0, "曲率分割: 法线/曲率估计与区域生长...")) {
+                PostLog(">>: 曲率分割已取消。");
+                return;
+            }
+            pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_in = tempcloud;  // 构造函数形参为非const引用, 需要左值
+            *csHolder = std::make_shared<CurvatureSegmentation>(cloud_in, picked_point, params);
+            (*csHolder)->compute();
+            PostLog("曲率分割完成, 输出点数: " + std::to_string((*csHolder)->getOutputCloud()->size()));
+            PostProgress(100, 100, "曲率分割完成");
+        },
+        [this, csHolder]() {
+    if (!*csHolder) {
+        return;   // 工作线程未执行(开始前已取消)
+    }
+    if (m_asyncState && m_asyncState->cancelRequested.load()) {
+        TeEDebug(">>: 曲率分割已取消，不再显示本次结果。");
+        return;
+    }
+    CurvatureSegmentation& cs = **csHolder;
     pcl::PointCloud<pcl::PointXYZ>::Ptr plane = cs.getOutputCloud();
     Update_CFmes(cs.message);
     ColorManager randomColor;
 	AddPointCloud(GenerateRandomName("planar"), plane, randomColor);
-
+        });
 }
 
 
@@ -1415,6 +2436,10 @@ void CloudForgeAnalyzer::Update_PointCounts() {
 
 void CloudForgeAnalyzer::Tool_MeasureGeodisic() {
 
+    if (IsTaskRunning()) {
+        TeEDebug(">>: 已有计算任务进行中，请等待完成或点击工具栏“取消计算”。");
+        return;
+    }
     TeEDebug("请选择点 (左键选点，Enter确认，ESC取消)");
     PointPickerMgr mgr(ui->winOfAnalyzer->interactor(), 2);
     const auto& pts = mgr.GetPickedPoints();
@@ -1462,10 +2487,28 @@ void CloudForgeAnalyzer::Tool_MeasureGeodisic() {
         qDebug() << "取消操作";
         return;
     }
-    GeodesicArcMeasurer measurer(tempcloud, base_radius);  // 基准半径0.03m
-    //measurer.setCurvatureRadius(0.02);  // 曲率计算半径
-    //measurer.setGeodesicRadius(0.04);   // 测地线搜索半径
-    auto result = measurer.measureArcLength(pointstart, pointend);
+    // 交互拾取与参数收集已在界面线程完成, 计算放到后台线程(界面保持响应)
+    auto measurerHolder = std::make_shared<std::shared_ptr<GeodesicArcMeasurer>>();
+    auto resultPtr = std::make_shared<GeodesicArcMeasurer::MeasurementResult>();
+
+    RunAsyncVoid("测地线弧长测量",
+        [this, measurerHolder, resultPtr, tempcloud, base_radius, pointstart, pointend]() {
+            PostProgress(0, 0, "测地线弧长: 曲面重建与最短路径搜索...");
+            // 计算类在工作线程中构造(MLS 曲面重建耗时)并执行; 构造函数不弹对话框
+            *measurerHolder = std::make_shared<GeodesicArcMeasurer>(tempcloud, base_radius);  // 基准半径0.03m
+            //(*measurerHolder)->setCurvatureRadius(0.02);  // 曲率计算半径
+            //(*measurerHolder)->setGeodesicRadius(0.04);   // 测地线搜索半径
+            *resultPtr = (*measurerHolder)->measureArcLength(pointstart, pointend);
+            if (resultPtr->success) {
+                PostLog("测地线弧长: " + std::to_string(resultPtr->arc_length) + " mm");
+            }
+            else {
+                PostLog(">>: 测地线弧长计算失败");
+            }
+        },
+        [this, measurerHolder, resultPtr]() {
+    GeodesicArcMeasurer& measurer = **measurerHolder;
+    const auto& result = *resultPtr;
     if (result.success) {
             std::string mesg2 = "测地线弧长: " + std::to_string(result.arc_length)+" mm";
             TeEDebug(mesg2);
@@ -1511,10 +2554,15 @@ void CloudForgeAnalyzer::Tool_MeasureGeodisic() {
        else{
            TeEDebug("计算失败");
        }
+        });
 }
 
 
 void CloudForgeAnalyzer::Slot_fit_line_Triggered() {
+    if (IsTaskRunning()) {
+        TeEDebug(">>: 已有计算任务进行中，请等待完成或点击工具栏“取消计算”。");
+        return;
+    }
     ChoseCloudDialog dialog(CloudMap, ColorMap);
     if (dialog.exec() != QDialog::Accepted) {
         TeEDebug(">>:操作取消");
@@ -1523,7 +2571,53 @@ void CloudForgeAnalyzer::Slot_fit_line_Triggered() {
     if (dialog.getSelectedList().empty()) return;
 
     pcl::PointCloud<pcl::PointXYZ>::Ptr cloud = CloudMap[dialog.getSelectedList()[0]];
-    Fit_Line fitter(cloud);
+
+    // 参数对话框在界面线程弹出(原先在 Fit_Line 构造函数里弹框)
+    ParamDialog_FittingLine fitDialog;
+    if (fitDialog.exec() != QDialog::Accepted) {
+        TeEDebug(">>: 参数设置取消");
+        return;
+    }
+    bool ok1, ok2;
+    Fit_Line::FitParams fp;
+    fp.DistanceThreshold = fitDialog.getParams()[0].toFloat(&ok1);
+    fp.MaxIterations = fitDialog.getParams()[1].toInt(&ok2);
+    if (!ok1 || !ok2) {
+        TeEDebug(">>: 无效数字");
+        return;
+    }
+
+    // 后台执行直线拟合(RANSAC), 完成后回到界面线程可视化
+    auto fitterHolder = std::make_shared<std::shared_ptr<Fit_Line>>();
+    RunAsyncVoid("直线拟合",
+        [this, fitterHolder, cloud, fp]() {
+            if (!PostProgress(0, 0, "直线拟合: RANSAC...")) {
+                PostLog(">>: 直线拟合已取消。");
+                return;
+            }
+            // 计算类在工作线程中构造(参数构造函数只保存参数, 点云拷贝也在此完成)并执行
+            *fitterHolder = std::make_shared<Fit_Line>(cloud, fp);
+            (*fitterHolder)->compute();
+            const Eigen::VectorXf c = (*fitterHolder)->Get_Coeff_in();
+            if (c.size() >= 6) {
+                PostLog("直线上一点: (" + std::to_string(c[0]) + ", " + std::to_string(c[1]) + ", " + std::to_string(c[2]) + ")");
+                PostLog("方向向量: (" + std::to_string(c[3]) + ", " + std::to_string(c[4]) + ", " + std::to_string(c[5]) + ")");
+            }
+            PostProgress(100, 100, "直线拟合完成");
+        },
+        [this, fitterHolder]() {
+    if (!*fitterHolder) {
+        return;   // 工作线程未执行(开始前已取消)
+    }
+    if (m_asyncState && m_asyncState->cancelRequested.load()) {
+        TeEDebug(">>: 直线拟合已取消，不再显示本次结果。");
+        return;
+    }
+    Fit_Line& fitter = **fitterHolder;
+    if (fitter.Get_Coeff_in().size() < 6) {
+        TeEDebug(">>: 直线拟合失败：未能获得有效的直线模型系数");
+        return;
+    }
 
     // 获取结果并显示
     pcl::PointCloud<pcl::PointXYZ>::Ptr inliers = fitter.Get_Inliers();
@@ -1551,9 +2645,14 @@ void CloudForgeAnalyzer::Slot_fit_line_Triggered() {
         + "方向向量: (" + std::to_string(coeffs[3]) + ", " + std::to_string(coeffs[4]) + ", " + std::to_string(coeffs[5]) + ")";
     Update_CFmes(msg);
     TeEDebug(msg);
+        });
 }
 
 void CloudForgeAnalyzer::Slot_fit_cy_Triggered() {
+    if (IsTaskRunning()) {
+        TeEDebug(">>: 已有计算任务进行中，请等待完成或点击工具栏“取消计算”。");
+        return;
+    }
     ChoseCloudDialog dialog(CloudMap, ColorMap);
     if (dialog.exec() != QDialog::Accepted) {
         TeEDebug(">>:操作取消");
@@ -1564,14 +2663,38 @@ void CloudForgeAnalyzer::Slot_fit_cy_Triggered() {
     }
     pcl::PointCloud<pcl::PointXYZ>::Ptr Cloud_Temp = CloudMap[dialog.getSelectedList()[0]];
 
-    Fit_Cylinder fcy(Cloud_Temp);
-    if (fcy.isCancelled) {
+    // 参数对话框在界面线程弹出(原先在 Fit_Cylinder 构造函数里弹框)
+    ParamDialog_FittingCylinder fitDialog;
+    if (fitDialog.exec() != QDialog::Accepted) {
+        TeEDebug(">>: 参数设置取消");
+        return;
+    }
+    bool ok1, ok2, ok3, ok4;
+    Fit_Cylinder::FitParams fp;
+    fp.KSearch = fitDialog.getParams()[0].toInt(&ok1);
+    fp.DistanceThreshold = fitDialog.getParams()[1].toFloat(&ok2);
+    fp.MaxIterations = fitDialog.getParams()[2].toInt(&ok3);
+    fp.InitialRadius = fitDialog.getParams()[3].toFloat(&ok4);
+    if (!ok1 || !ok2 || !ok3 || !ok4) {
+        TeEDebug(">>: 无效数字");
+        return;
+    }
+
+    // 后台执行拟合(法线估计+RANSAC), 完成后回到界面线程可视化
+    auto fcy = std::make_shared<Fit_Cylinder>(Cloud_Temp, fp);
+    RunAsyncVoid("圆柱拟合",
+        [this, fcy]() {
+            PostProgress(0, 0, "圆柱拟合: 法线估计与RANSAC...");
+            fcy->compute();
+        },
+        [this, fcy]() {
+    if (fcy->isCancelled) {
         TeEDebug(">>:操作取消");
         return;
     }
     pcl::PointCloud<pcl::PointXYZ>::Ptr Cloud_Inliers, Cloud_Outliers;
-    Cloud_Inliers = fcy.Get_Inliers();
-    Cloud_Outliers = fcy.Get_Outliers();
+    Cloud_Inliers = fcy->Get_Inliers();
+    Cloud_Outliers = fcy->Get_Outliers();
     if (Cloud_Inliers->empty()) {
         qDebug() << "圆柱拟合结果为空";
         return;
@@ -1586,7 +2709,7 @@ void CloudForgeAnalyzer::Slot_fit_cy_Triggered() {
 
     Eigen::VectorXf coeff1;//, coeff2;
 
-    coeff1 = fcy.Get_Coeff_in();
+    coeff1 = fcy->Get_Coeff_in();
     pcl::ModelCoefficients::Ptr cylinder_coeff(new pcl::ModelCoefficients);
     cylinder_coeff->values.resize(7);
     for (std::size_t i = 0; i < 7; ++i)
@@ -1620,10 +2743,15 @@ void CloudForgeAnalyzer::Slot_fit_cy_Triggered() {
     ui->winOfAnalyzer->update();
     ui->winOfAnalyzer->renderWindow()->Render();
     ui->winOfAnalyzer->update();
-    Update_CFmes(fcy.message);
+    Update_CFmes(fcy->message);
+        });
 }
 void CloudForgeAnalyzer::Slot_fi_open_Triggered()
 {
+    if (IsTaskRunning()) {
+        TeEDebug(">>: 已有计算任务进行中，请等待完成或点击工具栏“取消计算”。");
+        return;
+    }
     QString runPath = QDir::currentPath() + "/PCDfiles";
 
     QString file_name = QFileDialog::getOpenFileName(
@@ -1646,18 +2774,37 @@ void CloudForgeAnalyzer::Slot_fi_open_Triggered()
     std::string path = file_name.toStdString();
 #endif
 
-    if (pcl::io::loadPCDFile(path, *cloud) == -1) {
+    // 后台读取点云文件(界面保持响应)
+    auto loadedCloud = std::make_shared<pcl::PointCloud<pcl::PointXYZ>>();
+    auto loadOk = std::make_shared<bool>(false);
+
+    RunAsyncVoid("加载PCD文件",
+        [this, loadedCloud, loadOk, path]() {
+            PostProgress(0, 0, "加载点云文件...");
+            if (pcl::io::loadPCDFile(path, *loadedCloud) == -1) {
+                PostLog(">>无法加载点云文件");
+                return;
+            }
+            *loadOk = true;
+        },
+        [this, loadedCloud, loadOk]() {
+    if (!*loadOk) {
         TeEDebug(">>无法加载点云文件");
         return;
     }
-
+    *cloud = *loadedCloud;
     ColorManager color(255, 255, 255);
     ClearAllPointCloud();
     AddPointCloud("example", cloud, color);
     UpdateCamera(0, 0, 1);
+        });
 }
 
 void CloudForgeAnalyzer::Slot_fi_openSTL_Triggered() {
+    if (IsTaskRunning()) {
+        TeEDebug(">>: 已有计算任务进行中，请等待完成或点击工具栏“取消计算”。");
+        return;
+    }
     QString runPath = QDir::currentPath() + "/PCDfiles";//获取项目的根路径
     QString file_name = QFileDialog::getOpenFileName(this, QStringLiteral("选择文件"), runPath, "*.STL", nullptr, QFileDialog::DontResolveSymlinks);
     if (file_name.isEmpty()) {
@@ -1671,68 +2818,87 @@ void CloudForgeAnalyzer::Slot_fi_openSTL_Triggered() {
 #endif
     TeEDebug("开始处理STL文件: " + stlPath);
 
-    // 1. 读取STL文件信息，计算推荐参数
-    float recommendedLeafSize = 0.01f;
-    int triangleCount = 0;
-    float modelDiagonal = 0.0f;
+    // 1. 后台读取STL文件信息，计算推荐参数(界面保持响应)
+    auto info = std::make_shared<StlImportInfo>();
+    info->fileName = QFileInfo(file_name).fileName();
+    info->fileSizeMB = QFileInfo(file_name).size() / (1024.0 * 1024.0);
 
-    try {
-        vtkSmartPointer<vtkSTLReader> reader = vtkSmartPointer<vtkSTLReader>::New();
-        reader->SetFileName(stlPath.c_str());
-        reader->Update();
+    RunAsyncVoid("读取STL文件信息",
+        [this, info, stlPath]() {
+            PostProgress(0, 0, "读取STL文件信息...");
+            try {
+                vtkSmartPointer<vtkSTLReader> reader = vtkSmartPointer<vtkSTLReader>::New();
+                reader->SetFileName(stlPath.c_str());
+                reader->Update();
 
-        vtkPolyData* polyData = reader->GetOutput();
-        if (!polyData) {
-            QMessageBox::warning(this, "错误", "无法读取STL文件");
-            return;
-        }
-
-        triangleCount = polyData->GetNumberOfCells();
-        TeEDebug("STL文件三角形数量: " + std::to_string(triangleCount));
-
-        // 计算包围盒
-        double bounds[6];
-        polyData->GetBounds(bounds);
-        double dx = bounds[1] - bounds[0];
-        double dy = bounds[3] - bounds[2];
-        double dz = bounds[5] - bounds[4];
-
-        modelDiagonal = sqrt(dx * dx + dy * dy + dz * dz);
-        TeEDebug("模型对角线长度: " + std::to_string(modelDiagonal) + " 米");
-
-        // 根据模型尺寸计算推荐leaf size
-        if (modelDiagonal > 0) {
-            if (modelDiagonal < 0.1) {        // 小型模型 (<10cm)
-                recommendedLeafSize = 0.001f;  // 1mm
-            }
-            else if (modelDiagonal < 1.0) {  // 中型模型 (<1m)
-                recommendedLeafSize = 0.002f;  // 2mm
-            }
-            else if (modelDiagonal < 5.0) {  // 大型模型 (<5m)
-                recommendedLeafSize = 0.005f;  // 5mm
-            }
-            else {                            // 超大型模型
-                recommendedLeafSize = 0.01f;   // 1cm
-            }
-
-            // 根据三角形密度微调
-            if (triangleCount > 0) {
-                float triangleDensity = triangleCount / (modelDiagonal * modelDiagonal);
-                if (triangleDensity > 10000) {  // 高密度模型
-                    recommendedLeafSize *= 0.8f;
+                vtkPolyData* polyData = reader->GetOutput();
+                if (!polyData) {
+                    info->error = "无法读取STL文件";
+                    PostLog(">>: 无法读取STL文件");
+                    return;
                 }
-                else if (triangleDensity < 1000) {  // 低密度模型
-                    recommendedLeafSize *= 1.2f;
+
+                info->triangleCount = polyData->GetNumberOfCells();
+                PostLog("STL文件三角形数量: " + std::to_string(info->triangleCount));
+
+                // 计算包围盒
+                double bounds[6];
+                polyData->GetBounds(bounds);
+                double dx = bounds[1] - bounds[0];
+                double dy = bounds[3] - bounds[2];
+                double dz = bounds[5] - bounds[4];
+
+                info->modelDiagonal = sqrt(dx * dx + dy * dy + dz * dz);
+                PostLog("模型对角线长度: " + std::to_string(info->modelDiagonal) + " 米");
+
+                // 根据模型尺寸计算推荐leaf size
+                if (info->modelDiagonal > 0) {
+                    if (info->modelDiagonal < 0.1) {        // 小型模型 (<10cm)
+                        info->recommendedLeafSize = 0.001f;  // 1mm
+                    }
+                    else if (info->modelDiagonal < 1.0) {  // 中型模型 (<1m)
+                        info->recommendedLeafSize = 0.002f;  // 2mm
+                    }
+                    else if (info->modelDiagonal < 5.0) {  // 大型模型 (<5m)
+                        info->recommendedLeafSize = 0.005f;  // 5mm
+                    }
+                    else {                            // 超大型模型
+                        info->recommendedLeafSize = 0.01f;   // 1cm
+                    }
+
+                    // 根据三角形密度微调
+                    if (info->triangleCount > 0) {
+                        float triangleDensity = info->triangleCount / (info->modelDiagonal * info->modelDiagonal);
+                        if (triangleDensity > 10000) {  // 高密度模型
+                            info->recommendedLeafSize *= 0.8f;
+                        }
+                        else if (triangleDensity < 1000) {  // 低密度模型
+                            info->recommendedLeafSize *= 1.2f;
+                        }
+                    }
+
+                    // 限制范围
+                    info->recommendedLeafSize = std::max(0.0005f, std::min(0.1f, info->recommendedLeafSize));
                 }
+
             }
+            catch (const std::exception& e) {
+                PostLog("读取STL文件信息失败: " + std::string(e.what()));
+            }
+        },
+        [this, info, stlPath]() {
+            // 读取完成, 回到界面线程弹出参数对话框并启动转换
+            ContinueStlImportAfterInfo(info, stlPath);
+        });
+}
 
-            // 限制范围
-            recommendedLeafSize = std::max(0.0005f, std::min(0.1f, recommendedLeafSize));
-        }
-
-    }
-    catch (const std::exception& e) {
-        TeEDebug("读取STL文件信息失败: " + std::string(e.what()));
+// STL 信息读取完成后的界面部分: 弹参数对话框 + 启动后台转换
+void CloudForgeAnalyzer::ContinueStlImportAfterInfo(const std::shared_ptr<StlImportInfo>& info,
+                                                    const std::string& stlPath)
+{
+    if (!info->error.isEmpty()) {
+        QMessageBox::warning(this, "错误", info->error);
+        return;
     }
 
     // 2. 创建对话框获取参数
@@ -1746,15 +2912,14 @@ void CloudForgeAnalyzer::Slot_fi_openSTL_Triggered() {
     QVBoxLayout* mainLayout = new QVBoxLayout(&dialog);
 
     // 文件信息
-    QFileInfo fileInfo(file_name);
-    QString fileSize = QString("%1 MB").arg(fileInfo.size() / (1024.0 * 1024.0), 0, 'f', 2);
+    QString fileSize = QString("%1 MB").arg(info->fileSizeMB, 0, 'f', 2);
 
     QLabel* infoLabel = new QLabel(
         QString("文件: %1\n大小: %2\n三角形数量: %3\n模型对角线: %4 米")
-        .arg(fileInfo.fileName())
+        .arg(info->fileName)
         .arg(fileSize)
-        .arg(triangleCount)
-        .arg(modelDiagonal, 0, 'f', 3),
+        .arg(info->triangleCount)
+        .arg(info->modelDiagonal, 0, 'f', 3),
         &dialog
     );
     infoLabel->setWordWrap(true);
@@ -1768,7 +2933,7 @@ void CloudForgeAnalyzer::Slot_fi_openSTL_Triggered() {
     // Leaf size 设置
     QHBoxLayout* leafLayout = new QHBoxLayout();
     QLabel* leafLabel = new QLabel("下采样 leaf-size:", &dialog);
-    QLineEdit* leafEdit = new QLineEdit(QString::number(recommendedLeafSize, 'f', 4), &dialog);
+    QLineEdit* leafEdit = new QLineEdit(QString::number(info->recommendedLeafSize, 'f', 4), &dialog);
     leafEdit->setMaximumWidth(100);
 
     leafLayout->addWidget(leafLabel);
@@ -1807,23 +2972,17 @@ void CloudForgeAnalyzer::Slot_fi_openSTL_Triggered() {
     TeEDebug("转换参数 - leafSize: " + std::to_string(leafSize) +
         ", surfaceOnly: " + std::to_string(surfaceOnly));
 
-    // 3. 创建进度对话框
-    QProgressDialog progressDialog("正在转换STL文件...", "取消", 0, 100, this);
-    progressDialog.setWindowTitle("STL转换进度");
-    progressDialog.setWindowModality(Qt::WindowModal);
-    progressDialog.setMinimumDuration(0);
-    progressDialog.setValue(0);
-    progressDialog.show();
-
+    // 3. 后台执行转换(界面保持响应; 可在工具栏“取消计算”中止)
+    auto convertResult = std::make_shared<StlImportResult>();
+    RunAsyncVoid("STL转换点云",
+        [this, convertResult, stlPath, leafSize, surfaceOnly]() {
     // 4. 开始转换
     pcl::PointCloud<pcl::PointXYZ>::Ptr Cloud_Convert(new pcl::PointCloud<pcl::PointXYZ>);
 
     try {
         // 4.1 读取STL文件
-        TeEDebug("开始读取STL文件...");
-        progressDialog.setValue(10);
-        progressDialog.setLabelText("读取STL文件...");
-        QApplication::processEvents();
+        PostLog("开始读取STL文件...");
+        PostProgress(10, 100, "读取STL文件...");
 
         vtkSmartPointer<vtkSTLReader> reader = vtkSmartPointer<vtkSTLReader>::New();
         reader->SetFileName(stlPath.c_str());
@@ -1834,13 +2993,11 @@ void CloudForgeAnalyzer::Slot_fi_openSTL_Triggered() {
             throw std::runtime_error("STL文件为空");
         }
 
-        TeEDebug("STL文件读取成功");
-        TeEDebug("顶点数量: " + std::to_string(polyData->GetNumberOfPoints()));
-        TeEDebug("三角形数量: " + std::to_string(polyData->GetNumberOfCells()));
+        PostLog("STL文件读取成功");
+        PostLog("顶点数量: " + std::to_string(polyData->GetNumberOfPoints()));
+        PostLog("三角形数量: " + std::to_string(polyData->GetNumberOfCells()));
 
-        progressDialog.setValue(20);
-        progressDialog.setLabelText("转换网格数据...");
-        QApplication::processEvents();
+        PostProgress(20, 100, "转换网格数据...");
 
         // 4.2 转换为PCL网格
         pcl::PolygonMesh mesh;
@@ -1850,16 +3007,12 @@ void CloudForgeAnalyzer::Slot_fi_openSTL_Triggered() {
         pcl::PointCloud<pcl::PointXYZ>::Ptr vertices(new pcl::PointCloud<pcl::PointXYZ>);
         pcl::fromPCLPointCloud2(mesh.cloud, *vertices);
 
-        progressDialog.setValue(30);
-        progressDialog.setLabelText("获取顶点数据...");
-        QApplication::processEvents();
+        PostProgress(30, 100, "获取顶点数据...");
 
         if (surfaceOnly) {
             // 4.4a 表面采样
-            TeEDebug("开始表面采样...");
-            progressDialog.setValue(40);
-            progressDialog.setLabelText("表面采样...");
-            QApplication::processEvents();
+            PostLog("开始表面采样...");
+            PostProgress(40, 100, "表面采样...");
 
             pcl::PointCloud<pcl::PointXYZ>::Ptr sampledCloud(new pcl::PointCloud<pcl::PointXYZ>);
 
@@ -1873,10 +3026,13 @@ void CloudForgeAnalyzer::Slot_fi_openSTL_Triggered() {
             sampledCloud->reserve(totalTriangles * 50);
 
             for (int batch = 0; batch < numBatches && !cancelFlag; ++batch) {
-                // 检查是否取消
-                if (progressDialog.wasCanceled()) {
+                // 更新进度并检查是否取消(返回 false 表示用户点击了“取消计算”)
+                int batchEndPreview = std::min((batch + 1) * batchSize, totalTriangles);
+                int progressPreview = std::min(80, 40 + static_cast<int>(40.0f * batchEndPreview / totalTriangles));
+                if (!PostProgress(progressPreview, 100,
+                        "表面采样: " + std::to_string(batchEndPreview) + "/" + std::to_string(totalTriangles) + " 三角形")) {
                     cancelFlag = true;
-                    TeEDebug("用户取消转换");
+                    PostLog("用户取消转换");
                     break;
                 }
 
@@ -1963,35 +3119,27 @@ void CloudForgeAnalyzer::Slot_fi_openSTL_Triggered() {
                 int progress = 40 + static_cast<int>(40.0f * processedTriangles / totalTriangles);
                 progress = std::min(progress, 80);
 
-                progressDialog.setValue(progress);
-                progressDialog.setLabelText(
-                    QString("表面采样: %1/%2 三角形").arg(processedTriangles).arg(totalTriangles));
+                PostProgress(progress, 100,
+                    "表面采样: " + std::to_string(processedTriangles) + "/" + std::to_string(totalTriangles) + " 三角形");
 
-                QString debugMsg = QString("采样进度: %1% (%2/%3 三角形)")
-                    .arg(progress)
-                    .arg(processedTriangles)
-                    .arg(totalTriangles);
-                TeEDebug(debugMsg.toStdString());
-
-                QApplication::processEvents();
+                PostLog("采样进度: " + std::to_string(progress) + "% ("
+                    + std::to_string(processedTriangles) + "/" + std::to_string(totalTriangles) + " 三角形)");
             }
 
             *Cloud_Convert = *sampledCloud;
-            TeEDebug("表面采样完成，采样点数: " + std::to_string(Cloud_Convert->size()));
+            PostLog("表面采样完成，采样点数: " + std::to_string(Cloud_Convert->size()));
 
         }
         else {
             // 4.4b 使用所有顶点
             *Cloud_Convert = *vertices;
-            TeEDebug("使用所有顶点，点数: " + std::to_string(Cloud_Convert->size()));
+            PostLog("使用所有顶点，点数: " + std::to_string(Cloud_Convert->size()));
         }
 
         // 4.5 下采样
         if (leafSize > 0 && Cloud_Convert->size() > 0) {
-            TeEDebug("开始下采样...");
-            progressDialog.setValue(85);
-            progressDialog.setLabelText("下采样...");
-            QApplication::processEvents();
+            PostLog("开始下采样...");
+            PostProgress(85, 100, "下采样...");
 
             pcl::VoxelGrid<pcl::PointXYZ> voxelGrid;
             voxelGrid.setInputCloud(Cloud_Convert);
@@ -2002,34 +3150,55 @@ void CloudForgeAnalyzer::Slot_fi_openSTL_Triggered() {
 
             *Cloud_Convert = *filteredCloud;
 
-            TeEDebug("下采样完成，点数: " + std::to_string(Cloud_Convert->size()));
+            PostLog("下采样完成，点数: " + std::to_string(Cloud_Convert->size()));
         }
 
-        progressDialog.setValue(100);
-        progressDialog.setLabelText("转换完成！");
-        QApplication::processEvents();
-
-        // 显示结果信息
-        QString resultMsg = QString("转换完成！\n"
-            "原始STL文件: %1\n"
-            "生成点云数量: %2\n"
-            "Leaf size: %3\n"
-            "表面点云: %4")
-            .arg(fileInfo.fileName())
-            .arg(Cloud_Convert->size())
-            .arg(leafSize)
-            .arg(surfaceOnly ? "是" : "否");
-
-        QMessageBox::information(this, "转换完成", resultMsg);
-        TeEDebug(resultMsg.toStdString());
+        PostProgress(100, 100, "转换完成！");
 
     }
     catch (const std::exception& e) {
-        QString errorMsg = QString("STL转换失败: %1").arg(e.what());
-        QMessageBox::warning(this, "错误", errorMsg);
-        TeEDebug("转换失败: " + std::string(e.what()));
+        convertResult->error = QString("STL转换失败: %1").arg(e.what());
+        PostLog("转换失败: " + std::string(e.what()));
         return;
     }
+
+    // 转换成功: 结果交回界面线程加入场景
+    convertResult->cloud = Cloud_Convert;
+    convertResult->ok = true;
+        },
+        [this, convertResult, info, leafSize, surfaceOnly]() {
+            FinishStlImport(info, convertResult, leafSize, surfaceOnly);
+        });
+}
+
+// STL 转换完成后的界面部分: 提示结果 + 点云加入场景
+void CloudForgeAnalyzer::FinishStlImport(const std::shared_ptr<StlImportInfo>& info,
+                                         const std::shared_ptr<StlImportResult>& result,
+                                         float leafSize, bool surfaceOnly)
+{
+    if (!result->error.isEmpty()) {
+        QMessageBox::warning(this, "错误", result->error);
+        return;
+    }
+    if (!result->ok) {
+        return;
+    }
+    pcl::PointCloud<pcl::PointXYZ>::Ptr Cloud_Convert = result->cloud;
+
+    // 显示结果信息
+    QString resultMsg = QString("转换完成！\n"
+        "原始STL文件: %1\n"
+        "生成点云数量: %2\n"
+        "Leaf size: %3\n"
+        "表面点云: %4")
+        .arg(info->fileName)
+        .arg(Cloud_Convert->size())
+        .arg(leafSize)
+        .arg(surfaceOnly ? "是" : "否");
+
+    QMessageBox::information(this, "转换完成", resultMsg);
+    TeEDebug(resultMsg.toStdString());
+
     //..
     ClearAllPointCloud();
     viewer->removeAllShapes();
@@ -2038,6 +3207,10 @@ void CloudForgeAnalyzer::Slot_fi_openSTL_Triggered() {
     AddPointCloud(GenerateRandomName("stl_convert_cloud"), Cloud_Convert, color);
 }
 void CloudForgeAnalyzer::Slot_fi_add_Triggered() {
+    if (IsTaskRunning()) {
+        TeEDebug(">>: 已有计算任务进行中，请等待完成或点击工具栏“取消计算”。");
+        return;
+    }
     QString runPath = QDir::currentPath() + "/PCDfiles";
     QStringList file_names = QFileDialog::getOpenFileNames(
         this,
@@ -2054,71 +3227,88 @@ void CloudForgeAnalyzer::Slot_fi_add_Triggered() {
         return;
     }
 
-    // 开始任务 - 显示进度
-    SetProgressBarValue(0, "加载点云");
+    // 每个文件的读取结果(点云对象在后台线程创建, 加入场景在 GUI 线程)
+    struct LoadedEntry {
+        std::string displayName;                        // 不含路径的文件名(用于点云命名)
+        std::string fileName;                           // 含后缀的文件名(用于提示)
+        pcl::PointCloud<pcl::PointXYZ>::Ptr cloud;
+    };
+    auto entries = std::make_shared<std::vector<LoadedEntry>>();
 
-    // 用于跟踪成功加载的文件数量
-    int loadedCount = 0;
-    int currentIndex = 0;
+    // 后台批量读取点云(界面保持响应; 可在工具栏“取消计算”中止)
+    RunAsyncVoid("加载点云文件",
+        [this, entries, file_names, totalFiles]() {
+            int currentIndex = 0;
+            for (const QString& file_name : file_names) {
+                if (!PostProgress(currentIndex, totalFiles,
+                        "正在加载(" + std::to_string(currentIndex + 1) + "/" + std::to_string(totalFiles)
+                        + ") " + QFileInfo(file_name).fileName().toStdString())) {
+                    PostLog(">>加载已取消");
+                    break;
+                }
+                currentIndex++;
 
-    for (const QString& file_name : file_names) {
-        currentIndex++;
+                // 创建新点云对象（避免覆盖）
+                pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
 
-        // 更新进度信息（包括文件名）
-        QString progressText = QString("正在加载(%1/%2)\n%3")
-            .arg(currentIndex)
-            .arg(totalFiles)
-            .arg(QFileInfo(file_name).fileName());
-        SetProgressBarValue((currentIndex * 100) / totalFiles, progressText);
-
-        // 创建新点云对象（避免覆盖）
-        pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
-
-        // 尝试加载文件
-        QString status;
-        bool success = false;
-        try {
+                // 尝试加载文件
+                QString status;
+                try {
 #ifdef _WIN32
-            QByteArray localPath = file_name.toLocal8Bit();
-            std::string path = localPath.constData();
+                    QByteArray localPath = file_name.toLocal8Bit();
+                    std::string path = localPath.constData();
 #else
-            std::string path = file_name.toStdString();
+                    std::string path = file_name.toStdString();
 #endif
-            if (pcl::io::loadPCDFile(path, *cloud) == -1) {
-                status = QString(">>加载失败: %1").arg(QFileInfo(file_name).fileName());
+                    if (pcl::io::loadPCDFile(path, *cloud) == -1) {
+                        status = QString(">>加载失败: %1").arg(QFileInfo(file_name).fileName());
+                    }
+                    else {
+                        // 提取文件名（不含路径）
+                        QString displayName = QFileInfo(file_name).completeBaseName();
+
+                        LoadedEntry entry;
+                        entry.displayName = displayName.toStdString();
+                        entry.fileName = QFileInfo(file_name).fileName().toStdString();
+                        entry.cloud = cloud;
+                        entries->push_back(entry);
+
+                        status = QString(">>已加载: %1").arg(displayName);
+                    }
+                }
+                catch (...) {
+                    status = QString(">>加载异常: %1").arg(QFileInfo(file_name).fileName());
+                }
+
+                // 显示状态信息
+                PostLog(status.toStdString());
             }
-            else {
-                // 提取文件名（不含路径）
-                QString displayName = QFileInfo(file_name).completeBaseName();
-
-                // 生成颜色并添加点云
-                ColorManager color;
-                AddPointCloud(displayName.toStdString(), cloud, color);
-
-                status = QString(">>已加载: %1").arg(displayName);
-                success = true;
-                loadedCount++;
-            }
-        }
-        catch (...) {
-            status = QString(">>加载异常: %1").arg(QFileInfo(file_name).fileName());
-        }
-
-        // 显示状态信息
-        TeEDebug(status.toStdString().c_str());
+            PostProgress(totalFiles, totalFiles, "加载完成");
+        },
+        [this, entries, totalFiles]() {
+    // 将读取到的点云加入场景(仅在 GUI 线程)
+    int loadedCount = 0;
+    for (const auto& entry : *entries) {
+        // 生成颜色并添加点云
+        ColorManager color;
+        AddPointCloud(entry.displayName, entry.cloud, color);
+        loadedCount++;
     }
-
-    // 完成后重置进度条
-    ResetProgressBar();
 
     // 如果有成功加载的文件，更新相机
     if (loadedCount > 0) {
         UpdateCamera(0, 0, 1);
         TeEDebug(QString(">>成功加载 %1/%2 个点云文件").arg(loadedCount).arg(totalFiles).toStdString().c_str());
     }
+        });
 }
 
 void CloudForgeAnalyzer::Slot_fi_saveas_Triggered() {
+    if (IsTaskRunning()) {
+        TeEDebug(">>: 已有计算任务进行中，请等待完成或点击工具栏“取消计算”。");
+        return;
+    }
+    // SaveCloudDialog 的构造函数内部会 exec() 弹框, 必须在界面线程创建
     SaveCloudDialog dialog(CloudMap, ColorMap);
     auto SaveList = dialog.getSelectedList();
     if (SaveList.empty()) return;
@@ -2127,20 +3317,63 @@ void CloudForgeAnalyzer::Slot_fi_saveas_Triggered() {
     if (!saveDir.exists()) saveDir.mkpath(".");
     QString defaultName = QString("cloud_%1.pcd").arg(QDateTime::currentDateTime().toString("yyyyMMddHHmmss"));
     QString filePath = QFileDialog::getSaveFileName(this, "保存点云文件", saveDir.filePath(defaultName), "PCD文件 (*.pcd)");
+    if (filePath.isEmpty()) return;
 
-    QString infoMsg;
-    if (!filePath.isEmpty()) {
-        bool ok = dialog.SaveSelectedClouds(filePath, infoMsg);
-        if (ok) {
-            QMessageBox::information(this, "成功", infoMsg);
+    // 选中的点云在界面线程取出并做存在性检查(读取复选框状态必须在 GUI 线程)
+    auto saveClouds = std::make_shared<std::vector<pcl::PointCloud<pcl::PointXYZ>::Ptr>>();
+    auto infoMsg = std::make_shared<QString>();
+    auto saveOk = std::make_shared<bool>(false);
+    for (const auto& key : SaveList) {
+        auto it = CloudMap.find(key);
+        if (it == CloudMap.end()) {
+            *infoMsg = QString("点云 %1 不存在").arg(QString::fromStdString(key));
+            QMessageBox::critical(this, "错误", *infoMsg);
+            return;
         }
-        else {
-            QMessageBox::critical(this, "错误", infoMsg);
-        }
+        saveClouds->push_back(it->second);
     }
+
+    // 后台执行点云合并与写文件(界面保持响应)
+    RunAsyncVoid("保存点云文件",
+        [this, saveClouds, infoMsg, saveOk, filePath]() {
+            PostProgress(0, 0, "保存点云文件: 合并并写入...");
+            pcl::PointCloud<pcl::PointXYZ>::Ptr Cloud_Merged(new pcl::PointCloud<pcl::PointXYZ>);
+            Cloud_Merged->clear();
+            for (const auto& key : *saveClouds) {
+                *Cloud_Merged += *key;
+            }
+            // toLocal8Bit() → 系统本地编码(中文Windows即GBK),
+            // 匹配PCL内部fopen的ANSI编码预期, 避免中文路径乱码
+            std::string savePath = filePath.toLocal8Bit().toStdString();
+            if (QFileInfo(filePath).suffix().compare("pcd", Qt::CaseInsensitive) != 0) {
+                savePath += ".pcd";
+            }
+            if (pcl::io::savePCDFileBinaryCompressed(savePath, *Cloud_Merged) == -1) {
+                *infoMsg = "保存失败";
+                *saveOk = false;
+                return;
+            }
+            *infoMsg = QString("成功保存 %1 个点云到：\n%2")
+                .arg(saveClouds->size())
+                .arg(QString::fromLocal8Bit(savePath));
+            *saveOk = true;
+            PostLog(infoMsg->toStdString());
+        },
+        [this, infoMsg, saveOk]() {
+    if (*saveOk) {
+        QMessageBox::information(this, "成功", *infoMsg);
+    }
+    else {
+        QMessageBox::critical(this, "错误", *infoMsg);
+    }
+        });
 }
 
 void CloudForgeAnalyzer::Slot_fi_save_Triggered() {
+    if (IsTaskRunning()) {
+        TeEDebug(">>: 已有计算任务进行中，请等待完成或点击工具栏“取消计算”。");
+        return;
+    }
     pcl::PointCloud<pcl::PointXYZ>::Ptr nowCloud(new pcl::PointCloud<pcl::PointXYZ>);
     *nowCloud = *cloud;
     if (nowCloud->points.empty())
@@ -2148,29 +3381,47 @@ void CloudForgeAnalyzer::Slot_fi_save_Triggered() {
         TeEDebug(">>SspcdF:输入点云为空");
         return;
     }
-    pcl::PCDWriter writer;
     std::string path = "PCDfiles/nowCloud.pcd";
-    std::filesystem::path targetPath = "PCDfiles";
-    if (!std::filesystem::exists(targetPath)) {
-        TeEDebug(">>SspcdF:路径不存在，正在创建...");
-        // 创建文件夹
-        if (std::filesystem::create_directories(targetPath)) {
-            TeEDebug(">>SspcdF:文件夹创建成功！");
-        }
-        else {
-            TeEDebug(">>SspcdF:文件夹创建失败！");
-        }
+
+    // 后台写文件(界面保持响应)
+    auto writeOk = std::make_shared<bool>(false);
+    RunAsyncVoid("保存主体点云",
+        [this, nowCloud, writeOk, path]() {
+            PostProgress(0, 0, "保存点云: 写入 " + path + " ...");
+            std::filesystem::path targetPath = "PCDfiles";
+            if (!std::filesystem::exists(targetPath)) {
+                PostLog(">>SspcdF:路径不存在，正在创建...");
+                // 创建文件夹
+                if (std::filesystem::create_directories(targetPath)) {
+                    PostLog(">>SspcdF:文件夹创建成功！");
+                }
+                else {
+                    PostLog(">>SspcdF:文件夹创建失败！");
+                }
+            }
+            else {
+                PostLog(">>SspcdF:路径合法");
+            }
+
+            pcl::PCDWriter writer;
+            writer.write(path, *nowCloud, false);
+            *writeOk = true;
+        },
+        [this, writeOk, path]() {
+    if (*writeOk) {
+        TeEDebug(">>SspcdF:生成主体点云" + path);
     }
     else {
-        TeEDebug(">>SspcdF:路径合法");
+        TeEDebug(">>SspcdF:点云写入失败");
     }
-
-    writer.write(path, *nowCloud, false);
-    TeEDebug(">>SspcdF:生成主体点云" + path);
-
+        });
 }
 
 void CloudForgeAnalyzer::Slot_ed_dork_Triggered() {
+    if (IsTaskRunning()) {
+        TeEDebug(">>: 计算进行中，为保证数据安全，暂不能执行该操作。");
+        return;
+    }
     RmCloudDialog dcc(CloudMap,ColorMap);
     std::vector<std::string> todelete = dcc.Get_toDelete();
     if (!todelete.empty()) {
@@ -2184,6 +3435,10 @@ void CloudForgeAnalyzer::Slot_ed_dork_Triggered() {
     ui->winOfAnalyzer->update();
 }
 void CloudForgeAnalyzer::Slot_ed_cleangeo_Triggered() {
+    if (IsTaskRunning()) {
+        TeEDebug(">>: 计算进行中，为保证数据安全，暂不能执行该操作。");
+        return;
+    }
     viewer->removeAllShapes();
     //clearAllActors();
 
@@ -2216,6 +3471,10 @@ void CloudForgeAnalyzer::cleanGeodesicVisualization() {
 
 
 void CloudForgeAnalyzer::Slot_ed_cleanall_Triggered() {
+    if (IsTaskRunning()) {
+        TeEDebug(">>: 计算进行中，为保证数据安全，暂不能执行该操作。");
+        return;
+    }
     cleanGeodesicVisualization();
     viewer->removeAllShapes();
     ClearAllPointCloud();
@@ -2242,15 +3501,27 @@ void CloudForgeAnalyzer::Slot_ed_cleanall_Triggered() {
 }
 
 void CloudForgeAnalyzer::Slot_ed_cleanRGB_Triggered() {
+    if (IsTaskRunning()) {
+        TeEDebug(">>: 计算进行中，为保证数据安全，暂不能执行该操作。");
+        return;
+    }
     ClearAllPointCloudRGB();
 }
 
 void CloudForgeAnalyzer::Slot_ed_cleangeodetic_Triggered() {
+    if (IsTaskRunning()) {
+        TeEDebug(">>: 计算进行中，为保证数据安全，暂不能执行该操作。");
+        return;
+    }
     cleanGeodesicVisualization();
 
 }
 
 void CloudForgeAnalyzer::Slot_ed_clean2DActor_Triggered() {
+    if (IsTaskRunning()) {
+        TeEDebug(">>: 计算进行中，为保证数据安全，暂不能执行该操作。");
+        return;
+    }
     vtkRenderer* renderer = viewer->getRendererCollection()->GetFirstRenderer();
     if (renderer) {
         vtkPropCollection* props = renderer->GetViewProps();
@@ -2272,28 +3543,133 @@ void CloudForgeAnalyzer::Slot_ed_clean2DActor_Triggered() {
 }
 
 void CloudForgeAnalyzer::Slot_fl_2_Triggered() {
+    if (IsTaskRunning()) {
+        TeEDebug(">>: 已有计算任务进行中，请等待完成或点击工具栏“取消计算”。");
+        return;
+    }
     ChoseCloudDialog dialog(CloudMap, ColorMap);
     if (dialog.exec() != QDialog::Accepted) {
         TeEDebug(">>:操作取消");
         return;
     }
     if (dialog.getSelectedList().empty()) return;
-    pcl::PointCloud<pcl::PointXYZ>::Ptr tempcloud = CloudMap[dialog.getSelectedList()[0]];
-    Filter_sor fs(tempcloud);
+    const std::string selectedName = dialog.getSelectedList()[0];
+    pcl::PointCloud<pcl::PointXYZ>::Ptr tempcloud = CloudMap[selectedName];
 
-    *tempcloud = *fs.Get_filtered();
+    // 参数对话框在界面线程弹出(原先在 Filter_sor 构造函数里弹框)
+    ParamDialog_sor sorDialog;
+    if (sorDialog.exec() != QDialog::Accepted) {
+        TeEDebug(">>: 参数设置取消");
+        return;
+    }
+    bool ok1, ok2;
+    Filter_sor::Params params;
+    params.mean_k = sorDialog.getParams()[0].toInt(&ok1);
+    params.std_dev_mul_thresh = sorDialog.getParams()[1].toFloat(&ok2);
+    if (!ok1 || !ok2 || params.mean_k <= 0) {
+        TeEDebug(">>: 无效数字");
+        return;
+    }
+
+    // 后台执行统计离群滤波, 完成后回到界面线程替换原有点云
+    auto fsHolder = std::make_shared<std::shared_ptr<Filter_sor>>();
+    RunAsyncVoid("统计离群滤波",
+        [this, fsHolder, tempcloud, params]() {
+            if (!PostProgress(0, 0, "统计离群滤波: 邻域统计与剔除...")) {
+                PostLog(">>: 统计离群滤波已取消。");
+                return;
+            }
+            *fsHolder = std::make_shared<Filter_sor>(tempcloud, params);
+            (*fsHolder)->compute();
+            PostLog("统计离群滤波完成, 输出点数: " + std::to_string((*fsHolder)->Get_filtered()->size()));
+            PostProgress(100, 100, "统计离群滤波完成");
+        },
+        [this, fsHolder, tempcloud, selectedName]() {
+    if (!*fsHolder) {
+        return;   // 工作线程未执行(开始前已取消)
+    }
+    if (m_asyncState && m_asyncState->cancelRequested.load()) {
+        TeEDebug(">>: 统计离群滤波已取消，不再显示本次结果。");
+        return;
+    }
+    *tempcloud = *(*fsHolder)->Get_filtered();
     if (tempcloud->empty()) {
         TeEDebug("操作无效");
 		return;
     }
     ColorManager color(255, 255, 255);
-    DelePointCloud(dialog.getSelectedList()[0]);
+    DelePointCloud(selectedName);
     AddPointCloud("example", tempcloud, color);
     ui->winOfAnalyzer->renderWindow()->Render();
     ui->winOfAnalyzer->update();
-    
+        });
 }
 void CloudForgeAnalyzer::Slot_fl_1_Triggered() {
+    if (IsTaskRunning()) {
+        TeEDebug(">>: 已有计算任务进行中，请等待完成或点击工具栏“取消计算”。");
+        return;
+    }
+    ChoseCloudDialog dialog(CloudMap, ColorMap);
+    if (dialog.exec() != QDialog::Accepted) {
+        TeEDebug(">>:操作取消");
+        return;
+    }
+    if (dialog.getSelectedList().empty()) return;
+    const std::string selectedName = dialog.getSelectedList()[0];
+    pcl::PointCloud<pcl::PointXYZ>::Ptr tempcloud = CloudMap[selectedName];
+
+    // 参数对话框在界面线程弹出(原先在 Filter_voxel 构造函数里弹框)
+    ParamDialog_vg vgDialog;
+    if (vgDialog.exec() != QDialog::Accepted) {
+        TeEDebug(">>: 参数设置取消");
+        return;
+    }
+    bool ok1;
+    Filter_voxel::Params params;
+    params.leafsize = vgDialog.getParams()[0].toFloat(&ok1);
+    if (!ok1 || params.leafsize <= 0.0f) {
+        TeEDebug(">>: 无效数字");
+        return;
+    }
+
+    // 后台执行体素滤波, 完成后回到界面线程替换原有点云
+    auto fvHolder = std::make_shared<std::shared_ptr<Filter_voxel>>();
+    RunAsyncVoid("体素滤波",
+        [this, fvHolder, tempcloud, params]() {
+            if (!PostProgress(0, 0, "体素滤波: 体素下采样...")) {
+                PostLog(">>: 体素滤波已取消。");
+                return;
+            }
+            *fvHolder = std::make_shared<Filter_voxel>(tempcloud, params);
+            (*fvHolder)->compute();
+            PostLog("体素滤波完成, 输出点数: " + std::to_string((*fvHolder)->Get_filtered()->size()));
+            PostProgress(100, 100, "体素滤波完成");
+        },
+        [this, fvHolder, tempcloud, selectedName]() {
+    if (!*fvHolder) {
+        return;   // 工作线程未执行(开始前已取消)
+    }
+    if (m_asyncState && m_asyncState->cancelRequested.load()) {
+        TeEDebug(">>: 体素滤波已取消，不再显示本次结果。");
+        return;
+    }
+    *tempcloud = *(*fvHolder)->Get_filtered();
+    if (tempcloud->empty()) {
+        TeEDebug("操作无效");
+        return;
+    }
+    ColorManager color(255, 255, 255);
+    DelePointCloud(selectedName);
+    AddPointCloud("example", tempcloud, color);
+    ui->winOfAnalyzer->renderWindow()->Render();
+    ui->winOfAnalyzer->update();
+        });
+}
+void CloudForgeAnalyzer::Slot_ph_1_Triggered() {
+    if (IsTaskRunning()) {
+        TeEDebug(">>: 已有计算任务进行中，请等待完成或点击工具栏“取消计算”。");
+        return;
+    }
     ChoseCloudDialog dialog(CloudMap, ColorMap);
     if (dialog.exec() != QDialog::Accepted) {
         TeEDebug(">>:操作取消");
@@ -2302,27 +3678,44 @@ void CloudForgeAnalyzer::Slot_fl_1_Triggered() {
     if (dialog.getSelectedList().empty()) return;
     pcl::PointCloud<pcl::PointXYZ>::Ptr tempcloud = CloudMap[dialog.getSelectedList()[0]];
 
-    Filter_voxel fv(tempcloud);
-    *tempcloud = *fv.Get_filtered();
-    if (tempcloud->empty()) {
-        TeEDebug("操作无效");
+    // 参数对话框在界面线程弹出(原先在 Cluster 构造函数里弹框)
+    ParamDialog_ec ecDialog;
+    if (ecDialog.exec() != QDialog::Accepted) {
+        TeEDebug(">>: 参数设置取消");
         return;
     }
-    ColorManager color(255, 255, 255);
-    DelePointCloud(dialog.getSelectedList()[0]);
-    AddPointCloud("example", tempcloud, color);
-    ui->winOfAnalyzer->renderWindow()->Render();
-    ui->winOfAnalyzer->update();
-}
-void CloudForgeAnalyzer::Slot_ph_1_Triggered() {
-    ChoseCloudDialog dialog(CloudMap, ColorMap);
-    if (dialog.exec() != QDialog::Accepted) {
-        TeEDebug(">>:操作取消");
+    bool ok1, ok2, ok3;
+    Cluster::Params params;
+    params.tolerance = ecDialog.getParams()[0].toFloat(&ok1);
+    params.minSize = ecDialog.getParams()[1].toFloat(&ok2);
+    params.maxSize = ecDialog.getParams()[2].toFloat(&ok3);
+    if (!ok1 || !ok2 || !ok3) {
+        TeEDebug(">>: 无效数字");
         return;
     }
-    if (dialog.getSelectedList().empty()) return;
-    pcl::PointCloud<pcl::PointXYZ>::Ptr tempcloud = CloudMap[dialog.getSelectedList()[0]];
-    Cluster cs(tempcloud);
+
+    // 后台执行欧式聚类, 完成后回到界面线程逐簇可视化
+    auto csHolder = std::make_shared<std::shared_ptr<Cluster>>();
+    RunAsyncVoid("欧式聚类",
+        [this, csHolder, tempcloud, params]() {
+            if (!PostProgress(0, 0, "欧式聚类: 邻域搜索与聚类提取...")) {
+                PostLog(">>: 欧式聚类已取消。");
+                return;
+            }
+            *csHolder = std::make_shared<Cluster>(tempcloud, params);
+            (*csHolder)->compute();
+            PostLog("欧式聚类完成, 聚类数: " + std::to_string((*csHolder)->GetClusterMap().size()));
+            PostProgress(100, 100, "欧式聚类完成");
+        },
+        [this, csHolder]() {
+    if (!*csHolder) {
+        return;   // 工作线程未执行(开始前已取消)
+    }
+    if (m_asyncState && m_asyncState->cancelRequested.load()) {
+        TeEDebug(">>: 欧式聚类已取消，不再显示本次结果。");
+        return;
+    }
+    Cluster& cs = **csHolder;
     if (cs.GetClusterMap().empty() || cs.GetColorMap().empty()) {
         return;
     }
@@ -2339,6 +3732,7 @@ void CloudForgeAnalyzer::Slot_ph_1_Triggered() {
         //viewer->addPointCloud<pcl::PointXYZ>(cloud_cluster, cluster_color, "cluster_" + std::to_string(cluster_id));//这里绑定颜色有点问题导致后面颜色读不出来
     }
     endUndoBatch();
+        });
 }
 
 
@@ -2521,6 +3915,10 @@ void CloudForgeAnalyzer::cleanWeldMeasureVisuals()
 }
 
 void CloudForgeAnalyzer::Slot_ed_undo_Triggered() {
+    if (IsTaskRunning()) {
+        TeEDebug(">>: 计算进行中，为保证数据安全，暂不能执行该操作。");
+        return;
+    }
     if (!m_undoRedoManager.canUndo()) {
         TeEDebug("撤销: 没有更多历史记录");
         return;
@@ -2533,6 +3931,10 @@ void CloudForgeAnalyzer::Slot_ed_undo_Triggered() {
 }
 
 void CloudForgeAnalyzer::Slot_ed_redo_Triggered() {
+    if (IsTaskRunning()) {
+        TeEDebug(">>: 计算进行中，为保证数据安全，暂不能执行该操作。");
+        return;
+    }
     if (!m_undoRedoManager.canRedo()) {
         TeEDebug("重做: 没有更多历史记录");
         return;
@@ -2574,6 +3976,129 @@ void CloudForgeAnalyzer::SetProgressBarValue(int percentage, const QString& mess
 void CloudForgeAnalyzer::ResetProgressBar() {
     // 重置为100%完成状态
     SetProgressBarValue(100, "");
+}
+
+// ============================================================
+// 后台计算任务: 计算在工作线程执行, 界面保持响应
+// 进度经原子共享状态传回, GUI 线程定时器读取后刷新进度条/调试文本框
+// ============================================================
+void CloudForgeAnalyzer::BeginAsyncTask(const QString& title)
+{
+    m_asyncState = std::make_shared<AsyncTaskState>();
+    m_asyncRunning = true;
+
+    if (!m_asyncTimer) {
+        m_asyncTimer = new QTimer(this);
+        connect(m_asyncTimer, &QTimer::timeout, this, &CloudForgeAnalyzer::PollAsyncProgress);
+    }
+    m_asyncTimer->start(100);   // 100ms 轮询一次进度
+
+    ui->action_cancel_task->setEnabled(true);
+    SetProgressBarValue(0, title);
+    TeEDebug(">>: 开始后台计算: " + title.toStdString() + "（界面保持可用；可点击“取消计算”中止）");
+}
+
+void CloudForgeAnalyzer::EndAsyncTask(bool cancelled)
+{
+    if (m_asyncTimer) {
+        m_asyncTimer->stop();
+    }
+    // 收尾: 落最后的日志并把进度条置满
+    PollAsyncProgress();
+    m_asyncRunning = false;
+    ui->action_cancel_task->setEnabled(false);
+    if (cancelled) {
+        SetProgressBarValue(0, "已取消");
+        TeEDebug(">>: 计算已取消。");
+    }
+    else {
+        ResetProgressBar();
+    }
+}
+
+void CloudForgeAnalyzer::PollAsyncProgress()
+{
+    if (!m_asyncState) {
+        return;
+    }
+    const int current = m_asyncState->current.load();
+    const int total = m_asyncState->total.load();
+
+    std::string stage;
+    std::vector<std::string> logs;
+    {
+        std::lock_guard<std::mutex> lk(m_asyncState->mtx);
+        stage = m_asyncState->stage;
+        logs.swap(m_asyncState->pendingLog);
+    }
+    for (const auto& line : logs) {
+        TeEDebug(line);
+    }
+    if (total > 0) {
+        const int pct = static_cast<int>(100.0 * current / total);
+        SetProgressBarValue(pct, QString::fromStdString(stage));
+    }
+    else if (!stage.empty()) {
+        SetProgressBarValue(0, QString::fromStdString(stage));
+    }
+}
+
+void CloudForgeAnalyzer::CancelCurrentTask()
+{
+    if (m_asyncState) {
+        m_asyncState->cancelRequested.store(true);
+        TeEDebug(">>: 已请求取消当前计算（将在下一个检查点中止）...");
+    }
+}
+
+bool CloudForgeAnalyzer::PostProgress(int current, int total, const std::string& stage)
+{
+    if (!m_asyncState) {
+        return true;
+    }
+    m_asyncState->current.store(current);
+    m_asyncState->total.store(total);
+    if (!stage.empty()) {
+        std::lock_guard<std::mutex> lk(m_asyncState->mtx);
+        m_asyncState->stage = stage;
+    }
+    return !m_asyncState->cancelRequested.load();
+}
+
+void CloudForgeAnalyzer::PostLog(const std::string& line)
+{
+    if (!m_asyncState) {
+        return;
+    }
+    std::lock_guard<std::mutex> lk(m_asyncState->mtx);
+    m_asyncState->pendingLog.push_back(line);
+}
+
+void CloudForgeAnalyzer::RunAsyncVoid(const QString& title,
+                                      const std::function<void()>& work,
+                                      const std::function<void()>& onFinished)
+{
+    BeginAsyncTask(title);
+    auto* watcher = new QFutureWatcher<void>(this);
+    connect(watcher, &QFutureWatcher<void>::finished, this,
+        [this, watcher, onFinished]() {
+            const bool cancelled = m_asyncState && m_asyncState->cancelRequested.load();
+            watcher->deleteLater();
+            EndAsyncTask(cancelled);
+            if (onFinished && !m_shuttingDown.load()) {
+                onFinished();   // 在 GUI 线程执行后续可视化/收尾
+            }
+        });
+    watcher->setFuture(QtConcurrent::run(work));
+    m_asyncFuture = watcher->future();
+}
+
+// 后台任务使用的进度回调: 只写共享状态(线程安全), 不触碰 Qt 对象
+std::function<bool(int, int, const std::string&)> CloudForgeAnalyzer::WorkerProgressCallback()
+{
+    return [this](int current, int total, const std::string& stage) -> bool {
+        return PostProgress(current, total, stage);
+    };
 }
 
 void CloudForgeAnalyzer::AddLine(const std::string& name,
@@ -2675,10 +4200,18 @@ void CloudForgeAnalyzer::visualizeMeasurementResults(MeasureHeight& measurer,
     viewer->addText("按 'r' 重置视角, 按 'q' 退出", 10, 30, 12, 1.0, 1.0, 1.0, "help_text");
 
     // 7. 显示可视化窗口
-    while (!viewer->wasStopped()) {
-        viewer->spinOnce(100);
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
-    }
+    // 非阻塞: 用定时器在 GUI 线程驱动 spinOnce, 避免像原来那样在此自旋阻塞主窗口
+    auto visHolder = std::make_shared<pcl::visualization::PCLVisualizer::Ptr>(viewer);
+    QTimer* spinTimer = new QTimer();
+    QObject::connect(spinTimer, &QTimer::timeout, [visHolder, spinTimer]() {
+        if (!(*visHolder) || (*visHolder)->wasStopped()) {
+            spinTimer->stop();
+            spinTimer->deleteLater();
+            return;
+        }
+        (*visHolder)->spinOnce(10);
+    });
+    spinTimer->start(50);
 }
 
 void CloudForgeAnalyzer::colorPointCloudByHeight(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud,

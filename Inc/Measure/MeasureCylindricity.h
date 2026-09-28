@@ -2,10 +2,15 @@
 #include "config/pcl114.h"
 #include <memory>
 #include <vector>
+#include <functional>
 
 class MeasureCylindricity
 {
 public:
+    // 进度回调: (当前进度, 总量, 阶段描述), 返回 false 表示请求取消
+    // 仅在调用线程(GUI线程)中被调用, 便于安全地刷新界面
+    using ProgressCallback = std::function<bool(int, int, const std::string&)>;
+
     // 空间直线参数结构（4自由度）
     struct LineParams {
         Eigen::Vector3f point;      // 直线上一点（3个参数，但实际只有2个自由度）
@@ -86,6 +91,11 @@ public:
     void setInitialLine(const LineParams& line);
     void setInitialLineFromCoeffs(const std::vector<float>& coeffs);
 
+    // 新增：进度回调与取消(用于长耗时的优化过程, 避免界面无响应)
+    void setProgressCallback(ProgressCallback cb) { progress_cb_ = std::move(cb); }
+    bool isCancelled() const { return cancelled_; }
+    void setCancelled(bool c) { cancelled_ = c; }
+
     // 执行圆柱度评估（基于新思路）
     AssessmentResult evaluateCylindricity();
 
@@ -147,7 +157,8 @@ private:
     void fitCircleCenterFixedRadius(const Eigen::Vector3f& direction,
                                     const Eigen::Vector3f& c0,
                                     Eigen::Vector2f& ab) const; // 固定半径圆心拟合(代数初值+Gauss-Newton)
-    void refineLineParams(const Eigen::Vector3f& c0, LineParams& line); // 四自由度 Nelder-Mead 联合精化
+    void refineLineParams(const Eigen::Vector3f& c0, LineParams& line,
+                          int stageIndex = 0, int stageTotal = 1); // 四自由度 Nelder-Mead 联合精化
     double evaluateCandidate(const Eigen::Vector3f& center,
                              const Eigen::Vector3f& direction); // 候选轴线残差评估
 
@@ -165,11 +176,27 @@ private:
 
     // 新增：热力图颜色映射函数
     void getColorForDistance(double distance, uint8_t& r, uint8_t& g, uint8_t& b) const;
+
+    // 新增：搜索阶段使用的点云(大点云时降采样, 仅用于优化寻优;
+    // 最终评估仍使用全量 input_cloud_, 不影响指标结果)
+    const pcl::PointCloud<pcl::PointXYZ>& searchPoints() const {
+        return (search_cloud_ && !search_cloud_->empty()) ? *search_cloud_ : *input_cloud_;
+    }
+
+    // 新增：进度上报(内部处理取消标志); 返回 false 表示已请求取消
+    bool reportProgress(int current, int total, const std::string& stage);
 private:
     pcl::PointCloud<pcl::PointXYZ>::Ptr input_cloud_;
     pcl::PointCloud<pcl::PointXYZ>::Ptr inliers_;
     pcl::PointCloud<pcl::PointXYZ>::Ptr outliers_;
     std::vector<double> distance_map_;
+
+    // 新增：搜索阶段降采样点云(大点云加速用)
+    pcl::PointCloud<pcl::PointXYZ>::Ptr search_cloud_;
+
+    // 新增：进度回调与取消标志
+    ProgressCallback progress_cb_;
+    bool cancelled_ = false;
 
     double design_radius_;
     double tolerance_;

@@ -21,17 +21,20 @@ Fit_Line::Fit_Line(pcl::PointCloud<pcl::PointXYZ>::Ptr InputC)
 
         if (!ok1 || !ok2) {
             qDebug() << "无效参数";
+            isCancelled = true;
             return;
         }
     }
     else {
         qDebug() << "取消操作";
+        isCancelled = true;
         return;
     }
 
     *cloud_input = *InputC;
     if (cloud_input->empty()) {
         qDebug() << "点云为空";
+        isCancelled = true;
         return;
     }
 
@@ -39,6 +42,23 @@ Fit_Line::Fit_Line(pcl::PointCloud<pcl::PointXYZ>::Ptr InputC)
 }
 
 Fit_Line::~Fit_Line() = default;
+
+Fit_Line::Fit_Line(pcl::PointCloud<pcl::PointXYZ>::Ptr InputC, const FitParams& params)
+    : paramDialog(nullptr)
+    , cloud_input(new pcl::PointCloud<pcl::PointXYZ>)
+    , cloud_inliers(new pcl::PointCloud<pcl::PointXYZ>)
+    , cloud_outliers(new pcl::PointCloud<pcl::PointXYZ>)
+{
+    // 参数由界面线程收集, 此处仅保存并拷贝输入(不弹框、不计算)
+    DistanceThreshold = params.DistanceThreshold;
+    MaxIterations = params.MaxIterations;
+
+    *cloud_input = *InputC;
+}
+
+void Fit_Line::compute() {
+    Proc();
+}
 
 void Fit_Line::Proc() {
     // 创建直线模型

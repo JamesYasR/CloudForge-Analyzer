@@ -1,0 +1,402 @@
+[INFO] R=1940 mm; 真值由解析几何给出, 测量程序只读点云。
+[CASE] long_step2 layer=A/B psi=0.0 d0=2.000 near=72721 far=70317 zNear=-25.98 zFar=26.84
+[KEY] long_step2/step status=Valid max=2.000 truth=2.000 err=0.000 valid=598 invalid=1 len=298.5 t=0.96s
+[KEY] long_step2/gap_axial status=Unmeasurable max=N/A truth=N/A err=N/A valid=0 invalid=599 t=0.94s
+[KEY] long_step2/gap_normal status=Valid max=2.000 truth=2.000 err=0.000 valid=597 invalid=2
+[TOP] long_step2/step d=2.000 near(a=111.50,s=0.26) far(a=111.50,s=2.26)
+[TOP] long_step2/step d=2.000 near(a=-77.00,s=0.26) far(a=-77.00,s=2.26)
+[TOP] long_step2/step d=2.000 near(a=-102.50,s=0.26) far(a=-102.50,s=2.26)
+[BASE] long_step2 参考圆柱基准: 使用外部给定轴线(未做远件拟合, 未做子区稳定性检查); 远件残余 RMS 0.0000 mm, 均值 0.0000 mm, 峰峰值 0.0001 mm
+[WHY] long_step2/gap_axial 没有任何近件边缘点能按指定方向找到唯一、受观测支持的远件对应点(无交点 599 点, 多交点 0 点, 平行退化 0 次, 误差放大剔除 0 次)。若接缝走向与轴向近乎平行(如纵向直缝), 沿轴向的间隙在几何上即不可测, 请改用「曲面内接缝法向」方向模式; 也可能需要调整接缝区域(ROI)或搜索窗口。
+[EDGE] long_step2/near reject x1432: 邻域角度空缺仅 45.0°(< 100°): 本侧表面完整, 不是边缘
+[EDGE] long_step2/near reject x713: 邻域角度空缺仅 26.6°(< 100°): 本侧表面完整, 不是边缘
+[EDGE] long_step2/near reject x599: 附近没有对方试样(最近距离 62.0 mm > 10.0 mm): 更像外部视界边界/孔洞/裁剪边界
+[EDGE] long_step2/near reject x16: 空缺方向未朝向对方试样(朝向 180°): 非接缝侧边界
+[EDGE] long_step2/near reject x11: 空缺方向未朝向对方试样(朝向 0°): 非接缝侧边界
+[EDGE] long_step2/near reject x5: 空缺方向未朝向对方试样(朝向 360°): 非接缝侧边界
+[EDGE] long_step2/near 近件接缝边缘: 候选 3585 点, 有效 599 点, 连续边缘段 1 条
+[EDGE] long_step2/far reject x828: 邻域角度空缺仅 45.0°(< 100°): 本侧表面完整, 不是边缘
+[EDGE] long_step2/far reject x599: 附近没有对方试样(最近距离 60.0 mm > 10.0 mm): 更像外部视界边界/孔洞/裁剪边界
+[EDGE] long_step2/far reject x113: 邻域角度空缺仅 26.6°(< 100°): 本侧表面完整, 不是边缘
+[EDGE] long_step2/far reject x16: 空缺方向未朝向对方试样(朝向 180°): 非接缝侧边界
+[EDGE] long_step2/far reject x10: 空缺方向未朝向对方试样(朝向 0°): 非接缝侧边界
+[EDGE] long_step2/far reject x6: 空缺方向未朝向对方试样(朝向 360°): 非接缝侧边界
+[EDGE] long_step2/far 远件接缝边缘: 候选 2373 点, 有效 599 点, 连续边缘段 1 条
+[TRUTH] long_step2 samples=601 step: sampled=2.000 continuous=2.000 | gapAxial: sampled=0.000 continuous=N/A | gapNormal: sampled=2.000 continuous=2.000
+[EXPECT] long_step2 纵向直缝: 阶差=2mm 可测; 沿轴向间隙因平行退化不可测
+[PCD] long_step2 stepStatus=Valid stepMax=2.000 (内存结果 2.000)
+[CASE] circ_gap3 layer=A/B psi=90.0 d0=3.000 near=48521 far=46115 zNear=-15.00 zFar=15.75
+[KEY] circ_gap3/step status=Unmeasurable max=N/A truth=N/A err=N/A valid=0 invalid=399 len=0.0 t=0.57s
+[KEY] circ_gap3/gap_axial status=Valid max=3.000 truth=3.000 err=0.000 valid=398 invalid=1 t=0.58s
+[KEY] circ_gap3/gap_normal status=Valid max=3.000 truth=3.000 err=0.000 valid=398 invalid=1
+[TOP] circ_gap3/gap d=3.000 near(a=-0.00,s=-75.00) far(a=3.00,s=-75.00)
+[TOP] circ_gap3/gap d=3.000 near(a=-0.00,s=76.50) far(a=3.00,s=76.50)
+[TOP] circ_gap3/gap d=3.000 near(a=-0.00,s=94.00) far(a=3.00,s=94.00)
+[BASE] circ_gap3 参考圆柱基准: 使用外部给定轴线(未做远件拟合, 未做子区稳定性检查); 远件残余 RMS 0.0000 mm, 均值 0.0000 mm, 峰峰值 0.0001 mm
+[WHY] circ_gap3/step 没有任何近件边缘点能按指定方向找到唯一、受观测支持的远件对应点(无交点 399 点, 多交点 0 点, 平行退化 0 次, 误差放大剔除 0 次)。若接缝走向与周向近乎平行(如环向直缝), 阶差在几何上即不可测; 也可能需要调整接缝区域(ROI)或搜索窗口。
+[EDGE] circ_gap3/near reject x1032: 邻域角度空缺仅 45.0°(< 100°): 本侧表面完整, 不是边缘
+[EDGE] circ_gap3/near reject x513: 邻域角度空缺仅 26.6°(< 100°): 本侧表面完整, 不是边缘
+[EDGE] circ_gap3/near reject x399: 附近没有对方试样(最近距离 63.0 mm > 10.1 mm): 更像外部视界边界/孔洞/裁剪边界
+[EDGE] circ_gap3/near reject x14: 空缺方向未朝向对方试样(朝向 270°): 非接缝侧边界
+[EDGE] circ_gap3/near reject x14: 空缺方向未朝向对方试样(朝向 90°): 非接缝侧边界
+[EDGE] circ_gap3/near reject x4: 本侧表面支持不足(支持率 0.25)
+[EDGE] circ_gap3/near 近件接缝边缘: 候选 2585 点, 有效 399 点, 连续边缘段 1 条
+[EDGE] circ_gap3/near aRange=[-0.00,0.00] sRange=[-99.50,99.50]
+[EDGE] circ_gap3/far reject x399: 附近没有对方试样(最近距离 60.0 mm > 10.1 mm): 更像外部视界边界/孔洞/裁剪边界
+[EDGE] circ_gap3/far reject x228: 邻域角度空缺仅 45.0°(< 100°): 本侧表面完整, 不是边缘
+[EDGE] circ_gap3/far reject x111: 邻域角度空缺仅 26.6°(< 100°): 本侧表面完整, 不是边缘
+[EDGE] circ_gap3/far reject x14: 空缺方向未朝向对方试样(朝向 270°): 非接缝侧边界
+[EDGE] circ_gap3/far reject x14: 空缺方向未朝向对方试样(朝向 90°): 非接缝侧边界
+[EDGE] circ_gap3/far reject x4: 本侧表面支持不足(支持率 0.25)
+[EDGE] circ_gap3/far 远件接缝边缘: 候选 1367 点, 有效 399 点, 连续边缘段 1 条
+[EDGE] circ_gap3/far aRange=[3.00,3.00] sRange=[-99.50,99.50]
+[TRUTH] circ_gap3 samples=401 step: sampled=0.000 continuous=N/A | gapAxial: sampled=3.000 continuous=3.000 | gapNormal: sampled=3.000 continuous=3.000
+[EXPECT] circ_gap3 环向直缝: 轴向/法向间隙一致=3mm; 阶差不强求可测
+[PCD] circ_gap3 stepStatus=Unmeasurable stepMax=N/A (内存结果 N/A)
+[CASE] oblique60 layer=A/B psi=60.0 d0=1.500 near=55565 far=54176 zNear=-17.32 zFar=17.75
+[KEY] oblique60/step status=Valid max=4.265 truth=3.000 err=1.265 valid=307 invalid=8 len=224.4 t=0.58s
+[KEY] oblique60/gap_axial status=Valid max=2.500 truth=1.732 err=0.768 valid=315 invalid=0 t=0.58s
+[KEY] oblique60/gap_normal status=Valid max=2.159 truth=1.500 err=0.659 valid=313 invalid=2
+[TOP] oblique60/step d=4.265 near(a=-43.50,s=-74.40) far(a=-43.50,s=-78.67)
+[TOP] oblique60/step d=4.250 near(a=51.50,s=90.10) far(a=51.50,s=85.85)
+[TOP] oblique60/step d=4.250 near(a=31.00,s=54.60) far(a=31.00,s=50.35)
+[TOP] oblique60/gap d=2.500 near(a=40.50,s=71.10) far(a=43.00,s=71.10)
+[TOP] oblique60/gap d=2.500 near(a=-43.50,s=-74.40) far(a=-41.00,s=-74.40)
+[TOP] oblique60/gap d=2.500 near(a=-28.50,s=-48.40) far(a=-26.00,s=-48.40)
+[BASE] oblique60 参考圆柱基准: 使用外部给定轴线(未做远件拟合, 未做子区稳定性检查); 远件残余 RMS 0.0000 mm, 均值 0.0000 mm, 峰峰值 0.0001 mm
+[EDGE] oblique60/near reject x464: 邻域角度空缺仅 45.0°(< 100°): 本侧表面完整, 不是边缘
+[EDGE] oblique60/near reject x291: 邻域角度空缺仅 26.6°(< 100°): 本侧表面完整, 不是边缘
+[EDGE] oblique60/near reject x230: 邻域角度空缺仅 90.0°(< 100°): 本侧表面完整, 不是边缘
+[EDGE] oblique60/near reject x79: 附近没有对方试样(最近距离 61.3 mm > 13.6 mm): 更像外部视界边界/孔洞/裁剪边界
+[EDGE] oblique60/near reject x76: 附近没有对方试样(最近距离 61.5 mm > 13.6 mm): 更像外部视界边界/孔洞/裁剪边界
+[EDGE] oblique60/near reject x57: 附近没有对方试样(最近距离 61.1 mm > 13.6 mm): 更像外部视界边界/孔洞/裁剪边界
+[EDGE] oblique60/near 近件接缝边缘: 候选 1910 点, 有效 315 点, 连续边缘段 1 条
+[EDGE] oblique60/near aRange=[-57.50,57.00] sRange=[-99.40,99.60]
+       valid a=-44.00 s=-75.90 support=0.50 outward=333 toOther=1.8
+       valid a=-43.50 s=-74.90 support=0.50 outward=333 toOther=1.8
+       valid a=-43.50 s=-74.40 support=0.63 outward=337 toOther=2.1
+[EDGE] oblique60/far reject x490: 邻域角度空缺仅 45.0°(< 100°): 本侧表面完整, 不是边缘
+[EDGE] oblique60/far reject x299: 邻域角度空缺仅 26.6°(< 100°): 本侧表面完整, 不是边缘
+[EDGE] oblique60/far reject x237: 邻域角度空缺仅 90.0°(< 100°): 本侧表面完整, 不是边缘
+[EDGE] oblique60/far reject x105: 附近没有对方试样(最近距离 59.9 mm > 13.6 mm): 更像外部视界边界/孔洞/裁剪边界
+[EDGE] oblique60/far reject x77: 附近没有对方试样(最近距离 59.7 mm > 13.6 mm): 更像外部视界边界/孔洞/裁剪边界
+[EDGE] oblique60/far reject x53: 附近没有对方试样(最近距离 60.0 mm > 13.6 mm): 更像外部视界边界/孔洞/裁剪边界
+[EDGE] oblique60/far 远件接缝边缘: 候选 1965 点, 有效 333 点, 连续边缘段 1 条
+[EDGE] oblique60/far aRange=[-55.50,59.50] sRange=[-99.40,99.60]
+       valid a=-44.00 s=-79.90 support=0.63 outward=157 toOther=2.1
+       valid a=-44.00 s=-79.40 support=0.50 outward=153 toOther=1.8
+       valid a=-43.00 s=-77.90 support=0.62 outward=158 toOther=1.8
+       valid a=-43.00 s=-77.40 support=0.45 outward=144 toOther=1.6
+[TRUTH] oblique60 samples=631 step: sampled=4.000 continuous=3.000 | gapAxial: sampled=3.000 continuous=1.732 | gapNormal: sampled=2.182 continuous=1.500
+[EXPECT] oblique60 斜缝60°: 阶差=3.0, 轴向间隙=1.732, 法向间隙=1.5, 三者互不相同
+[PCD] oblique60 stepStatus=Valid stepMax=4.265 (内存结果 4.265)
+[CASE] local_peak layer=A/B psi=0.0 d0=1.000 near=72721 far=70445 zNear=-25.98 zFar=26.79
+[KEY] local_peak/step status=Valid max=4.000 truth=4.000 err=0.000 valid=598 invalid=1 len=298.5 t=0.95s
+[KEY] local_peak/gap_axial status=Unmeasurable max=N/A truth=N/A err=N/A valid=0 invalid=599 t=0.93s
+[KEY] local_peak/gap_normal status=Valid max=4.006 truth=4.000 err=0.006 valid=598 invalid=1
+[TOP] local_peak/step d=4.000 near(a=-10.50,s=0.01) far(a=-10.50,s=4.01)
+[TOP] local_peak/step d=4.000 near(a=-6.00,s=0.01) far(a=-6.00,s=4.01)
+[TOP] local_peak/step d=4.000 near(a=-3.00,s=0.01) far(a=-3.00,s=4.01)
+[BASE] local_peak 参考圆柱基准: 使用外部给定轴线(未做远件拟合, 未做子区稳定性检查); 远件残余 RMS 0.0000 mm, 均值 0.0000 mm, 峰峰值 0.0001 mm
+[WHY] local_peak/gap_axial 没有任何近件边缘点能按指定方向找到唯一、受观测支持的远件对应点(无交点 599 点, 多交点 0 点, 平行退化 0 次, 误差放大剔除 0 次)。若接缝走向与轴向近乎平行(如纵向直缝), 沿轴向的间隙在几何上即不可测, 请改用「曲面内接缝法向」方向模式; 也可能需要调整接缝区域(ROI)或搜索窗口。
+[EDGE] local_peak/near reject x1316: 邻域角度空缺仅 45.0°(< 100°): 本侧表面完整, 不是边缘
+[EDGE] local_peak/near reject x713: 邻域角度空缺仅 26.6°(< 100°): 本侧表面完整, 不是边缘
+[EDGE] local_peak/near reject x380: 附近没有对方试样(最近距离 61.5 mm > 10.0 mm): 更像外部视界边界/孔洞/裁剪边界
+[EDGE] local_peak/near reject x46: 附近没有对方试样(最近距离 61.0 mm > 10.0 mm): 更像外部视界边界/孔洞/裁剪边界
+[EDGE] local_peak/near reject x21: 附近没有对方试样(最近距离 64.0 mm > 10.0 mm): 更像外部视界边界/孔洞/裁剪边界
+[EDGE] local_peak/near reject x18: 空缺方向未朝向对方试样(朝向 180°): 非接缝侧边界
+[EDGE] local_peak/near 近件接缝边缘: 候选 3469 点, 有效 599 点, 连续边缘段 1 条
+[EDGE] local_peak/far reject x1157: 邻域角度空缺仅 45.0°(< 100°): 本侧表面完整, 不是边缘
+[EDGE] local_peak/far reject x599: 附近没有对方试样(最近距离 60.0 mm > 10.0 mm): 更像外部视界边界/孔洞/裁剪边界
+[EDGE] local_peak/far reject x115: 邻域角度空缺仅 26.6°(< 100°): 本侧表面完整, 不是边缘
+[EDGE] local_peak/far reject x18: 空缺方向未朝向对方试样(朝向 180°): 非接缝侧边界
+[EDGE] local_peak/far reject x11: 空缺方向未朝向对方试样(朝向 0°): 非接缝侧边界
+[EDGE] local_peak/far reject x7: 空缺方向未朝向对方试样(朝向 360°): 非接缝侧边界
+[EDGE] local_peak/far 远件接缝边缘: 候选 2709 点, 有效 594 点, 连续边缘段 1 条
+[TRUTH] local_peak samples=601 step: sampled=4.000 continuous=4.000 | gapAxial: sampled=0.000 continuous=N/A | gapNormal: sampled=4.000 continuous=4.000
+[EXPECT] local_peak 局部窄张口: 峰值 4.0mm 必须保留, 不被全局/局部拟合压平
+[PCD] local_peak stepStatus=Valid stepMax=4.000 (内存结果 4.000)
+[CASE] dual_peak layer=A/B psi=0.0 d0=1.000 near=72721 far=70564 zNear=-25.98 zFar=26.75
+[KEY] dual_peak/step status=Valid max=4.000 truth=4.000 err=0.000 valid=598 invalid=1 len=298.5 t=0.95s
+[KEY] dual_peak/gap_axial status=Unmeasurable max=N/A truth=N/A err=N/A valid=0 invalid=599 t=0.93s
+[KEY] dual_peak/gap_normal status=Valid max=4.006 truth=4.000 err=0.006 valid=598 invalid=1
+[TOP] dual_peak/step d=4.000 near(a=40.00,s=0.01) far(a=40.00,s=4.01)
+[TOP] dual_peak/step d=4.000 near(a=41.50,s=0.01) far(a=41.50,s=4.01)
+[TOP] dual_peak/step d=4.000 near(a=43.00,s=0.01) far(a=43.00,s=4.01)
+[BASE] dual_peak 参考圆柱基准: 使用外部给定轴线(未做远件拟合, 未做子区稳定性检查); 远件残余 RMS 0.0000 mm, 均值 0.0000 mm, 峰峰值 0.0001 mm
+[WHY] dual_peak/gap_axial 没有任何近件边缘点能按指定方向找到唯一、受观测支持的远件对应点(无交点 599 点, 多交点 0 点, 平行退化 0 次, 误差放大剔除 0 次)。若接缝走向与轴向近乎平行(如纵向直缝), 沿轴向的间隙在几何上即不可测, 请改用「曲面内接缝法向」方向模式; 也可能需要调整接缝区域(ROI)或搜索窗口。
+[EDGE] dual_peak/near reject x1316: 邻域角度空缺仅 45.0°(< 100°): 本侧表面完整, 不是边缘
+[EDGE] dual_peak/near reject x713: 邻域角度空缺仅 26.6°(< 100°): 本侧表面完整, 不是边缘
+[EDGE] dual_peak/near reject x267: 附近没有对方试样(最近距离 61.5 mm > 10.0 mm): 更像外部视界边界/孔洞/裁剪边界
+[EDGE] dual_peak/near reject x166: 附近没有对方试样(最近距离 61.0 mm > 10.0 mm): 更像外部视界边界/孔洞/裁剪边界
+[EDGE] dual_peak/near reject x18: 空缺方向未朝向对方试样(朝向 180°): 非接缝侧边界
+[EDGE] dual_peak/near reject x16: 附近没有对方试样(最近距离 61.6 mm > 10.0 mm): 更像外部视界边界/孔洞/裁剪边界
+[EDGE] dual_peak/near 近件接缝边缘: 候选 3469 点, 有效 599 点, 连续边缘段 1 条
+[EDGE] dual_peak/far reject x1034: 邻域角度空缺仅 45.0°(< 100°): 本侧表面完整, 不是边缘
+[EDGE] dual_peak/far reject x599: 附近没有对方试样(最近距离 60.0 mm > 10.0 mm): 更像外部视界边界/孔洞/裁剪边界
+[EDGE] dual_peak/far reject x115: 邻域角度空缺仅 26.6°(< 100°): 本侧表面完整, 不是边缘
+[EDGE] dual_peak/far reject x18: 空缺方向未朝向对方试样(朝向 180°): 非接缝侧边界
+[EDGE] dual_peak/far reject x12: 邻域角度空缺仅 90.0°(< 100°): 本侧表面完整, 不是边缘
+[EDGE] dual_peak/far reject x11: 空缺方向未朝向对方试样(朝向 0°): 非接缝侧边界
+[EDGE] dual_peak/far 远件接缝边缘: 候选 2592 点, 有效 594 点, 连续边缘段 1 条
+[TRUTH] dual_peak samples=601 step: sampled=4.000 continuous=4.000 | gapAxial: sampled=0.000 continuous=N/A | gapNormal: sampled=4.000 continuous=4.000
+[EXPECT] dual_peak 两个并列极大值: 返回平台区/并列候选而不是伪造唯一位置
+[PCD] dual_peak stepStatus=Valid stepMax=4.000 (内存结果 4.000)
+[CASE] radial_offset layer=A/B psi=0.0 d0=2.000 near=72721 far=70317 zNear=-25.99 zFar=26.84
+[KEY] radial_offset/step status=Valid max=2.000 truth=2.000 err=0.000 valid=598 invalid=1 len=298.5 t=0.95s
+[KEY] radial_offset/gap_axial status=Unmeasurable max=N/A truth=N/A err=N/A valid=0 invalid=599 t=0.93s
+[KEY] radial_offset/gap_normal status=Valid max=2.000 truth=2.000 err=0.000 valid=597 invalid=2
+[TOP] radial_offset/step d=2.000 near(a=86.00,s=0.26) far(a=86.00,s=2.26)
+[TOP] radial_offset/step d=2.000 near(a=108.00,s=0.26) far(a=108.00,s=2.26)
+[TOP] radial_offset/step d=2.000 near(a=-124.50,s=0.26) far(a=-124.50,s=2.26)
+[BASE] radial_offset 参考圆柱基准: 使用外部给定轴线(未做远件拟合, 未做子区稳定性检查); 远件残余 RMS 0.0000 mm, 均值 0.0000 mm, 峰峰值 0.0001 mm
+[WHY] radial_offset/gap_axial 没有任何近件边缘点能按指定方向找到唯一、受观测支持的远件对应点(无交点 599 点, 多交点 0 点, 平行退化 0 次, 误差放大剔除 0 次)。若接缝走向与轴向近乎平行(如纵向直缝), 沿轴向的间隙在几何上即不可测, 请改用「曲面内接缝法向」方向模式; 也可能需要调整接缝区域(ROI)或搜索窗口。
+[EDGE] radial_offset/near reject x1432: 邻域角度空缺仅 45.0°(< 100°): 本侧表面完整, 不是边缘
+[EDGE] radial_offset/near reject x713: 邻域角度空缺仅 26.6°(< 100°): 本侧表面完整, 不是边缘
+[EDGE] radial_offset/near reject x599: 附近没有对方试样(最近距离 62.0 mm > 10.0 mm): 更像外部视界边界/孔洞/裁剪边界
+[EDGE] radial_offset/near reject x16: 空缺方向未朝向对方试样(朝向 180°): 非接缝侧边界
+[EDGE] radial_offset/near reject x10: 空缺方向未朝向对方试样(朝向 360°): 非接缝侧边界
+[EDGE] radial_offset/near reject x6: 空缺方向未朝向对方试样(朝向 0°): 非接缝侧边界
+[EDGE] radial_offset/near 近件接缝边缘: 候选 3585 点, 有效 599 点, 连续边缘段 1 条
+[EDGE] radial_offset/far reject x828: 邻域角度空缺仅 45.0°(< 100°): 本侧表面完整, 不是边缘
+[EDGE] radial_offset/far reject x599: 附近没有对方试样(最近距离 60.0 mm > 10.0 mm): 更像外部视界边界/孔洞/裁剪边界
+[EDGE] radial_offset/far reject x113: 邻域角度空缺仅 26.6°(< 100°): 本侧表面完整, 不是边缘
+[EDGE] radial_offset/far reject x16: 空缺方向未朝向对方试样(朝向 180°): 非接缝侧边界
+[EDGE] radial_offset/far reject x10: 空缺方向未朝向对方试样(朝向 0°): 非接缝侧边界
+[EDGE] radial_offset/far reject x6: 空缺方向未朝向对方试样(朝向 360°): 非接缝侧边界
+[EDGE] radial_offset/far 远件接缝边缘: 候选 2373 点, 有效 599 点, 连续边缘段 1 条
+[TRUTH] radial_offset samples=601 step: sampled=2.000 continuous=2.000 | gapAxial: sampled=0.000 continuous=N/A | gapNormal: sampled=2.000 continuous=2.000
+[EXPECT] radial_offset 近件径向抬高 1mm: 阶差仍=2mm(不混入径向高低差)
+[PCD] radial_offset stepStatus=Valid stepMax=2.000 (内存结果 2.000)
+[CASE] form_noise layer=A/B psi=0.0 d0=2.000 near=72721 far=70317 zNear=-25.98 zFar=26.84
+[KEY] form_noise/step status=Valid max=2.000 truth=2.000 err=0.000 valid=598 invalid=1 len=298.5 t=0.95s
+[KEY] form_noise/gap_axial status=Unmeasurable max=N/A truth=N/A err=N/A valid=0 invalid=599 t=0.93s
+[KEY] form_noise/gap_normal status=Valid max=2.000 truth=2.000 err=0.000 valid=598 invalid=1
+[TOP] form_noise/step d=2.000 near(a=-130.50,s=0.26) far(a=-130.50,s=2.26)
+[TOP] form_noise/step d=2.000 near(a=-143.00,s=0.26) far(a=-143.00,s=2.26)
+[TOP] form_noise/step d=2.000 near(a=-121.00,s=0.26) far(a=-121.00,s=2.26)
+[BASE] form_noise 参考圆柱基准: 使用外部给定轴线(未做远件拟合, 未做子区稳定性检查); 远件残余 RMS 0.3949 mm, 均值 0.0001 mm, 峰峰值 1.8684 mm
+[WHY] form_noise/gap_axial 没有任何近件边缘点能按指定方向找到唯一、受观测支持的远件对应点(无交点 599 点, 多交点 0 点, 平行退化 0 次, 误差放大剔除 0 次)。若接缝走向与轴向近乎平行(如纵向直缝), 沿轴向的间隙在几何上即不可测, 请改用「曲面内接缝法向」方向模式; 也可能需要调整接缝区域(ROI)或搜索窗口。
+[EDGE] form_noise/near reject x1432: 邻域角度空缺仅 45.0°(< 100°): 本侧表面完整, 不是边缘
+[EDGE] form_noise/near reject x713: 邻域角度空缺仅 26.6°(< 100°): 本侧表面完整, 不是边缘
+[EDGE] form_noise/near reject x599: 附近没有对方试样(最近距离 62.0 mm > 10.0 mm): 更像外部视界边界/孔洞/裁剪边界
+[EDGE] form_noise/near reject x16: 空缺方向未朝向对方试样(朝向 180°): 非接缝侧边界
+[EDGE] form_noise/near reject x13: 空缺方向未朝向对方试样(朝向 360°): 非接缝侧边界
+[EDGE] form_noise/near reject x4: 本侧表面支持不足(支持率 0.25)
+[EDGE] form_noise/near 近件接缝边缘: 候选 3585 点, 有效 599 点, 连续边缘段 1 条
+[EDGE] form_noise/far reject x828: 邻域角度空缺仅 45.0°(< 100°): 本侧表面完整, 不是边缘
+[EDGE] form_noise/far reject x599: 附近没有对方试样(最近距离 60.0 mm > 10.0 mm): 更像外部视界边界/孔洞/裁剪边界
+[EDGE] form_noise/far reject x113: 邻域角度空缺仅 26.6°(< 100°): 本侧表面完整, 不是边缘
+[EDGE] form_noise/far reject x16: 空缺方向未朝向对方试样(朝向 180°): 非接缝侧边界
+[EDGE] form_noise/far reject x8: 空缺方向未朝向对方试样(朝向 0°): 非接缝侧边界
+[EDGE] form_noise/far reject x8: 空缺方向未朝向对方试样(朝向 360°): 非接缝侧边界
+[EDGE] form_noise/far 远件接缝边缘: 候选 2373 点, 有效 599 点, 连续边缘段 1 条
+[TRUTH] form_noise samples=601 step: sampled=2.000 continuous=2.000 | gapAxial: sampled=0.000 continuous=N/A | gapNormal: sampled=2.000 continuous=2.000
+[EXPECT] form_noise mm 级平滑形面变化 + 噪声: 阶差仍=2mm(口径不引入形面偏差)
+[PCD] form_noise stepStatus=Valid stepMax=2.000 (内存结果 2.000)
+[CASE] rigid_xform layer=A/B psi=0.0 d0=2.000 near=72721 far=70317 zNear=992.94 zFar=1021.04
+[KEY] rigid_xform/step status=Valid max=2.000 truth=2.000 err=0.000 valid=599 invalid=0 len=299.0 t=0.95s
+[KEY] rigid_xform/gap_axial status=Unmeasurable max=N/A truth=N/A err=N/A valid=0 invalid=599 t=0.93s
+[KEY] rigid_xform/gap_normal status=Valid max=2.000 truth=2.000 err=0.000 valid=599 invalid=0
+[TOP] rigid_xform/step d=2.000 near(a=48.00,s=0.26) far(a=48.00,s=2.26)
+[TOP] rigid_xform/step d=2.000 near(a=79.00,s=0.26) far(a=79.00,s=2.26)
+[TOP] rigid_xform/step d=2.000 near(a=108.50,s=0.26) far(a=108.50,s=2.26)
+[BASE] rigid_xform 参考圆柱基准: 使用外部给定轴线(未做远件拟合, 未做子区稳定性检查); 远件残余 RMS 0.0000 mm, 均值 0.0000 mm, 峰峰值 0.0002 mm
+[WHY] rigid_xform/gap_axial 没有任何近件边缘点能按指定方向找到唯一、受观测支持的远件对应点(无交点 599 点, 多交点 0 点, 平行退化 0 次, 误差放大剔除 0 次)。若接缝走向与轴向近乎平行(如纵向直缝), 沿轴向的间隙在几何上即不可测, 请改用「曲面内接缝法向」方向模式; 也可能需要调整接缝区域(ROI)或搜索窗口。
+[EDGE] rigid_xform/near reject x1432: 邻域角度空缺仅 45.0°(< 100°): 本侧表面完整, 不是边缘
+[EDGE] rigid_xform/near reject x713: 邻域角度空缺仅 26.6°(< 100°): 本侧表面完整, 不是边缘
+[EDGE] rigid_xform/near reject x599: 附近没有对方试样(最近距离 62.0 mm > 10.0 mm): 更像外部视界边界/孔洞/裁剪边界
+[EDGE] rigid_xform/near reject x16: 空缺方向未朝向对方试样(朝向 180°): 非接缝侧边界
+[EDGE] rigid_xform/near reject x8: 空缺方向未朝向对方试样(朝向 0°): 非接缝侧边界
+[EDGE] rigid_xform/near reject x8: 空缺方向未朝向对方试样(朝向 360°): 非接缝侧边界
+[EDGE] rigid_xform/near 近件接缝边缘: 候选 3585 点, 有效 599 点, 连续边缘段 1 条
+[EDGE] rigid_xform/far reject x828: 邻域角度空缺仅 45.0°(< 100°): 本侧表面完整, 不是边缘
+[EDGE] rigid_xform/far reject x599: 附近没有对方试样(最近距离 60.0 mm > 10.0 mm): 更像外部视界边界/孔洞/裁剪边界
+[EDGE] rigid_xform/far reject x113: 邻域角度空缺仅 26.6°(< 100°): 本侧表面完整, 不是边缘
+[EDGE] rigid_xform/far reject x16: 空缺方向未朝向对方试样(朝向 180°): 非接缝侧边界
+[EDGE] rigid_xform/far reject x10: 空缺方向未朝向对方试样(朝向 0°): 非接缝侧边界
+[EDGE] rigid_xform/far reject x6: 空缺方向未朝向对方试样(朝向 360°): 非接缝侧边界
+[EDGE] rigid_xform/far 远件接缝边缘: 候选 2373 点, 有效 599 点, 连续边缘段 1 条
+[TRUTH] rigid_xform samples=601 step: sampled=2.000 continuous=2.000 | gapAxial: sampled=0.000 continuous=N/A | gapNormal: sampled=2.000 continuous=2.000
+[EXPECT] rigid_xform 整体旋转平移: 尺寸不变、位置随变换一致
+[PCD] rigid_xform stepStatus=Valid stepMax=2.000 (内存结果 2.000)
+[CASE] missing_band layer=A/B psi=90.0 d0=3.000 near=48521 far=34562 zNear=-15.00 zFar=15.80
+[KEY] missing_band/step status=Unmeasurable max=N/A truth=N/A err=N/A valid=0 invalid=318 len=0.0 t=0.47s
+[KEY] missing_band/gap_axial status=Partial max=3.000 truth=3.000 err=0.000 valid=294 invalid=24 t=0.48s
+[KEY] missing_band/gap_normal status=Partial max=3.000 truth=3.000 err=0.000 valid=294 invalid=24
+[TOP] missing_band/gap d=3.000 near(a=-0.00,s=-75.03) far(a=3.00,s=-75.03)
+[TOP] missing_band/gap d=3.000 near(a=-0.00,s=76.47) far(a=3.00,s=76.47)
+[TOP] missing_band/gap d=3.000 near(a=-0.00,s=93.97) far(a=3.00,s=93.97)
+[BASE] missing_band 参考圆柱基准: 使用外部给定轴线(未做远件拟合, 未做子区稳定性检查); 远件残余 RMS 0.0000 mm, 均值 0.0000 mm, 峰峰值 0.0001 mm
+[WHY] missing_band/step 没有任何近件边缘点能按指定方向找到唯一、受观测支持的远件对应点(无交点 318 点, 多交点 0 点, 平行退化 0 次, 误差放大剔除 0 次)。若接缝走向与周向近乎平行(如环向直缝), 阶差在几何上即不可测; 也可能需要调整接缝区域(ROI)或搜索窗口。
+[WHY] missing_band/gap_axial 存在不可测区间(共 2 处), 结论限定在有效测量段内; 缺测不等于零间隙。(另有无效点 24 个, 多为边缘端部/角点)
+[EDGE] missing_band/near reject x916: 邻域角度空缺仅 45.0°(< 100°): 本侧表面完整, 不是边缘
+[EDGE] missing_band/near reject x513: 邻域角度空缺仅 26.6°(< 100°): 本侧表面完整, 不是边缘
+[EDGE] missing_band/near reject x308: 附近没有对方试样(最近距离 63.0 mm > 10.7 mm): 更像外部视界边界/孔洞/裁剪边界
+[EDGE] missing_band/near reject x15: 空缺方向未朝向对方试样(朝向 270°): 非接缝侧边界
+[EDGE] missing_band/near reject x15: 空缺方向未朝向对方试样(朝向 90°): 非接缝侧边界
+[EDGE] missing_band/near reject x12: 空缺方向未朝向对方试样(朝向 360°): 非接缝侧边界
+[EDGE] missing_band/near 近件接缝边缘: 候选 2469 点, 有效 318 点, 连续边缘段 2 条(第一版只支持单条连续接缝)
+[EDGE] missing_band/far reject x469: 邻域角度空缺仅 45.0°(< 100°): 本侧表面完整, 不是边缘
+[EDGE] missing_band/far reject x297: 附近没有对方试样(最近距离 60.0 mm > 10.7 mm): 更像外部视界边界/孔洞/裁剪边界
+[EDGE] missing_band/far reject x111: 邻域角度空缺仅 26.6°(< 100°): 本侧表面完整, 不是边缘
+[EDGE] missing_band/far reject x30: 空缺方向未朝向对方试样(朝向 270°): 非接缝侧边界
+[EDGE] missing_band/far reject x30: 空缺方向未朝向对方试样(朝向 90°): 非接缝侧边界
+[EDGE] missing_band/far reject x8: 本侧表面支持不足(支持率 0.25)
+[EDGE] missing_band/far 远件接缝边缘: 候选 1634 点, 有效 296 点, 连续边缘段 2 条(第一版只支持单条连续接缝)
+[MISS] missing_band/step [-20.5, 20.5] mm(沿接缝走向), 长度 41.0 mm(近件接缝边缘在此断开)
+[MISS] missing_band/gap_axial [-20.5, 20.5] mm(沿接缝走向), 长度 41.0 mm(近件接缝边缘在此断开)
+[MISS] missing_band/gap_axial [-26.0, 26.0] mm(沿接缝走向), 长度 52.0 mm
+[TRUTH] missing_band samples=401 step: sampled=0.000 continuous=N/A | gapAxial: sampled=3.000 continuous=3.000 | gapNormal: sampled=3.000 continuous=3.000
+[EXPECT] missing_band 远边局部缺失: 报 Partial + 缺测区间; 缺口不得当成 0 间隙
+[PCD] missing_band stepStatus=Unmeasurable stepMax=N/A (内存结果 N/A)
+[CASE] spike layer=A/B psi=0.0 d0=2.000 near=72721 far=70317 zNear=-25.98 zFar=26.84
+[KEY] spike/step status=Valid max=2.000 truth=2.000 err=0.000 valid=598 invalid=1 len=298.5 t=0.95s
+[KEY] spike/gap_axial status=Unmeasurable max=N/A truth=N/A err=N/A valid=0 invalid=599 t=0.93s
+[KEY] spike/gap_normal status=Valid max=2.000 truth=2.000 err=0.000 valid=597 invalid=2
+[TOP] spike/step d=2.000 near(a=111.50,s=0.26) far(a=111.50,s=2.26)
+[TOP] spike/step d=2.000 near(a=-77.00,s=0.26) far(a=-77.00,s=2.26)
+[TOP] spike/step d=2.000 near(a=-102.50,s=0.26) far(a=-102.50,s=2.26)
+[BASE] spike 参考圆柱基准: 使用外部给定轴线(未做远件拟合, 未做子区稳定性检查); 远件残余 RMS 0.0000 mm, 均值 0.0000 mm, 峰峰值 0.0001 mm
+[WHY] spike/gap_axial 没有任何近件边缘点能按指定方向找到唯一、受观测支持的远件对应点(无交点 599 点, 多交点 0 点, 平行退化 0 次, 误差放大剔除 0 次)。若接缝走向与轴向近乎平行(如纵向直缝), 沿轴向的间隙在几何上即不可测, 请改用「曲面内接缝法向」方向模式; 也可能需要调整接缝区域(ROI)或搜索窗口。
+[EDGE] spike/near reject x1432: 邻域角度空缺仅 45.0°(< 100°): 本侧表面完整, 不是边缘
+[EDGE] spike/near reject x713: 邻域角度空缺仅 26.6°(< 100°): 本侧表面完整, 不是边缘
+[EDGE] spike/near reject x599: 附近没有对方试样(最近距离 62.0 mm > 10.0 mm): 更像外部视界边界/孔洞/裁剪边界
+[EDGE] spike/near reject x16: 空缺方向未朝向对方试样(朝向 180°): 非接缝侧边界
+[EDGE] spike/near reject x11: 空缺方向未朝向对方试样(朝向 0°): 非接缝侧边界
+[EDGE] spike/near reject x5: 空缺方向未朝向对方试样(朝向 360°): 非接缝侧边界
+[EDGE] spike/near 近件接缝边缘: 候选 3585 点, 有效 599 点, 连续边缘段 1 条
+[EDGE] spike/far reject x828: 邻域角度空缺仅 45.0°(< 100°): 本侧表面完整, 不是边缘
+[EDGE] spike/far reject x599: 附近没有对方试样(最近距离 60.0 mm > 10.0 mm): 更像外部视界边界/孔洞/裁剪边界
+[EDGE] spike/far reject x113: 邻域角度空缺仅 26.6°(< 100°): 本侧表面完整, 不是边缘
+[EDGE] spike/far reject x16: 空缺方向未朝向对方试样(朝向 180°): 非接缝侧边界
+[EDGE] spike/far reject x10: 空缺方向未朝向对方试样(朝向 0°): 非接缝侧边界
+[EDGE] spike/far reject x6: 空缺方向未朝向对方试样(朝向 360°): 非接缝侧边界
+[EDGE] spike/far 远件接缝边缘: 候选 2373 点, 有效 599 点, 连续边缘段 1 条
+[TRUTH] spike samples=601 step: sampled=2.000 continuous=2.000 | gapAxial: sampled=0.000 continuous=N/A | gapNormal: sampled=2.000 continuous=2.000
+[EXPECT] spike 近边缘单点尖刺: 极值诊断可追溯, 不被静默吞掉
+[PCD] spike stepStatus=Valid stepMax=2.000 (内存结果 2.000)
+[CASE] dual_seam layer=A/B psi=0.0 d0=2.000 near=91352 far=51686 zNear=-14.94 zFar=26.38
+[KEY] dual_seam/step status=Unmeasurable max=N/A truth=2.000 err=N/A valid=0 invalid=0 len=0.0 t=0.56s
+[KEY] dual_seam/gap_axial status=Unmeasurable max=N/A truth=N/A err=N/A valid=0 invalid=0 t=0.56s
+[KEY] dual_seam/gap_normal status=Unmeasurable max=N/A truth=2.000 err=N/A valid=0 invalid=0
+[BASE] dual_seam 参考圆柱基准: 使用外部给定轴线(未做远件拟合, 未做子区稳定性检查); 远件残余 RMS 0.0000 mm, 均值 0.0000 mm, 峰峰值 0.0001 mm
+[WHY] dual_seam/step 接缝边缘无观测支持: 近件接缝边缘: 有效边缘点无法连成连续段(断点过多); 远件接缝边缘: 有效边缘点无法连成连续段(断点过多)。远件的实际接缝边缘必须有观测支持; 无限延伸的拟合曲面不能推断被遮住的板边。
+[WHY] dual_seam/gap_axial 接缝边缘无观测支持: 近件接缝边缘: 有效边缘点无法连成连续段(断点过多); 远件接缝边缘: 有效边缘点无法连成连续段(断点过多)。远件的实际接缝边缘必须有观测支持; 无限延伸的拟合曲面不能推断被遮住的板边。
+[EDGE] dual_seam/near reject x2088: 邻域角度空缺仅 45.0°(< 100°): 本侧表面完整, 不是边缘
+[EDGE] dual_seam/near reject x740: 邻域角度空缺仅 26.6°(< 100°): 本侧表面完整, 不是边缘
+[EDGE] dual_seam/near reject x599: 附近没有对方试样(最近距离 62.0 mm > 10.0 mm): 更像外部视界边界/孔洞/裁剪边界
+[EDGE] dual_seam/near reject x45: 空缺方向未朝向对方试样(朝向 180°): 非接缝侧边界
+[EDGE] dual_seam/near reject x24: 空缺方向未朝向对方试样(朝向 360°): 非接缝侧边界
+[EDGE] dual_seam/near reject x21: 空缺方向未朝向对方试样(朝向 0°): 非接缝侧边界
+[EDGE] dual_seam/near 近件接缝边缘: 有效边缘点无法连成连续段(断点过多)
+[EDGE] dual_seam/far reject x1360: 邻域角度空缺仅 45.0°(< 100°): 本侧表面完整, 不是边缘
+[EDGE] dual_seam/far reject x599: 附近没有对方试样(最近距离 20.0 mm > 10.0 mm): 更像外部视界边界/孔洞/裁剪边界
+[EDGE] dual_seam/far reject x78: 邻域角度空缺仅 26.6°(< 100°): 本侧表面完整, 不是边缘
+[EDGE] dual_seam/far reject x54: 空缺方向未朝向对方试样(朝向 180°): 非接缝侧边界
+[EDGE] dual_seam/far reject x33: 空缺方向未朝向对方试样(朝向 0°): 非接缝侧边界
+[EDGE] dual_seam/far reject x21: 空缺方向未朝向对方试样(朝向 360°): 非接缝侧边界
+[EDGE] dual_seam/far 远件接缝边缘: 有效边缘点无法连成连续段(断点过多)
+[TRUTH] dual_seam samples=601 step: sampled=2.000 continuous=2.000 | gapAxial: sampled=0.000 continuous=N/A | gapNormal: sampled=2.000 continuous=2.000
+[EXPECT] dual_seam 区域内两条平行但不同位置的接缝: 第一版拒绝并给出可执行原因
+[PCD] dual_seam stepStatus=Unmeasurable stepMax=N/A (内存结果 N/A)
+[CASE] smallR_curved layer=A/B psi=0.0 d0=2.000 near=75551 far=74798 zNear=-98.48 zFar=99.46
+[KEY] smallR_curved/step status=Valid max=2.400 truth=2.000 err=0.400 valid=248 invalid=1 len=197.6 t=0.63s
+[KEY] smallR_curved/gap_axial status=Unmeasurable max=N/A truth=N/A err=N/A valid=0 invalid=249 t=0.62s
+[KEY] smallR_curved/gap_normal status=Valid max=2.400 truth=2.000 err=0.400 valid=248 invalid=1
+[TOP] smallR_curved/step d=2.400 near(a=-98.40,s=0.00) far(a=-98.40,s=2.40)
+[TOP] smallR_curved/step d=2.400 near(a=77.60,s=0.00) far(a=77.60,s=2.40)
+[TOP] smallR_curved/step d=2.400 near(a=-68.80,s=0.00) far(a=-68.80,s=2.40)
+[BASE] smallR_curved 参考圆柱基准: 使用外部给定轴线(未做远件拟合, 未做子区稳定性检查); 远件残余 RMS 0.0000 mm, 均值 -0.0000 mm, 峰峰值 0.0000 mm
+[WHY] smallR_curved/gap_axial 没有任何近件边缘点能按指定方向找到唯一、受观测支持的远件对应点(无交点 249 点, 多交点 0 点, 平行退化 0 次, 误差放大剔除 0 次)。若接缝走向与轴向近乎平行(如纵向直缝), 沿轴向的间隙在几何上即不可测, 请改用「曲面内接缝法向」方向模式; 也可能需要调整接缝区域(ROI)或搜索窗口。
+[EDGE] smallR_curved/near reject x547: 邻域角度空缺仅 45.0°(< 100°): 本侧表面完整, 不是边缘
+[EDGE] smallR_curved/near reject x249: 附近没有对方试样(最近距离 242.4 mm > 16.0 mm): 更像外部视界边界/孔洞/裁剪边界
+[EDGE] smallR_curved/near reject x16: 空缺方向未朝向对方试样(朝向 180°): 非接缝侧边界
+[EDGE] smallR_curved/near reject x11: 空缺方向未朝向对方试样(朝向 360°): 非接缝侧边界
+[EDGE] smallR_curved/near reject x5: 空缺方向未朝向对方试样(朝向 0°): 非接缝侧边界
+[EDGE] smallR_curved/near reject x4: 本侧表面支持不足(支持率 0.25)
+[EDGE] smallR_curved/near 近件接缝边缘: 候选 1647 点, 有效 249 点, 连续边缘段 1 条
+[EDGE] smallR_curved/far reject x296: 邻域角度空缺仅 45.0°(< 100°): 本侧表面完整, 不是边缘
+[EDGE] smallR_curved/far reject x249: 附近没有对方试样(最近距离 240.0 mm > 16.0 mm): 更像外部视界边界/孔洞/裁剪边界
+[EDGE] smallR_curved/far reject x16: 空缺方向未朝向对方试样(朝向 180°): 非接缝侧边界
+[EDGE] smallR_curved/far reject x9: 空缺方向未朝向对方试样(朝向 360°): 非接缝侧边界
+[EDGE] smallR_curved/far reject x7: 空缺方向未朝向对方试样(朝向 0°): 非接缝侧边界
+[EDGE] smallR_curved/far reject x4: 本侧表面支持不足(支持率 0.25)
+[EDGE] smallR_curved/far 远件接缝边缘: 候选 1390 点, 有效 249 点, 连续边缘段 1 条
+[TRUTH] smallR_curved samples=251 step: sampled=2.400 continuous=2.000 | gapAxial: sampled=0.000 continuous=N/A | gapNormal: sampled=2.000 continuous=2.000
+[EXPECT] smallR_curved 强曲率 R=300mm/45.8°弧: 阶差与浅弧案例同样精确
+[PCD] smallR_curved stepStatus=Valid stepMax=2.400 (内存结果 2.400)
+[CASE] broken_near layer=A/B psi=0.0 d0=2.000 near=69696 far=70317 zNear=-25.98 zFar=26.84
+[KEY] broken_near/step status=Partial max=2.000 truth=2.000 err=0.000 valid=571 invalid=1 len=298.5 t=0.91s
+[KEY] broken_near/gap_axial status=Unmeasurable max=N/A truth=N/A err=N/A valid=0 invalid=572 t=0.90s
+[KEY] broken_near/gap_normal status=Partial max=2.000 truth=2.000 err=0.000 valid=570 invalid=2
+[TOP] broken_near/step d=2.000 near(a=111.50,s=-0.38) far(a=111.50,s=1.62)
+[TOP] broken_near/step d=2.000 near(a=-77.00,s=-0.38) far(a=-77.00,s=1.62)
+[TOP] broken_near/step d=2.000 near(a=-96.00,s=-0.38) far(a=-96.00,s=1.62)
+[BASE] broken_near 参考圆柱基准: 使用外部给定轴线(未做远件拟合, 未做子区稳定性检查); 远件残余 RMS 0.0000 mm, 均值 0.0000 mm, 峰峰值 0.0001 mm
+[WHY] broken_near/step 存在不可测区间(共 1 处), 结论限定在有效测量段内; 缺测不等于零间隙。(另有无效点 1 个, 多为边缘端部/角点)
+[WHY] broken_near/gap_axial 没有任何近件边缘点能按指定方向找到唯一、受观测支持的远件对应点(无交点 572 点, 多交点 0 点, 平行退化 0 次, 误差放大剔除 0 次)。若接缝走向与轴向近乎平行(如纵向直缝), 沿轴向的间隙在几何上即不可测, 请改用「曲面内接缝法向」方向模式; 也可能需要调整接缝区域(ROI)或搜索窗口。
+[EDGE] broken_near/near reject x1045: 邻域角度空缺仅 45.0°(< 100°): 本侧表面完整, 不是边缘
+[EDGE] broken_near/near reject x684: 邻域角度空缺仅 26.6°(< 100°): 本侧表面完整, 不是边缘
+[EDGE] broken_near/near reject x572: 附近没有对方试样(最近距离 62.0 mm > 10.1 mm): 更像外部视界边界/孔洞/裁剪边界
+[EDGE] broken_near/near reject x32: 空缺方向未朝向对方试样(朝向 180°): 非接缝侧边界
+[EDGE] broken_near/near reject x22: 空缺方向未朝向对方试样(朝向 0°): 非接缝侧边界
+[EDGE] broken_near/near reject x10: 空缺方向未朝向对方试样(朝向 360°): 非接缝侧边界
+[EDGE] broken_near/near 近件接缝边缘: 候选 3357 点, 有效 572 点, 连续边缘段 2 条(第一版只支持单条连续接缝)
+[EDGE] broken_near/far reject x828: 邻域角度空缺仅 45.0°(< 100°): 本侧表面完整, 不是边缘
+[EDGE] broken_near/far reject x582: 附近没有对方试样(最近距离 60.0 mm > 10.1 mm): 更像外部视界边界/孔洞/裁剪边界
+[EDGE] broken_near/far reject x113: 邻域角度空缺仅 26.6°(< 100°): 本侧表面完整, 不是边缘
+[EDGE] broken_near/far reject x16: 空缺方向未朝向对方试样(朝向 180°): 非接缝侧边界
+[EDGE] broken_near/far reject x13: 空缺方向未朝向对方试样(朝向 270°): 非接缝侧边界
+[EDGE] broken_near/far reject x10: 空缺方向未朝向对方试样(朝向 0°): 非接缝侧边界
+[EDGE] broken_near/far 远件接缝边缘: 候选 2373 点, 有效 586 点, 连续边缘段 1 条
+[MISS] broken_near/step [-7.0, 7.0] mm(沿接缝走向), 长度 14.0 mm(近件接缝边缘在此断开)
+[MISS] broken_near/gap_axial [-7.0, 7.0] mm(沿接缝走向), 长度 14.0 mm(近件接缝边缘在此断开)
+[TRUTH] broken_near samples=576 step: sampled=2.000 continuous=2.000 | gapAxial: sampled=0.000 continuous=N/A | gapNormal: sampled=2.000 continuous=2.000
+[EXPECT] broken_near 近件在同一接缝上被切开 12mm: 视为断点, 报缺测区间而不是拒绝
+[PCD] broken_near stepStatus=Partial stepMax=2.000 (内存结果 2.000)
+[PASS] long_step2/pcd_roundtrip_matches (A/B) pcd=2.000 mem=2.000
+[PASS] long_step2/step_value (A/B) max=2.000 允许区间=[2.000, 2.250] (连续 2.000 / 采样 2.000)
+[PASS] long_step2/gap_axial_unmeasurable (A/B) status=Unmeasurable
+[PASS] circ_gap3/pcd_roundtrip_matches (A/B) pcd=0.000 mem=0.000
+[PASS] circ_gap3/step_unmeasurable (A/B) status=Unmeasurable
+[PASS] circ_gap3/gap_axial_value (A/B) max=3.000 允许区间=[3.000, 3.250] (连续 3.000 / 采样 3.000)
+[PASS] oblique60/pcd_roundtrip_matches (A/B) pcd=4.265 mem=4.265
+[PASS] oblique60/step_value (A/B) max=4.265 允许区间=[3.000, 4.500] (连续 3.000 / 采样 4.000)
+[PASS] oblique60/gap_axial_value (A/B) max=2.500 允许区间=[1.732, 3.289] (连续 1.732 / 采样 3.000)
+[PASS] local_peak/pcd_roundtrip_matches (A/B) pcd=4.000 mem=4.000
+[PASS] local_peak/step_value (A/B) max=4.000 允许区间=[4.000, 4.250] (连续 4.000 / 采样 4.000)
+[PASS] local_peak/gap_axial_unmeasurable (A/B) status=Unmeasurable
+[PASS] local_peak/peak_preserved (A/B) max=4.000
+[PASS] dual_peak/pcd_roundtrip_matches (A/B) pcd=4.000 mem=4.000
+[PASS] dual_peak/step_value (A/B) max=4.000 允许区间=[4.000, 4.250] (连续 4.000 / 采样 4.000)
+[PASS] dual_peak/gap_axial_unmeasurable (A/B) status=Unmeasurable
+[PASS] dual_peak/platform_reported (A/B) has_platform=1 ties=88
+[PASS] radial_offset/pcd_roundtrip_matches (A/B) pcd=2.000 mem=2.000
+[PASS] radial_offset/step_value (A/B) max=2.000 允许区间=[2.000, 2.250] (连续 2.000 / 采样 2.000)
+[PASS] radial_offset/gap_axial_unmeasurable (A/B) status=Unmeasurable
+[PASS] form_noise/pcd_roundtrip_matches (A/B) pcd=2.000 mem=2.000
+[PASS] form_noise/step_value (A/B) max=2.000 允许区间=[2.000, 2.250] (连续 2.000 / 采样 2.000)
+[PASS] form_noise/gap_axial_unmeasurable (A/B) status=Unmeasurable
+[PASS] rigid_xform/pcd_roundtrip_matches (A/B) pcd=2.000 mem=2.000
+[PASS] rigid_xform/step_value (A/B) max=2.000 允许区间=[2.000, 2.250] (连续 2.000 / 采样 2.000)
+[PASS] rigid_xform/gap_axial_unmeasurable (A/B) status=Unmeasurable
+[PASS] missing_band/pcd_roundtrip_matches (A/B) pcd=0.000 mem=0.000
+[PASS] missing_band/step_unmeasurable (A/B) status=Unmeasurable
+[PASS] missing_band/gap_axial_value (A/B) max=3.000 允许区间=[3.000, 3.250] (连续 3.000 / 采样 3.000)
+[PASS] missing_band/partial_with_missing_interval (A/B) gap_axial status=Partial missing=2
+[PASS] spike/pcd_roundtrip_matches (A/B) pcd=2.000 mem=2.000
+[PASS] spike/step_value (A/B) max=2.000 允许区间=[2.000, 2.250] (连续 2.000 / 采样 2.000)
+[PASS] spike/gap_axial_unmeasurable (A/B) status=Unmeasurable
+[PASS] spike/spike_traceable (A/B) needs_review=0 excluded=21 invalid=1
+[PASS] dual_seam/pcd_roundtrip_matches (A/B) pcd=0.000 mem=0.000
+[PASS] dual_seam/step_rejected_as_multi_seam (A/B) status=Unmeasurable
+[PASS] dual_seam/multi_seam_rejected (A/B) step status=Unmeasurable
+[PASS] smallR_curved/pcd_roundtrip_matches (A/B) pcd=2.400 mem=2.400
+[PASS] smallR_curved/step_value (A/B) max=2.400 允许区间=[2.000, 2.800] (连续 2.000 / 采样 2.400)
+[PASS] smallR_curved/gap_axial_unmeasurable (A/B) status=Unmeasurable
+[PASS] broken_near/pcd_roundtrip_matches (A/B) pcd=2.000 mem=2.000
+[PASS] broken_near/step_value (A/B) max=2.000 允许区间=[2.000, 2.250] (连续 2.000 / 采样 2.000)
+[PASS] broken_near/gap_axial_unmeasurable (A/B) status=Unmeasurable
+[PASS] broken_near/partial_with_missing_interval (A/B) step status=Partial missing=1
+[SUMMARY] pass=44 fail=0 total=44

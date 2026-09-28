@@ -5,3 +5,5 @@
 #include "MeasureCylindricity.h"
 #include "MeasurePlanarity.h"
 #include "MeasureWeldHeight.h"
+#include "MeasurePothole.h"
+#include "MeasureWeldPreparation.h"

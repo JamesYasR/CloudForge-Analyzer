@@ -1,0 +1,91 @@
+{
+ "file": "PCDfiles/pothole_dent_form.pcd",
+ "num_points": 1953131,
+ "design_radius": 1940.0,
+ "axis_point": [
+  241.98,
+  42.38,
+  789.1
+ ],
+ "axis_dir": [
+  0.11203982938027575,
+  -0.9882884949860115,
+  -0.1035998422331004
+ ],
+ "patch": {
+  "a_range": [
+   -150.0,
+   150.0
+  ],
+  "phi_range_deg": [
+   -5.0,
+   5.0
+  ],
+  "density": 20.0
+ },
+ "form_deviation": {
+  "kind": "quadratic_bowl+linear_tilt",
+  "bowl_amp": 1.5,
+  "tilt_amp": 0.5,
+  "p2p": 3.5369998057525356,
+  "note": "口径A 会把该形面偏差当成凹塘; 口径B 应能分离"
+ },
+ "dents": [
+  {
+   "name": "dent1_30mm",
+   "depth": 1.5,
+   "semi_a": 15.0,
+   "semi_b": 11.0,
+   "center_a": -60.0,
+   "center_s": 70.0,
+   "false_area_mm2": 518.3627878423158
+  },
+  {
+   "name": "dent2_20mm",
+   "depth": 0.8,
+   "semi_a": 10.0,
+   "semi_b": 8.0,
+   "center_a": 40.0,
+   "center_s": -70.0,
+   "false_area_mm2": 251.32741228718345
+  },
+  {
+   "name": "dent3_16mm",
+   "depth": 0.6,
+   "semi_a": 8.0,
+   "semi_b": 6.0,
+   "center_a": 90.0,
+   "center_s": 60.0,
+   "false_area_mm2": 150.79644737231007
+  },
+  {
+   "name": "dent4_11mm",
+   "depth": 0.5,
+   "semi_a": 5.5,
+   "semi_b": 4.5,
+   "center_a": -20.0,
+   "center_s": -40.0,
+   "false_area_mm2": 77.75441817634737
+  }
+ ],
+ "noise_sigma": 0.35,
+ "blanks": [
+  {
+   "kind": "rect",
+   "a": [
+    105.0,
+    145.0
+   ],
+   "s": [
+    -150.0,
+    -60.0
+   ]
+  },
+  {
+   "kind": "circle",
+   "a": -110.0,
+   "s": -90.0,
+   "r": 10.0
+  }
+ ]
+}

@@ -22,17 +22,44 @@ public:
         BSPLINE_LSQ = 1           // 新方法：最小二乘B样条逼近
     };
 
+    // 新增：圆弧测量参数(用于后台计算: 参数已在界面线程收集完毕, 不再弹对话框)
+    struct ArcParams {
+        FitMethod method = CARDINAL_SPLINE;      // 拟合方法
+        // 通用参数
+        double sliceThicknessFactor = 5.0;       // 切片厚度因子
+        double integrationTolerance = 1e-5;      // 积分容差
+        // Cardinal样条参数
+        int downsampleTargetSize = 30;           // 降采样目标点数
+        double virtualPointExtrapolation = 0.03; // 虚拟点外推比例
+        // B样条逼近参数
+        int bsplineDegree = 3;                   // B样条次数 (默认3次)
+        int bsplineControlPoints = 15;           // B样条控制点数量
+        double bsplineSmoothingFactor = 0.01;    // 平滑因子 (λ), 0=插值, >0=平滑
+    };
+
     // 构造函数 - 新增拟合方法参数
     MeasureArc(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud,
         pcl::ModelCoefficients::Ptr cylinder_coeff,
         pcl::PointXYZ* specified_point = nullptr,
         FitMethod method = CARDINAL_SPLINE);
 
+    // 新增：已知参数构造(不弹参数对话框, 不自动计算) —— 配合 compute() 在工作线程中执行
+    MeasureArc(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud,
+        pcl::ModelCoefficients::Ptr cylinder_coeff,
+        pcl::PointXYZ* specified_point,
+        const ArcParams& params);
+
     // 执行计算
     void compute();
 
     // 获取可视化Actor
     vtkSmartPointer<vtkActor> getVisualizationActor() const { return m_splineActor; }
+
+    // 后台计算支持: compute() 是否顺带构建可视化 Actor。
+    // 后台线程计算时应关闭(默认true保持旧行为), 改由界面线程调用
+    // buildVisualizationActor() 创建 —— VTK 对象只在 GUI 线程创建/渲染。
+    void setAutoBuildActor(bool on) { m_autoBuildActor = on; }
+    void buildVisualizationActor() { createVisualizationActor(); }
 
     // 公共成员变量 (结果与状态)
     double arcLength = 0.0;
@@ -110,6 +137,7 @@ private:
     std::vector<double> m_bsplineKnots;    // 节点向量
 
     vtkSmartPointer<vtkActor> m_splineActor;
+    bool m_autoBuildActor = true;   // compute() 内是否构建 Actor(后台计算时应关闭)
 
     // 参数范围
     double m_actualParamStart = 0.0;

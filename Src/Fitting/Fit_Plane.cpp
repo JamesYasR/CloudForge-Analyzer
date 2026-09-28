@@ -45,6 +45,27 @@ Fit_Plane::Fit_Plane(pcl::PointCloud<pcl::PointXYZ>::Ptr InputC)
     Proc();
 }
 
+Fit_Plane::Fit_Plane(pcl::PointCloud<pcl::PointXYZ>::Ptr InputC, const FitParams& params)
+    : dialog(nullptr)
+    , cloud_input(new pcl::PointCloud<pcl::PointXYZ>)
+    , cloud_inliers(new pcl::PointCloud<pcl::PointXYZ>)
+    , cloud_outliers(new pcl::PointCloud<pcl::PointXYZ>)
+    , cloud_anomaly(new pcl::PointCloud<pcl::PointXYZ>)
+    , coeff_in(Eigen::Vector4f::Zero())
+{
+    // 参数由界面线程收集, 此处仅保存并拷贝输入(不弹框、不计算)
+    LocalRadius = params.LocalRadius;
+    AnomalyThreshold = params.AnomalyThreshold;
+    PlaneFitThreshold = params.PlaneFitThreshold;
+    MaxIterations = params.MaxIterations;
+
+    *cloud_input = *InputC;
+}
+
+void Fit_Plane::compute() {
+    Proc();
+}
+
 Fit_Plane::~Fit_Plane() = default;
 
 void Fit_Plane::detectAnomalyPoints() {

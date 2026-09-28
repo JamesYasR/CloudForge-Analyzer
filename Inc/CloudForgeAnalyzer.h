@@ -11,6 +11,12 @@
 
 #include <string>
 #include <filesystem>
+#include <atomic>
+#include <mutex>
+#include <memory>
+#include <functional>
+#include <QSemaphore>
+#include <QThread>
 #include "Protrusion_Depression_Cylinder.h"
 #include "Linear_Depression_Plane.h"
 
@@ -70,8 +76,21 @@ private slots:
     void Tool_Clip();
     void Tool_MeasureCylindricity();
     void Tool_MeasureWeldHeight();
+    void Tool_MeasurePothole();
     void Update_PointCounts();
 private:
+    // 焊前装配阶差/间隙的共同流程(§7): 选两件 → 定接缝区域 → 看 Z 均值 → 设 R 与方向 → 后台计算
+    // 口径(2026-09 统一): 阶差 = 径向(e_P - e_Q, 近件在外为正); 间隙 = 沿跨缝方向(环缝=轴向)
+    // 两个量由同一次配对同时得到, 只有一个入口; 结果只输出文本报告, 不做三维标注。
+    void Tool_MeasureWeldPreparation();
+    // 焊前装配测量的三维标注(只在 GUI 线程; 数据来自 Result 与参考圆柱框架)
+    void VisualizeWeldPreparation(const MeasureWeldPreparation::Result& result,
+                                  const CylinderSurfaceFrame& frame);
+    std::vector<std::string> m_weldPrepShapeIds;   // PCL 形状(三维文字)
+    std::vector<std::string> m_weldPrepLineIds;    // 直线段(走 LineMap 注册)
+    std::vector<std::string> m_weldPrepActorIds;   // vtkActor(折线)
+    void cleanWeldPrepVisuals();
+
     //  
     void visualizeFittedPlane(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud,
         const pcl::ModelCoefficients::Ptr& plane_coeffs,
@@ -110,6 +129,78 @@ private:
     void InitializeProgressBar();
     void SetProgressBarValue(int percentage, const QString& message = "");
     void ResetProgressBar();
+
+    // ============ 后台计算任务(避免界面无响应) ============
+    // 计算在工作线程执行; 进度经原子共享状态传回, GUI 线程用定时器读取并刷新
+    // 进度条/调试文本框; VTK 可视化仍只在 GUI 线程执行。
+    struct AsyncTaskState {
+        std::atomic<bool> cancelRequested{ false };
+        std::atomic<int> current{ 0 };
+        std::atomic<int> total{ 0 };
+        std::mutex mtx;
+        std::string stage;
+        std::vector<std::string> pendingLog;
+    };
+
+    void BeginAsyncTask(const QString& title);
+    void EndAsyncTask(bool cancelled);
+    void PollAsyncProgress();
+    void CancelCurrentTask();
+    bool IsTaskRunning() const { return m_asyncRunning; }
+
+    // 以下两个可从工作线程调用(只写共享状态, 不触碰 Qt 对象)
+    bool PostProgress(int current, int total, const std::string& stage);
+    void PostLog(const std::string& line);
+
+    // 执行后台任务: work 在工作线程, onFinished 在 GUI 线程(此时任务已收尾)
+    void RunAsyncVoid(const QString& title,
+                      const std::function<void()>& work,
+                      const std::function<void()>& onFinished = nullptr);
+
+    // 圆柱拟合流程的异步分段(初次拟合 → 可视化/参数 → 优化 → 可视化/保存)
+    void ContinueFitCy2AfterInitialFit(std::shared_ptr<Fit_Cylinder> fcy,
+                                       pcl::PointCloud<pcl::PointXYZ>::Ptr Cloud_Temp);
+    void FinishFitCy2(const std::shared_ptr<MeasureCylindricity::AssessmentResult>& result,
+                      const std::shared_ptr<MeasureCylindricity>& evaluator,
+                      const Eigen::Vector3f& initial_center,
+                      const Eigen::Vector3f& initial_axis,
+                      double design_radius);
+    void ContinueFitCy3AfterInitialFit(std::shared_ptr<Fit_Cylinder> fcy,
+                                       pcl::PointCloud<pcl::PointXYZ>::Ptr Cloud_Temp);
+    void FinishFitCy3(const std::shared_ptr<MeasureCylindricity::AssessmentResult>& result,
+                      const std::shared_ptr<MeasureCylindricity>& evaluator,
+                      const Eigen::Vector3f& initial_center,
+                      const Eigen::Vector3f& initial_axis,
+                      double design_radius);
+
+    // STL 导入流程的异步分段(后台读取文件信息 → 界面弹参数 → 后台转换 → 界面加入场景)
+    struct StlImportInfo {
+        int triangleCount = 0;            // STL 三角形数量
+        float modelDiagonal = 0.0f;       // 模型包围盒对角线(米)
+        float recommendedLeafSize = 0.01f;// 推荐的降采样 leaf-size
+        QString fileName;                 // 文件名(不含路径)
+        double fileSizeMB = 0.0;          // 文件大小(MB)
+        QString error;                    // 非空表示无法读取STL文件(致命错误)
+    };
+    struct StlImportResult {
+        pcl::PointCloud<pcl::PointXYZ>::Ptr cloud{ new pcl::PointCloud<pcl::PointXYZ> };
+        bool ok = false;                  // 转换是否成功
+        QString error;                    // 非空表示失败原因
+    };
+    void ContinueStlImportAfterInfo(const std::shared_ptr<StlImportInfo>& info,
+                                    const std::string& stlPath);
+    void FinishStlImport(const std::shared_ptr<StlImportInfo>& info,
+                         const std::shared_ptr<StlImportResult>& result,
+                         float leafSize, bool surfaceOnly);
+
+    std::shared_ptr<AsyncTaskState> m_asyncState;
+    QTimer* m_asyncTimer = nullptr;
+    QFuture<void> m_asyncFuture;
+    bool m_asyncRunning = false;
+    std::atomic<bool> m_shuttingDown{ false };
+
+    // 新增：长耗时计算的进度回调工厂(供测量类在后台线程中回报进度)
+    std::function<bool(int, int, const std::string&)> WorkerProgressCallback();
 
     pcl::visualization::PCLVisualizer::Ptr viewer;
     pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZ>::Ptr renderer_custom;

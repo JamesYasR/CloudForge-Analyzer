@@ -4,4 +4,5 @@
 #include "Line.h"
 #include "funcs.h"
 #include "CloudClipper.h"
+#include "CylinderSurfaceFrame.h"
 

@@ -44,6 +44,24 @@ Fit_Cylinder::Fit_Cylinder(pcl::PointCloud<pcl::PointXYZ>::Ptr InputC) :
 	}
 	Proc();
 }
+Fit_Cylinder::Fit_Cylinder(pcl::PointCloud<pcl::PointXYZ>::Ptr InputC, const FitParams& params)
+	: dialog(nullptr)
+	, cloud_input(new pcl::PointCloud<pcl::PointXYZ>)
+	, cloud_inliers(new pcl::PointCloud<pcl::PointXYZ>)
+	, cloud_outliers(new pcl::PointCloud<pcl::PointXYZ>)
+{
+	// 参数由界面线程收集, 此处仅保存并拷贝输入(不弹框、不计算)
+	KSearch = params.KSearch;
+	DistanceThreshold = params.DistanceThreshold;
+	MaxIterations = params.MaxIterations;
+	InitialRadius = params.InitialRadius;
+	*cloud_input = *InputC;
+}
+
+void Fit_Cylinder::compute() {
+	Proc();
+}
+
 Fit_Cylinder::~Fit_Cylinder() = default;
 
 void Fit_Cylinder::Proc() {

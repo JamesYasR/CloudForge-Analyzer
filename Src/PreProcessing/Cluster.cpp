@@ -17,16 +17,35 @@ Cluster::Cluster(pcl::PointCloud<pcl::PointXYZ>::Ptr Input_c) :
 		max = param3.toFloat(&ok3);
 		if (!ok1 || !ok2 || !ok3) {
 			qDebug() << "无效数字";
+			isCancelled = true;
 			return;
 		}
 	}
 	else
 	{
 		qDebug() << "取消操作";
+		isCancelled = true;
 		return;
 	}
 	*Input_cloud = *Input_c;
 	//qDebug() << "DIAN:" + QString::number(Input_cloud->size());
+	Proc();
+}
+
+Cluster::Cluster(pcl::PointCloud<pcl::PointXYZ>::Ptr Input_c, const Params& params) :
+	Input_cloud(new pcl::PointCloud<pcl::PointXYZ>)
+	, paramDialog(nullptr)
+	, tree(new pcl::search::KdTree<pcl::PointXYZ>)
+{
+	// 参数由界面线程收集, 此处仅保存并拷贝输入(不弹框、不计算)
+	tolerance = params.tolerance;
+	min = params.minSize;
+	max = params.maxSize;
+
+	*Input_cloud = *Input_c;
+}
+
+void Cluster::compute() {
 	Proc();
 }
 void Cluster::Proc() {

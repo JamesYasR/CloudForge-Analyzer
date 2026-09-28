@@ -99,6 +99,52 @@ MeasureArc::MeasureArc(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud,
     compute();
 }
 
+MeasureArc::MeasureArc(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud,
+    pcl::ModelCoefficients::Ptr cylinder_coeff,
+    pcl::PointXYZ* specified_point,
+    const ArcParams& params)
+    : m_inputCloud(cloud)
+    , m_cylinderCoeff(cylinder_coeff)
+    , m_specifiedPoint(specified_point)
+    , m_sliceCloud(new pcl::PointCloud<pcl::PointXYZ>)
+    , fitMethod(params.method)
+    , arcLength(0.0)
+    , success(false)
+    , message("Initialized.")
+    , m_actualParamStart(0.0)
+    , m_actualParamEnd(1.0)
+    , m_hasVirtualPoints(false)
+    , m_bsplineParamStart(0.0)
+    , m_bsplineParamEnd(1.0)
+{
+    // 初始化成员变量
+    m_axisPoint = Eigen::Vector3f::Zero();
+    m_axisDirection = Eigen::Vector3f::Zero();
+    m_cylinderRadius = 0.0;
+    m_planeCenter = Eigen::Vector3f::Zero();
+    m_planeX = Eigen::Vector3f::Zero();
+    m_planeY = Eigen::Vector3f::Zero();
+
+    // 参数由界面线程收集, 此处仅保存(不弹框、不计算)
+    // 与原构造函数一致: 只采用所选拟合方法对应对话框的参数
+    sliceThicknessFactor = params.sliceThicknessFactor;
+    integrationTolerance = params.integrationTolerance;
+    if (params.method == CARDINAL_SPLINE) {
+        downsampleTargetSize = params.downsampleTargetSize;
+        virtualPointExtrapolation = params.virtualPointExtrapolation;
+    }
+    else {
+        bsplineDegree = params.bsplineDegree;
+        bsplineControlPoints = params.bsplineControlPoints;
+        bsplineSmoothingFactor = params.bsplineSmoothingFactor;
+    }
+
+    splineColor[0] = 1.0; // 设置为红色 (R=1, G=0, B=0)
+    splineColor[1] = 0.0;
+    splineColor[2] = 0.0;
+    splineLineWidth = 3.0; // 设置曲线线宽
+}
+
 bool MeasureArc::fitSplineCurve() {
     qDebug() << "[拟合] 使用拟合方法:"
         << (fitMethod == CARDINAL_SPLINE ? "CARDINAL_SPLINE" : "BSPLINE_LSQ");
@@ -622,7 +668,9 @@ void MeasureArc::compute() {
     if (!sortProjectedPoints()) return;
     if (!fitSplineCurve()) return;
     if (!computeArcLengthByIntegration()) return;
-    createVisualizationActor();
+    if (m_autoBuildActor) {
+        createVisualizationActor();
+    }
 
     success = true;
     message = "Success: Arc length calculated = " + std::to_string(arcLength);

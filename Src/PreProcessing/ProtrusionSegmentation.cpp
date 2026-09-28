@@ -36,6 +36,20 @@ ProtrusionSegmentation::ProtrusionSegmentation(pcl::PointCloud<pcl::PointXYZ>::P
     }
 }
 
+ProtrusionSegmentation::ProtrusionSegmentation(pcl::PointCloud<pcl::PointXYZ>::Ptr& input_cloud,
+    const Params& params)
+    : input_cloud(input_cloud)
+    , planar_cloud(new pcl::PointCloud<pcl::PointXYZ>)
+    , protrusion_cloud(new pcl::PointCloud<pcl::PointXYZ>)
+    , search_radius(params.searchRadius)
+    , height_threshold(params.heightThreshold)
+    , min_cluster_size(params.minClusterSize)
+    , dialog(nullptr)
+{
+    // 参数由界面线程收集, 此处仅保存输入与参数(不弹框、不计算)
+    is_valid = true;
+}
+
 void ProtrusionSegmentation::segment() {
     if (!is_valid) {
         qDebug() << "分割器状态无效，跳过处理";

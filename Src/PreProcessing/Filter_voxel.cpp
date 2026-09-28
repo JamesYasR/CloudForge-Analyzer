@@ -13,6 +13,7 @@ Filter_voxel::Filter_voxel(pcl::PointCloud<pcl::PointXYZ>::Ptr Input_c) :
 		leafsize = param.toFloat(&ok);
 		if (!ok) {
 			qDebug() << "无效数字";
+			isCancelled = true;
 			return;
 		}
 		qDebug() << "参数：" << param;
@@ -20,12 +21,28 @@ Filter_voxel::Filter_voxel(pcl::PointCloud<pcl::PointXYZ>::Ptr Input_c) :
 	else
 	{
 		qDebug() << "取消操作";
+		isCancelled = true;
 		return;
 	}
 	Input_cloud = Input_c;
 	vg_size = leafsize;
 	Proc();
 }
+
+Filter_voxel::Filter_voxel(pcl::PointCloud<pcl::PointXYZ>::Ptr Input_c, const Params& params)
+	: Input_cloud(new pcl::PointCloud<pcl::PointXYZ>)
+	, Output_cloud(new pcl::PointCloud<pcl::PointXYZ>)
+	, paramDialog(nullptr)
+{
+	// 参数由界面线程收集, 此处仅保存输入(不弹框、不计算)
+	Input_cloud = Input_c;
+	vg_size = params.leafsize;
+}
+
+void Filter_voxel::compute() {
+	Proc();
+}
+
 Filter_voxel::~Filter_voxel() = default;
 
 void Filter_voxel::Proc() {

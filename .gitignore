@@ -394,3 +394,14 @@ FodyWeavers.xsd
 /vcpkg_installed/
 /CMakeUserPresets.json
 /.cache/
+
+# ---- 本地生成物与备份（不入库）----
+/orig-src/
+/CMakePresets.ubuntu-backup.json
+analysis/**/*.o
+analysis/**/independent_audit_*/
+analysis/**/samples/
+analysis/**/samples_realistic/
+analysis/**/real_probe/*.npy
+docs/**/ppt_assets/png/
+docs/**/ppt_assets/preview/

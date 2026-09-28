@@ -26,6 +26,7 @@ CurvatureSegmentation::CurvatureSegmentation(pcl::PointCloud<pcl::PointXYZ>::Ptr
 
         if (!ok1 || !ok2 || !ok3 || !ok4 ) {
             qDebug() << "无效数字";
+            isCancelled = true;
             return;
         }
 
@@ -36,8 +37,27 @@ CurvatureSegmentation::CurvatureSegmentation(pcl::PointCloud<pcl::PointXYZ>::Ptr
     }
     else {
         qDebug() << "取消操作";
+        isCancelled = true;
         return;
     }
+    extractPlane();
+}
+
+CurvatureSegmentation::CurvatureSegmentation(pcl::PointCloud<pcl::PointXYZ>::Ptr& input_cloud,
+    pcl::PointXYZ input_point, const CurvParams& params) :
+    input_cloud(input_cloud)
+    , output_cloud(new pcl::PointCloud<pcl::PointXYZ>())
+    , dialog(nullptr)
+{
+    // 参数由界面线程收集, 此处仅保存输入点云与拾取点(不弹框、不计算)
+    picked_point = input_point;
+    k_search = params.kSearch;
+    smooth_threshold = params.smoothThreshold;
+    curvature_threshold = params.curvatureThreshold;
+    min_cluster_size = params.minClusterSize;
+}
+
+void CurvatureSegmentation::compute() {
     extractPlane();
 }
 

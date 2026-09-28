@@ -521,8 +521,11 @@ font: 700 8pt &quot;Microsoft YaHei UI&quot;;</string>
    <addaction name="measure_planarity"/>
    <addaction name="measure_angleP2P"/>
    <addaction name="measure_weldheight"/>
+   <addaction name="measure_pothole"/>
+   <addaction name="measure_weld_prep"/>
    <addaction name="separator"/>
    <addaction name="action_Clip"/>
+   <addaction name="action_cancel_task"/>
    <addaction name="separator"/>
   </widget>
   <widget class="QMenuBar" name="menuBar">
@@ -1032,6 +1035,17 @@ QMenu::item:selected {
     <string>拟合平面</string>
    </property>
   </action>
+  <action name="action_cancel_task">
+   <property name="text">
+    <string>取消计算</string>
+   </property>
+   <property name="toolTip">
+    <string>中止当前后台计算任务（在下一个检查点生效）</string>
+   </property>
+   <property name="menuRole">
+    <enum>QAction::MenuRole::NoRole</enum>
+   </property>
+  </action>
   <action name="action_STL">
    <property name="text">
     <string>打开STL</string>
@@ -1058,6 +1072,36 @@ QMenu::item:selected {
    </property>
    <property name="toolTip">
     <string>可以用于测量垂直度</string>
+   </property>
+   <property name="menuRole">
+    <enum>QAction::MenuRole::NoRole</enum>
+   </property>
+  </action>
+  <action name="measure_pothole">
+   <property name="icon">
+    <iconset resource="CloudForgeAnalyzer.qrc">
+     <normaloff>:/CloudForgeAnalyzer/Icons/icon_Pothole.png</normaloff>:/CloudForgeAnalyzer/Icons/icon_Pothole.png</iconset>
+   </property>
+   <property name="text">
+    <string>凹塘测量</string>
+   </property>
+   <property name="toolTip">
+    <string>按理想直径拟合圆柱，测量凹塘/凹坑的最大深度与长短轴</string>
+   </property>
+   <property name="menuRole">
+    <enum>QAction::MenuRole::NoRole</enum>
+   </property>
+  </action>
+  <action name="measure_weld_prep">
+   <property name="icon">
+    <iconset resource="CloudForgeAnalyzer.qrc">
+     <normaloff>:/CloudForgeAnalyzer/Icons/icon_WeldStep.png</normaloff>:/CloudForgeAnalyzer/Icons/icon_WeldStep.png</iconset>
+   </property>
+   <property name="text">
+    <string>焊前装配</string>
+   </property>
+   <property name="toolTip">
+    <string>焊前装配测量：径向阶差与间隙</string>
    </property>
    <property name="menuRole">
     <enum>QAction::MenuRole::NoRole</enum>

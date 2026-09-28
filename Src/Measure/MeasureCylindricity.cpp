@@ -4,6 +4,7 @@
 #include <iostream>
 #include <random>
 #include <cmath>
+#include <chrono>
 #include <limits>
 #include <iomanip>
 #include <algorithm>
@@ -30,6 +31,7 @@ MeasureCylindricity::MeasureCylindricity()
     input_cloud_.reset(new pcl::PointCloud<pcl::PointXYZ>);
     inliers_.reset(new pcl::PointCloud<pcl::PointXYZ>);
     outliers_.reset(new pcl::PointCloud<pcl::PointXYZ>);
+    search_cloud_.reset(new pcl::PointCloud<pcl::PointXYZ>);
     heatmap_cloud_.reset(new pcl::PointCloud<pcl::PointXYZRGB>); 
     weld_points_.reset(new pcl::PointCloud<pcl::PointXYZ>);
     // 初始化默认外部直线参数
@@ -145,6 +147,7 @@ void MeasureCylindricity::setInputCloud(pcl::PointCloud<pcl::PointXYZ>::Ptr clou
 {
     if (cloud && !cloud->empty()) {
         input_cloud_ = cloud;
+        search_cloud_.reset();  // 换点云后让搜索降采样重新生成
         printDebugInfo("点云设置完成，点数: " + std::to_string(input_cloud_->size()));
     }
     else {
@@ -296,10 +299,13 @@ double MeasureCylindricity::objectiveFunction(const LineParams& line) {
     double total_squared_error = 0.0;
     int valid_points = 0;
 
+    // 搜索阶段可使用降采样点云加速(见 searchPoints())
+    const auto& pts = searchPoints();
+
     //并行化
 #pragma omp parallel for reduction(+:total_squared_error, valid_points)
-    for (int i = 0; i < static_cast<int>(input_cloud_->size()); ++i) {
-        const auto& p = input_cloud_->points[i];
+    for (int i = 0; i < static_cast<int>(pts.size()); ++i) {
+        const auto& p = pts.points[i];
         if (!isPointValid(p)) continue;
 
         Eigen::Vector3f point(p.x, p.y, p.z);
@@ -673,9 +679,11 @@ MeasureCylindricity::LineParams MeasureCylindricity::randomSearchOptimization()
 
 namespace {
 // 四自由度(方向2+圆心2) Nelder-Mead 单纯形搜索, x0 为初值, 返回最优顶点 xBest
+// tick: 可选的中断/进度检查(每若干次迭代调用一次), 返回 false 表示请求中止
 void NelderMead4D(const Eigen::Vector4f& x0,
                   const std::function<double(const Eigen::Vector4f&)>& eval,
-                  Eigen::Vector4f& xBest)
+                  Eigen::Vector4f& xBest,
+                  const std::function<bool()>& tick = nullptr)
 {
     const int kDim = 4;
     const Eigen::Vector4f steps(0.1f, 0.1f, 1.0f, 1.0f);
@@ -704,6 +712,10 @@ void NelderMead4D(const Eigen::Vector4f& x0,
     const float kAlpha = 1.0f, kGamma = 2.0f, kRho = 0.5f, kSigma = 0.5f;
     const int kMaxIters = 300;
     for (int iter = 0; iter < kMaxIters; ++iter) {
+        // 进度/取消检查(每10次迭代): 便于界面刷新与用户中止
+        if (tick && (iter % 10 == 0) && !tick()) {
+            break;
+        }
         sortVertices();
 
         // 收敛判断: 顶点目标值差异小于容差
@@ -824,7 +836,8 @@ void MeasureCylindricity::fitCircleCenterFixedRadius(const Eigen::Vector3f& dire
     double su = 0.0, sv = 0.0, suu = 0.0, svv = 0.0, suv = 0.0;
     double su3 = 0.0, sv3 = 0.0, suv2 = 0.0, svu2 = 0.0, sr2 = 0.0;
     int n = 0;
-    for (const auto& p : input_cloud_->points) {
+    const auto& search_pts = searchPoints();
+    for (const auto& p : search_pts.points) {
         if (!isPointValid(p)) continue;
         const Eigen::Vector3f pt(p.x, p.y, p.z);
         const Eigen::Vector3f v = pt - c0;
@@ -860,7 +873,7 @@ void MeasureCylindricity::fitCircleCenterFixedRadius(const Eigen::Vector3f& dire
     const double r = design_radius_;
     for (int iter = 0; iter < 10; ++iter) {
         double h00 = 0.0, h01 = 0.0, h11 = 0.0, g0 = 0.0, g1 = 0.0;
-        for (const auto& p : input_cloud_->points) {
+        for (const auto& p : search_pts.points) {
             if (!isPointValid(p)) continue;
             const Eigen::Vector3f pt(p.x, p.y, p.z);
             const Eigen::Vector3f v = pt - c0;
@@ -884,7 +897,8 @@ void MeasureCylindricity::fitCircleCenterFixedRadius(const Eigen::Vector3f& dire
     ab = Eigen::Vector2f(static_cast<float>(a), static_cast<float>(b));
 }
 
-void MeasureCylindricity::refineLineParams(const Eigen::Vector3f& c0, LineParams& line)
+void MeasureCylindricity::refineLineParams(const Eigen::Vector3f& c0, LineParams& line,
+                                           int stageIndex, int stageTotal)
 {
     // 参数化: 方向 = (sinφcosθ, sinφsinθ, cosφ); 圆心 = c0 + a*t1 + b*t2
     const Eigen::Vector3f d0 = line.direction.normalized();
@@ -908,7 +922,14 @@ void MeasureCylindricity::refineLineParams(const Eigen::Vector3f& c0, LineParams
     };
 
     // Nelder-Mead 单纯形搜索(公共实现见本文件匿名命名空间)
-    NelderMead4D(x, eval, x);
+    // 每10次迭代上报进度并检查取消(局部精化是最耗时的阶段)
+    int tickCount = 0;
+    const int total = std::max(1, stageTotal) * 300;
+    auto tick = [this, stageIndex, total, &tickCount]() -> bool {
+        ++tickCount;
+        return reportProgress(stageIndex * 300 + tickCount, total, "轴线局部精化");
+    };
+    NelderMead4D(x, eval, x, tick);
 
     const float th = x[0];
     const float ph = x[1];
@@ -922,34 +943,70 @@ void MeasureCylindricity::refineLineParams(const Eigen::Vector3f& c0, LineParams
 
 MeasureCylindricity::LineParams MeasureCylindricity::coarseToFineOptimization()
 {
+    const auto tStart = std::chrono::steady_clock::now();
     const Eigen::Vector3f c0 = computeCentroid();
     const int kGridSize = 400;
     const int kTopK = 8;
 
+    // 搜索阶段降采样: 大点云上 400 方向 x 全量点的圆拟合/残差评估代价过高,
+    // 均匀抽稀到 kMaxSearchPoints 以内做寻优; 最终评估仍用全量点云(指标不受影响).
+    const int kMaxSearchPoints = 300000;
+    search_cloud_.reset();
+    const int total_points = static_cast<int>(input_cloud_->size());
+    if (total_points > kMaxSearchPoints) {
+        const int stride = (total_points + kMaxSearchPoints - 1) / kMaxSearchPoints;
+        pcl::PointCloud<pcl::PointXYZ>::Ptr sub(new pcl::PointCloud<pcl::PointXYZ>);
+        sub->points.reserve(total_points / stride + 1);
+        for (int i = 0; i < total_points; i += stride) {
+            sub->points.push_back(input_cloud_->points[i]);
+        }
+        sub->width = static_cast<std::uint32_t>(sub->points.size());
+        sub->height = 1;
+        sub->is_dense = input_cloud_->is_dense;
+        search_cloud_ = sub;
+        printDebugInfo("搜索降采样: " + std::to_string(total_points) + " -> "
+            + std::to_string(search_cloud_->size()) + " 点 (stride=" + std::to_string(stride) + ")");
+    }
+
     printDebugInfo("第二阶段粗到精搜索: 球面采样 " + std::to_string(kGridSize)
-        + " 个候选方向...");
+        + " 个候选方向(并行)...");
 
     const std::vector<Eigen::Vector3f> dirs = sampleDirectionsSphere(kGridSize);
 
-    // 粗搜索: 每个方向配固定半径圆心, 评估几何残差
+    // 粗搜索: 每个方向配固定半径圆心, 评估几何残差(各方向相互独立, 并行执行)
+    // 按批处理: 每批结束后回到调用线程上报进度, 便于界面刷新与用户取消
     struct Candidate {
         double error;
         Eigen::Vector3f center;
         Eigen::Vector3f direction;
     };
-    std::vector<Candidate> candidates;
-    candidates.reserve(dirs.size());
-    for (const auto& d : dirs) {
-        Eigen::Vector2f ab;
-        fitCircleCenterFixedRadius(d, c0, ab);
-        const Eigen::Vector3f t1 = d.unitOrthogonal();
-        const Eigen::Vector3f t2 = d.cross(t1);
-        const Eigen::Vector3f center = c0 + t1 * ab.x() + t2 * ab.y();
-        Candidate cand;
-        cand.direction = d;
-        cand.center = center;
-        cand.error = evaluateCandidate(center, d);
-        candidates.push_back(cand);
+    std::vector<Candidate> candidates(dirs.size());
+    const int nDirs = static_cast<int>(dirs.size());
+    const int kBatchSize = 25;
+    bool aborted = false;
+    for (int b0 = 0; b0 < nDirs; b0 += kBatchSize) {
+        const int b1 = std::min(b0 + kBatchSize, nDirs);
+#pragma omp parallel for schedule(dynamic)
+        for (int di = b0; di < b1; ++di) {
+            const Eigen::Vector3f& d = dirs[di];
+            Eigen::Vector2f ab;
+            fitCircleCenterFixedRadius(d, c0, ab);
+            const Eigen::Vector3f t1 = d.unitOrthogonal();
+            const Eigen::Vector3f t2 = d.cross(t1);
+            Candidate cand;
+            cand.direction = d;
+            cand.center = c0 + t1 * ab.x() + t2 * ab.y();
+            cand.error = evaluateCandidate(cand.center, d);
+            candidates[di] = cand;
+        }
+        if (!reportProgress(b1, nDirs, "候选方向搜索(球面采样)")) {
+            aborted = true;
+            break;
+        }
+    }
+    if (aborted) {
+        printDebugInfo("第二阶段: 用户取消搜索");
+        return initializeLineParameters();
     }
 
     // 取残差最小的 kTopK 个候选
@@ -957,6 +1014,7 @@ MeasureCylindricity::LineParams MeasureCylindricity::coarseToFineOptimization()
         [](const Candidate& a, const Candidate& b) { return a.error < b.error; });
 
     // 局部精化: 对 top-K 做四自由度联合精化, 取最优
+    // (实测: top-K 并行会因嵌套并行争抢而变慢约1.6倍, 故保持串行)
     double bestError = candidates.front().error;
     LineParams best;
     best.point = candidates.front().center;
@@ -965,15 +1023,24 @@ MeasureCylindricity::LineParams MeasureCylindricity::coarseToFineOptimization()
         LineParams line;
         line.point = candidates[i].center;
         line.direction = candidates[i].direction;
-        refineLineParams(c0, line);
+        // 传入候选序号, 使精化阶段的进度在整段内单调推进
+        refineLineParams(c0, line, i, std::min(kTopK, static_cast<int>(candidates.size())));
         const double err = evaluateCandidate(line.point, line.direction);
         if (err < bestError) {
             bestError = err;
             best = line;
         }
+        if (cancelled_) {
+            printDebugInfo("第二阶段: 用户取消精化");
+            break;
+        }
     }
 
     printDebugInfo("第二阶段优化完成, 误差: " + std::to_string(bestError));
+    const auto tEnd = std::chrono::steady_clock::now();
+    printDebugInfo("第二阶段粗到精搜索总耗时: "
+        + std::to_string(std::chrono::duration_cast<std::chrono::milliseconds>(tEnd - tStart).count())
+        + " ms");
     return best;
 }
 
@@ -1138,7 +1205,12 @@ void MeasureCylindricity::refineLineParamsWithWeld(const Eigen::Vector3f& c0,
     };
 
     // 局部精化(含焊缝轴向方差惩罚)
-    NelderMead4D(x, eval, x);
+    int tickCountWeld = 0;
+    auto tickWeld = [this, &tickCountWeld]() -> bool {
+        ++tickCountWeld;
+        return reportProgress(tickCountWeld, 300, "焊缝约束精化");
+    };
+    NelderMead4D(x, eval, x, tickWeld);
 
     const float th = x[0];
     const float ph = x[1];
@@ -1215,9 +1287,17 @@ MeasureCylindricity::AssessmentResult MeasureCylindricity::evaluateCylindricityW
     printDebugInfo("设计半径: " + std::to_string(design_radius_));
     printDebugInfo("容差阈值: " + std::to_string(tolerance_));
 
+    cancelled_ = false;  // 每次评估重置取消标志
+
     try {
         // 第二阶段粗到精优化 + 第三阶段焊缝约束修正
         LineParams best_line = optimizeLineParameters();
+        if (cancelled_) {
+            result.assessment_message = "圆柱度评估(含焊缝约束)已取消";
+            result.is_acceptable = false;
+            printDebugInfo(result.assessment_message);
+            return result;
+        }
         best_line = optimizeWithWeldConstraint(best_line);
 
         result = computeAssessmentMetrics(best_line);
@@ -1463,8 +1543,16 @@ MeasureCylindricity::AssessmentResult MeasureCylindricity::evaluateCylindricity(
     printDebugInfo("设计半径: " + std::to_string(design_radius_));
     printDebugInfo("容差阈值: " + std::to_string(tolerance_));
 
+    cancelled_ = false;  // 每次评估重置取消标志
+
     try {
         LineParams best_line = optimizeLineParameters();
+        if (cancelled_) {
+            result.assessment_message = "圆柱度评估已取消";
+            result.is_acceptable = false;
+            printDebugInfo(result.assessment_message);
+            return result;
+        }
         result = computeAssessmentMetrics(best_line);
 
         // 新增：生成热力图点云
@@ -1531,4 +1619,21 @@ void MeasureCylindricity::printDebugInfo(const std::string& message) const
     if (verbose_) {
         std::cout << "[MeasureCylindricity] " << message << std::endl;
     }
+}
+
+// 新增：进度上报(在调用线程中执行, 由界面侧负责刷新进度条与事件循环)
+// 返回 false 表示用户请求取消, 内部置位 cancelled_
+bool MeasureCylindricity::reportProgress(int current, int total, const std::string& stage)
+{
+    if (cancelled_) {
+        return false;
+    }
+    if (!progress_cb_) {
+        return true;
+    }
+    if (!progress_cb_(current, total, stage)) {
+        cancelled_ = true;
+        return false;
+    }
+    return true;
 }
