@@ -11,6 +11,10 @@ on:
         description: 'Verify dependency cache: fail instead of building missing packages'
         type: boolean
         default: false
+      restore_from_release:
+        description: 'Skip Actions cache and require the durable Release dependency backup'
+        type: boolean
+        default: false
   push:
     tags:
       - "v*"
@@ -37,6 +41,9 @@ env:
 jobs:
   build-windows-installer:
     runs-on: windows-2025-vs2026
+    permissions:
+      contents: write # 维护长期依赖备份 Release
+      actions: write
     # GitHub Actions 普通 job 上限为 360 分钟；首次全量编译依赖较慢，
     # 之后依靠文件二进制缓存加速。
     timeout-minutes: 360
@@ -69,14 +76,32 @@ jobs:
         shell: pwsh
         run: ./.github/scripts/ci-toolchain.ps1
 
+      - name: Compute dependency cache key
+        id: dependency-cache
+        shell: pwsh
+        env:
+          CACHE_KEY: vcpkg-v2-windows2025-${{ steps.toolchain.outputs.fingerprint }}-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'vcpkg-ports/**', 'vcpkg-triplets/**', '.github/scripts/patch-msys.ps1', '.github/scripts/msys-packages.json') }}
+        run: '"key=$env:CACHE_KEY" >> $env:GITHUB_OUTPUT'
+
       - name: Restore vcpkg binary cache
+        if: ${{ !inputs.restore_from_release }}
         id: vcpkg-cache
         uses: actions/cache/restore@v4
         with:
           path: ${{ github.workspace }}/vcpkg-bincache
-          key: vcpkg-v2-windows2025-${{ steps.toolchain.outputs.fingerprint }}-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'vcpkg-ports/**', 'vcpkg-triplets/**', '.github/scripts/patch-msys.ps1', '.github/scripts/msys-packages.json') }}
+          key: ${{ steps.dependency-cache.outputs.key }}
           restore-keys: |
             vcpkg-v2-windows2025-${{ steps.toolchain.outputs.fingerprint }}-
+
+      - name: Restore durable dependency backup
+        if: steps.vcpkg-cache.outputs.cache-hit != 'true'
+        id: release-cache
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CACHE_KEY: ${{ steps.dependency-cache.outputs.key }}
+          REQUIRE_RELEASE: ${{ inputs.restore_from_release || false }}
+        run: ./.github/scripts/ci-release-cache.ps1 -Mode Restore -CacheKey $env:CACHE_KEY -Required:($env:REQUIRE_RELEASE -eq 'true')
 
       - name: Install dependencies (vcpkg install)
         id: dependencies
@@ -88,11 +113,19 @@ jobs:
       # Only publish a complete dependency cache, and avoid duplicate snapshots
       # when the exact key was already restored.
       - name: Save vcpkg binary cache
-        if: steps.dependencies.outcome == 'success' && steps.vcpkg-cache.outputs.cache-hit != 'true'
+        if: steps.dependencies.outcome == 'success' && steps.vcpkg-cache.outputs.cache-hit != 'true' && !inputs.restore_from_release
         uses: actions/cache/save@v4
         with:
           path: ${{ github.workspace }}/vcpkg-bincache
-          key: ${{ steps.vcpkg-cache.outputs.cache-primary-key }}
+          key: ${{ steps.dependency-cache.outputs.key }}
+
+      - name: Back up dependencies to GitHub Release
+        if: steps.dependencies.outcome == 'success'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CACHE_KEY: ${{ steps.dependency-cache.outputs.key }}
+        run: ./.github/scripts/ci-release-cache.ps1 -Mode Backup -CacheKey $env:CACHE_KEY
 
       - name: Upload dependency cache diagnostics
         if: always()

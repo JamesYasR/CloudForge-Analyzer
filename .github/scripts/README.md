@@ -49,3 +49,27 @@ vcpkg baseline 下载固定工具（包括 CMake/Ninja/PowerShell）。应用和
 依赖安装耗时。`dependency-cache-diagnostics` artifact 保存完整安装日志、
 工具指纹及 `*vcpkg_abi_info.txt`，便于精确比较失效原因。缓存被清退、
 依赖或工具版本变化后需要重新填充；禁止绕过 ABI 兼容性检查强行复用。
+
+## 长期依赖备份与缓存缺失恢复
+
+Actions 缓存受保留期和容量淘汰策略影响。依赖安装成功后，工作流会将
+`vcpkg-bincache` 中的二进制包归档到专用 prerelease `ci-dependency-cache`，
+不标为最新应用版本，也不触发 `v*` 安装包标签构建。每套工具链/依赖 key
+各自保留 `.tar`、`.tar.sha256` 和带来源/工具链信息的 `.json` 附件。
+已有备份不覆盖，后续运行只检查是否存在，避免重复上传。
+
+恢复顺序：Actions 精确缓存 → 同 key 的 Release 归档（校验 SHA256）→
+vcpkg 按 ABI 复用。Release 附件不受 Actions 缓存七天未访问清理规则影响，
+但不是不可删除的存储：手动删除 Release/附件/仓库会丢失备份。请保留
+`ci-dependency-cache`；更换依赖或编译工具需要另建兼容版本。固定工具集在
+未来 runner 中若被移除，构建会明确失败，不能以不兼容工具强行复用。
+
+验证长期恢复：先正常运行一次备份现有依赖；随后同时设置
+`restore_from_release=true` 和 `cache_only=true` 手动构建。前者跳过
+Actions 缓存读取，要求 Release 归档存在并下载校验成功，后者禁止依赖
+源码重编。验收须 Release 恢复成功、126 包复用、0 包源码构建及整个
+Windows 安装包流水线成功，不能只依据附件上传成功下结论。
+
+本脚本当前限制单个归档小于 2 GiB（本项目约 575 MiB）；超过时明确失败，
+需拆分归档后再上传。GitHub Release 附件限制与 Actions 缓存规则不同，
+不应通过周期性运行两小时依赖构建来“保活”。
