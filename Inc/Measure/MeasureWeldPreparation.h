@@ -282,7 +282,7 @@ public:
         z_increase_away_ = increase_means_away;
     }
     // 人工指定近远角色(覆盖按 Z 均值的自动判定), 并记录原因(§3)。
-    void setRoleOverride(Role near, Role far, const std::string& reason);
+    void setRoleOverride(Role nearRole, Role farRole, const std::string& reason);
     void clearRoleOverride();
 
     // 参考圆柱轴线先验(可选; 用于"必要时要求外部轴向先验", §4.2)。

@@ -216,12 +216,12 @@ void MeasureWeldPreparation::setSeamRoi(double a0, double a1, double s0, double 
     roi_set_ = (a1 > a0) && (s1 > s0);
 }
 
-void MeasureWeldPreparation::setRoleOverride(Role near, Role far, const std::string& reason)
+void MeasureWeldPreparation::setRoleOverride(Role nearRole, Role farRole, const std::string& reason)
 {
-    if (near == far) return;
+    if (nearRole == farRole) return;
     role_override_ = true;
-    role_near_ = near;
-    role_far_ = far;
+    role_near_ = nearRole;
+    role_far_ = farRole;
     role_override_reason_ = reason;
 }
 
