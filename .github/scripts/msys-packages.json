@@ -1,0 +1,122 @@
+[
+  {
+    "old": "autoconf2.72-2.72-1-any.pkg.tar.zst",
+    "old_sha512": "c8dc3e317dc4befc5f2848ac339a74f9dc8f021767aadb3d2c50b13869e0ef49fb48c62a0a1df5176a15a4f10196fcd2307efb83ff143ba1d20301882ba8dd1e",
+    "new": "autoconf2.72-2.72-3-any.pkg.tar.zst",
+    "sha512": "307751b00b6a9729673d0af35ccf327041880f20498143100053a9d914927e86dd20a4aa4cd9e83e3d4e7e27c2d068cfc0313c6cab4f103955e4dafede22f4d0"
+  },
+  {
+    "old": "bash-5.2.037-1-x86_64.pkg.tar.zst",
+    "old_sha512": "c93ea45d4dd603d5cef42b599b4e0ff40b064bfd277eaf6933be35105e085155ebd63b732a2fa703e3878dc26bc288b09a5dfe355531237e3b20c27e1fc12215",
+    "new": "bash-5.2.037-2-x86_64.pkg.tar.zst",
+    "sha512": "dda8e37b5d7185c1cf935eb8d8a7eec7b6a065c44984486725b27d842a793228cd9586a3b68cef4a4e6bf6f8685aa416628cd8da18184f427e3403d73186bc6f"
+  },
+  {
+    "old": "binutils-2.43.1-1-x86_64.pkg.tar.zst",
+    "old_sha512": "fb4ceb5f6b472923f654aa320401b7d65063c62c8f4c284996ac1e7f3091e117dafb1d600df164466bc0b56fb5a4d13558b05f707dd91e7801c37df7e9346a5e",
+    "new": "binutils-2.44-1-x86_64.pkg.tar.zst",
+    "sha512": "4bddf315ad028841144c2e1f38a08437f8acde2652f6a32e4ce2dfa59b6c8eb6fec25c3383e944324e16f40c02b88b17c1c5d41b219b4ed0f413c6815f1a1012"
+  },
+  {
+    "old": "file-5.45-3-x86_64.pkg.tar.zst",
+    "old_sha512": "14f6bb0a19f8c74d5b3fe4e95fcf013c0db3bb270c795009f315a2207ca099efc32a9ab487dee72603c0adbe2949337724bbb28b779c71bbf9c1045ad6e23e72",
+    "new": "file-5.48-1-x86_64.pkg.tar.zst",
+    "sha512": "a44e90c23b768c10cf7efa4f4610a630508b1eba2f21e1f1e35082e751e5a710974cee278c3930a739411c8f3c50e8b8416be1f19531c0e4166ade63426fbb7d"
+  },
+  {
+    "old": "gettext-0.22.4-1-x86_64.pkg.tar.zst",
+    "old_sha512": "7bd1dc50df8a973a075286fdf115fa30c8a78aa23d2845e2bdeb6068bf3391321d9b3ce3241626453bb660d1a57563bea44eebadf81cb2f98f15fbaf266648ec",
+    "new": "gettext-0.22.5-1-x86_64.pkg.tar.zst",
+    "sha512": "50e1969179c6b33376396f200f6c25f709a6104d253121a8148bc5591b140c6f1729dc703374315a96137fa7cfec2abe427ea63bce243d5c0729cee8964ffbd3"
+  },
+  {
+    "old": "gettext-devel-0.22.4-1-x86_64.pkg.tar.zst",
+    "old_sha512": "e7748736014b0aa47f2bc740189a5e8e1bcc99a82ccd02d6f75e226b041704e4f353107df175c0547651a05f5a352ec474a7af693fb33d42a8885e47ac371d2e",
+    "new": "gettext-devel-0.22.5-1-x86_64.pkg.tar.zst",
+    "sha512": "6de3e04ba238353df65111120ec4850b49f5797f27626ebc27c561390f75b4b1b25c84ac377f6ab15d586ca3ee3940eaf3aba074db1a50d8b8930c1135eae7cf"
+  },
+  {
+    "old": "grep-1~3.0-6-x86_64.pkg.tar.zst",
+    "old_sha512": "79b4c652082db04c2ca8a46ed43a86d74c47112932802b7c463469d2b73e731003adb1daf06b08cf75dc1087f0e2cdfa6fec0e8386ada47714b4cff8a2d841e1",
+    "new": "grep-1~3.0-7-x86_64.pkg.tar.zst",
+    "sha512": "8a5248d0aa7c8d9e57a810f0b03b76db31ebc3c64158886804fdc82095709d496fee433d3aa744484c6cdcb5877ebe95d03b15486cc7bdb13ba33cfbf71e4e14"
+  },
+  {
+    "old": "libasprintf-0.22.4-1-x86_64.pkg.tar.zst",
+    "old_sha512": "06f353d2020d1e7168f4084e9fc17856a158a67a61098314e4b1d7db075542eb29dfe8a84bd154dad28942ee8eaae1e13a6510a4d2caab4509d9f3ea22db6d87",
+    "new": "libasprintf-0.22.5-1-x86_64.pkg.tar.zst",
+    "sha512": "26ad060897f86cfa8257657d9ca3f64302c3bf949369ef29edd1d2f1525cbd462351d3177ba036ae91e8dec0c8501afdd5a666c1e51d7693d7f16f05406d35dd"
+  },
+  {
+    "old": "libgettextpo-0.22.4-1-x86_64.pkg.tar.zst",
+    "old_sha512": "7552bc873331f07a4c006f27fe9f72186eed9717d68c4cbf54a75ff65c9445f874c43ccced2f9fa75ff1602c1209f6f1f4335a6ae6bf9bd5e951292584db7539",
+    "new": "libgettextpo-0.22.5-1-x86_64.pkg.tar.zst",
+    "sha512": "a4ea2c576de4dca804d013e257e99a185eacafa558bd3793ece3216a21884c0ff23b5369cd8954bf7258e8cea9ffe9197d8a752baa67b5e895daac83de93d2f0"
+  },
+  {
+    "old": "libiconv-1.17-1-x86_64.pkg.tar.zst",
+    "old_sha512": "e8fc6338d499ccf3a143b3dbdb91838697de76e1c9582bb44b0f80c1d2da5dcfe8102b7512efa798c5409ba9258f4014eb4eccd24a9a46d89631c06afc615678",
+    "new": "libiconv-1.18-1-x86_64.pkg.tar.zst",
+    "sha512": "77979ed35af45aa5bb7fb6b07d649e8eafa69ebdc8e421c2a7bf69ee567f814b38623a12be0736fb56c17c0aeff69ba769bc52110f62f8e5fdc5bcf334d88d44"
+  },
+  {
+    "old": "libintl-0.22.4-1-x86_64.pkg.tar.zst",
+    "old_sha512": "07f41f7fa53967bb5b0aca72255c70d7aeed58ea86b67bd0e765e08c20c50187ef2e775b630c0d48b3afbe62203754f7e8653a5f2e1a87a38b4af5753c7bd232",
+    "new": "libintl-0.22.5-1-x86_64.pkg.tar.zst",
+    "sha512": "1f1826763bcc252f15a0a5a27fbf596a2b5fad5e092bdff17af8231c373c0de17be7411938068aac0f0a617edbb32533de6619f6c58ebcdec7480c210673af45"
+  },
+  {
+    "old": "liblzma-5.6.3-1-x86_64.pkg.tar.zst",
+    "old_sha512": "9fea23590973d5d2eea6da134ae4d10cd5a989babf135778de15ae0d5f28aad58f74485339d1e76187e3496993d26f4c243256d20dd7a0d77e9ebdc5ed56f124",
+    "new": "liblzma-5.6.4-1-x86_64.pkg.tar.zst",
+    "sha512": "c79eb21376d1ecc08cd0198d95ed8142f68032e885dbd2e561f7d72e2ec13177dbd8cf39dbff2203723b0b92c50e9f921717fba56390c01134d58e77ac6e2991"
+  },
+  {
+    "old": "libpcre-8.45-4-x86_64.pkg.tar.zst",
+    "old_sha512": "e1eb5cb38dce22012527bba2e92f908bf23c7725d77dcbd7fa14597af0f5b413319e0a7dd66555370afffc3b55d6074b8b83fd3c384d31ac505b74db246d54ac",
+    "new": "libpcre-8.45-5-x86_64.pkg.tar.zst",
+    "sha512": "3a0fffaf4d24bac07847220bac70b0e3f15645ea04171c5f4079966cbec01cee9138e36e5100b989af2dcce67660756c060fb3298c86fa120779c15d083231eb"
+  },
+  {
+    "old": "libtool-2.4.7-4-x86_64.pkg.tar.zst",
+    "old_sha512": "fa2f0d4ac3a5aca38988d6f901407c14185238e6554894fd0b1ebe35ee836388c3649c5547cf529778e2a62ce5a3dafae15568b33c0e5d5535b67bb9c46ac37a",
+    "new": "libtool-2.5.4-1-x86_64.pkg.tar.zst",
+    "sha512": "65bdd278c19a6f32094d9944ac87418f38966e453f5fca60b2e00966731af88b119b94ef3cb6a68a9fd9a183f846d08a6524b9f273d311987acc308e84e3cf00"
+  },
+  {
+    "old": "libxcrypt-4.4.36-1-x86_64.pkg.tar.zst",
+    "old_sha512": "457320daebd1aa45461788fb52dd4772fe91c34902201fac81d94ee2cbbfa216b02b3831a3e32a5ac638a3f12ac31fcec94ee95b19696fec6624e10e3dc5ffff",
+    "new": "libxcrypt-4.4.38-1-x86_64.pkg.tar.zst",
+    "sha512": "a23b90d67773a4846cf0aa0a37132f65ca5244a16d04c903ac3807e146a41a4cab033ac12572c95df6f6ad3272ac97097dfc678b1c2da25092ce9ed1e9dddc01"
+  },
+  {
+    "old": "msys2-runtime-3.4-3.4.10-2-x86_64.pkg.tar.zst",
+    "old_sha512": "3fa087d4eb4e260785b81d5b6f4400ec128a83ff940da732bf147dfde457224573fa467e735b63c9a138872f5c9830f3684f824b2aa5d344fb95dfb91632f832",
+    "new": "msys2-runtime-3.4-3.4.10-3-x86_64.pkg.tar.zst",
+    "sha512": "fe4f83dc8f9c817d0b349c2aa7de22f50c6c79f25f9d7220a8da9d8aaefd30d2cc121976a2622a8debd1664a9f57b47354f1a9f18c5db9c816a29d0c722352c2"
+  },
+  {
+    "old": "msys2-runtime-3.5.4-2-x86_64.pkg.tar.zst",
+    "old_sha512": "070aeb43385beb0e3f8d5fb28909469765116c222d53c2614f5f080be879eef0b78258334b35e8cda7625d8704efc89133f8b8fa78f309c5d680ae270efdaba8",
+    "new": "msys2-runtime-3.6.4-1-x86_64.pkg.tar.zst",
+    "sha512": "65de2d7c7fa3fb2996e6c29e1d400a3da51b02a1aaa7ad192214c7e5d4ae27fa835b84577eff707d6944931b26df764f76379d20751f1a510f9b77777422a8b2"
+  },
+  {
+    "old": "patch-2.7.6-2-x86_64.pkg.tar.zst",
+    "old_sha512": "eb484156e6e93da061645437859531f7b04abe6fef9973027343302f088a8681d413d87c5635a10b61ddc4a3e4d537af1de7552b3a13106639e451b95831ec91",
+    "new": "patch-2.7.6-3-x86_64.pkg.tar.zst",
+    "sha512": "dd5069cab243c8367152b1b8799a199103a7a86be2d478a9f4f84406591ad892284859531ec29ca09de8f278e6c97492896a08b6a08bcbc3ac09ac297e653ec0"
+  },
+  {
+    "old": "perl-5.38.2-2-x86_64.pkg.tar.zst",
+    "old_sha512": "1d1cff89a0f0b47eb5bea51974a092b42a9c05634391bf2056dcd38557d8b97a3f6e697fb2bbf421beea780f132d8d13ff8e0cec22b24f99811657857691a815",
+    "new": "perl-5.38.2-3-x86_64.pkg.tar.zst",
+    "sha512": "84a44aefeb5dce2f5fb5364153f0296945523f7443aeefb090c13f771387cc9cc4c99023a9c02fd2c627f86b729eb9d07f5d5c786965ea74c8902f6b7e219de9"
+  },
+  {
+    "old": "xz-5.6.3-1-x86_64.pkg.tar.zst",
+    "old_sha512": "038094ac7a208b03f41c2caf0b3ca1214b6fc914ef28884d9daa385062cbcfc793b94e29f4d4beb3475728ef2c9b70f9fbc58ec5b41f354c638898601f746917",
+    "new": "xz-5.6.4-1-x86_64.pkg.tar.zst",
+    "sha512": "9a4ca2a75ef6f28b3d21d00dfb54dfa9ff4b2eb3fb94135c3ab8f8d3ab75e12d73131c7c09d8aff2bd7158de10f7a1272165468756fdc66da4aaf1fec6f9680d"
+  }
+]

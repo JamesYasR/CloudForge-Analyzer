@@ -17,10 +17,8 @@ permissions:
 env:
   VCPKG_ROOT: ${{ github.workspace }}/vcpkg
   VCPKG_DEFAULT_TRIPLET: x64-windows
-  # 注意：不要用 x-gha 二进制缓存，它需要 run-vcpkg 注入的
-  # ACTIONS_RUNTIME_TOKEN / ACTIONS_CACHE_URL 环境变量；裸 vcpkg 命令下没有，
-  # 会报错 "GHA binary source requires the ACTIONS_RUNTIME_TOKEN..."。
-  # 这里留空走默认（纯本地构建，无缓存复用）。
+  # 用本地文件二进制缓存配合 actions/cache；不依赖已失效的 x-gha provider。
+  VCPKG_BINARY_SOURCES: "clear;files,${{ github.workspace }}/vcpkg-bincache,readwrite"
   # 限制 vcpkg 并行编译数，避免 Windows runner 内存不足
   VCPKG_MAX_CONCURRENCY: "16"
   # 与 CMake 的 -DVCPKG_INSTALLED_DIR 保持一致
@@ -32,7 +30,7 @@ jobs:
   build-windows-installer:
     runs-on: windows-latest
     # GitHub Actions 普通 job 上限为 360 分钟；首次全量编译依赖较慢，
-    # 之后依靠 x-gha 二进制缓存加速。
+    # 之后依靠文件二进制缓存加速。
     timeout-minutes: 360
 
     steps:
@@ -55,34 +53,24 @@ jobs:
           git clone https://github.com/microsoft/vcpkg.git "$env:VCPKG_ROOT"
           cd "$env:VCPKG_ROOT"
           git checkout b2cb0da531c2f1f740045bfe7c4dac59f0b2b69c
-          # 修复: vcpkg baseline(2024-11) 锁定的 msys2 包已从滚动仓库消失(全镜像404)。
-          # 逐个替换为现存版本 (URL+SHA512 均已实测):
-          #   msys2-runtime 3.5.4-2 -> 3.6.4-1
-          #   libtool       2.4.7-4 -> 2.5.4-1
-          #   file          5.45-3  -> 5.48-1
-          #   autoconf2.72  2.72-1  -> 2.72-3
-          $msys = "$env:VCPKG_ROOT\scripts\cmake\vcpkg_acquire_msys.cmake"
-          (Get-Content $msys -Raw) `
-            -replace [regex]::Escape('https://mirror.msys2.org/msys/x86_64/msys2-runtime-3.5.4-2-x86_64.pkg.tar.zst'), 'https://mirror.msys2.org/msys/x86_64/msys2-runtime-3.6.4-1-x86_64.pkg.tar.zst' `
-            -replace [regex]::Escape('070aeb43385beb0e3f8d5fb28909469765116c222d53c2614f5f080be879eef0b78258334b35e8cda7625d8704efc89133f8b8fa78f309c5d680ae270efdaba8'), '65de2d7c7fa3fb2996e6c29e1d400a3da51b02a1aaa7ad192214c7e5d4ae27fa835b84577eff707d6944931b26df764f76379d20751f1a510f9b77777422a8b2' `
-            -replace [regex]::Escape('https://mirror.msys2.org/msys/x86_64/libtool-2.4.7-4-x86_64.pkg.tar.zst'), 'https://mirror.msys2.org/msys/x86_64/libtool-2.5.4-1-x86_64.pkg.tar.zst' `
-            -replace [regex]::Escape('fa2f0d4ac3a5aca38988d6f901407c14185238e6554894fd0b1ebe35ee836388c3649c5547cf529778e2a62ce5a3dafae15568b33c0e5d5535b67bb9c46ac37a'), '65bdd278c19a6f32094d9944ac87418f38966e453f5fca60b2e00966731af88b119b94ef3cb6a68a9fd9a183f846d08a6524b9f273d311987acc308e84e3cf00' `
-            -replace [regex]::Escape('https://mirror.msys2.org/msys/x86_64/file-5.45-3-x86_64.pkg.tar.zst'), 'https://mirror.msys2.org/msys/x86_64/file-5.48-1-x86_64.pkg.tar.zst' `
-            -replace [regex]::Escape('https://mirror.msys2.org/msys/x86_64/autoconf2.72-2.72-1-any.pkg.tar.zst'), 'https://mirror.msys2.org/msys/x86_64/autoconf2.72-2.72-3-any.pkg.tar.zst' `
-            -replace [regex]::Escape('c8dc3e317dc4befc5f2848ac339a74f9dc8f021767aadb3d2c50b13869e0ef49fb48c62a0a1df5176a15a4f10196fcd2307efb83ff143ba1d20301882ba8dd1e'), '307751b00b6a9729673d0af35ccf327041880f20498143100053a9d914927e86dd20a4aa4cd9e83e3d4e7e27c2d068cfc0313c6cab4f103955e4dafede22f4d0' `
-            -replace [regex]::Escape('14f6bb0a19f8c74d5b3fe4e95fcf013c0db3bb270c795009f315a2207ca099efc32a9ab487dee72603c0adbe2949337724bbb28b779c71bbf9c1045ad6e23e72'), 'a44e90c23b768c10cf7efa4f4610a630508b1eba2f21e1f1e35082e751e5a710974cee278c3930a739411c8f3c50e8b8416be1f19531c0e4166ade63426fbb7d' |
-            Set-Content $msys -NoNewline
-          Write-Host "=== msys2 包替换后确认 ==="
-          Select-String -Path $msys -Pattern "msys2-runtime-3|libtool-|file-|autoconf2.72-" | ForEach-Object { Write-Host $_.Line.Trim() }
+          & "$env:GITHUB_WORKSPACE/.github/scripts/patch-msys.ps1" -VcpkgRoot $env:VCPKG_ROOT
           .\bootstrap-vcpkg.bat -disableMetrics
+
+      - name: Restore vcpkg binary cache
+        id: vcpkg-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ github.workspace }}/vcpkg-bincache
+          key: vcpkg-${{ runner.os }}-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'vcpkg-ports/**', 'vcpkg-triplets/**', '.github/scripts/**') }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            vcpkg-${{ runner.os }}-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'vcpkg-ports/**', 'vcpkg-triplets/**', '.github/scripts/**') }}-
+            vcpkg-${{ runner.os }}-
 
       - name: Install dependencies (vcpkg install)
         shell: pwsh
         run: |
           cd "$env:GITHUB_WORKSPACE"
-          # 强制清空 binary sources，避免 runner 环境带入 x-gha 缓存配置
-          # （x-gha 需要 ACTIONS_RUNTIME_TOKEN/ACTIONS_CACHE_URL，裸 vcpkg 下没有会报错）
-          $env:VCPKG_BINARY_SOURCES = "clear"
+          New-Item -ItemType Directory -Force -Path "$env:GITHUB_WORKSPACE/vcpkg-bincache" | Out-Null
           # 详细日志：输出到 vcpkg-install.log，失败时打印关键错误段
           & "$env:VCPKG_ROOT\vcpkg.exe" install `
             --triplet "$env:VCPKG_DEFAULT_TRIPLET" `
@@ -104,6 +92,14 @@ jobs:
               }
             exit $code
           }
+
+      # Persist completed ports even if a later dependency fails.
+      - name: Save vcpkg binary cache
+        if: always() && steps.vcpkg-cache.outputs.cache-primary-key != ''
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ github.workspace }}/vcpkg-bincache
+          key: ${{ steps.vcpkg-cache.outputs.cache-primary-key }}
 
       - name: Upload vcpkg install log on failure
         if: failure()
