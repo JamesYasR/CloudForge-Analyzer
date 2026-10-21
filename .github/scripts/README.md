@@ -73,3 +73,15 @@ Windows 安装包流水线成功，不能只依据附件上传成功下结论。
 本脚本当前限制单个归档小于 2 GiB（本项目约 575 MiB）；超过时明确失败，
 需拆分归档后再上传。GitHub Release 附件限制与 Actions 缓存规则不同，
 不应通过周期性运行两小时依赖构建来“保活”。
+
+### 实际验收记录（2026-10-21）
+
+- Actions 缓存验证 [39623203125](https://github.com/JamesYasR/CloudForge-Analyzer/actions/runs/39623203125)：整轮成功，126 包复用、0 包重建，依赖安装 29 秒。
+- Release 独立恢复验证 [39626575325](https://github.com/JamesYasR/CloudForge-Analyzer/actions/runs/39626575325)：
+  `Restore vcpkg binary cache` 明确 skipped；Release 下载/校验/恢复 16 秒；
+  `restored=126 built=0 seconds=35 cache_only=True exit=0`；Windows 编译、
+  NSIS 打包及安装包上传全部成功，job 总计 9 分 1 秒。
+- 长期备份入口：[ci-dependency-cache](https://github.com/JamesYasR/CloudForge-Analyzer/releases/tag/ci-dependency-cache)。
+  当前归档 610,684,928 字节，包含 126 个二进制包，另附 SHA256 和来源清单。
+- 对比此前依赖源码构建约 122 分钟，同工具链与依赖版本下，依赖安装已降为几十秒。
+  本次未运行功能验证。
