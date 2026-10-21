@@ -513,6 +513,7 @@ font: 700 8pt &quot;Microsoft YaHei UI&quot;;</string>
     <bool>false</bool>
    </attribute>
    <addaction name="separator"/>
+   <addaction name="measure_line"/>
    <addaction name="measure_cylinder"/>
    <addaction name="measure_geodisic"/>
    <addaction name="measure_parallel"/>
@@ -849,15 +850,18 @@ QMenu::item:selected {
    </property>
   </action>
   <action name="measure_line">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
    <property name="icon">
     <iconset resource="CloudForgeAnalyzer.qrc">
      <normaloff>:/CloudForgeAnalyzer/Icons/icons-line.png</normaloff>:/CloudForgeAnalyzer/Icons/icons-line.png</iconset>
    </property>
    <property name="text">
-    <string>直线</string>
+    <string>两点测距</string>
    </property>
    <property name="toolTip">
-    <string>测量直线</string>
+    <string>选取两点测量空间直线距离；Esc 退出</string>
    </property>
    <property name="menuRole">
     <enum>QAction::MenuRole::NoRole</enum>
@@ -910,6 +914,9 @@ QMenu::item:selected {
    </property>
   </action>
   <action name="action_Clip">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
    <property name="icon">
     <iconset resource="CloudForgeAnalyzer.qrc">
      <normaloff>:/CloudForgeAnalyzer/Icons/icon_cut.png</normaloff>:/CloudForgeAnalyzer/Icons/icon_cut.png</iconset>
@@ -918,7 +925,7 @@ QMenu::item:selected {
     <string>裁剪</string>
    </property>
    <property name="toolTip">
-    <string>手动裁切点云</string>
+    <string>在主视窗绘制多边形，预览并裁切点云</string>
    </property>
    <property name="shortcut">
     <string>Ctrl+T</string>

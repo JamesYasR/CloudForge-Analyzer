@@ -1,4 +1,6 @@
 #include "CloudForgeAnalyzer.h"
+#include "Basic/DistanceMeasureTool.h"
+#include "Basic/PolygonClipTool.h"
 #include "Dialog/ParamDialogMeasureWeldHeight.h"
 #include <thread>
 #include <omp.h> // OpenMP 并行: MSVC(/openmp) 与 GCC(-fopenmp) 双平台兼容
@@ -41,6 +43,8 @@ CloudForgeAnalyzer::~CloudForgeAnalyzer()
     if (m_asyncFuture.isRunning()) {
         m_asyncFuture.waitForFinished();
     }
+    m_clipTool.reset();
+    m_distanceTool.reset();
     viewer.reset();
     delete ui;
 }
@@ -72,6 +76,20 @@ void CloudForgeAnalyzer::InitalizeRenderer() {
 
     viewer->setBackgroundColor(0, 0.3, 0.4);
     viewer->addCoordinateSystem(4.0);
+    m_distanceTool = std::make_unique<DistanceMeasureTool>(ui->winOfAnalyzer, renderer, renderWindow);
+    connect(m_distanceTool.get(), &DistanceMeasureTool::activeChanged, ui->measure_line, &QAction::setChecked);
+    connect(m_distanceTool.get(), &DistanceMeasureTool::resultChanged, this, [this, previous = QString()](const QString& text) mutable {
+        if (!text.isEmpty() || ui->textEdit_Show_CFmes->toPlainText() == previous) Update_CFmes(text.toStdString());
+        previous = text;
+    });
+    connect(m_distanceTool.get(), &DistanceMeasureTool::measurementCompleted, this, [this](const QString& text) {
+        TeEDebug(text.toStdString());
+    });
+    m_clipTool = std::make_unique<PolygonClipTool>(ui->winOfAnalyzer, renderer, renderWindow);
+    connect(m_clipTool.get(), &PolygonClipTool::activeChanged, ui->action_Clip, &QAction::setChecked);
+    connect(m_clipTool.get(), &PolygonClipTool::previewRequested, this, &CloudForgeAnalyzer::PreviewPolygonClip);
+    connect(m_clipTool.get(), &PolygonClipTool::applyRequested, this, &CloudForgeAnalyzer::ApplyPolygonClip);
+    connect(m_clipTool.get(), &PolygonClipTool::cancelPreviewRequested, this, &CloudForgeAnalyzer::CancelCurrentTask);
 }
 
 void CloudForgeAnalyzer::InitalizeQWidgets() {
@@ -79,6 +97,19 @@ void CloudForgeAnalyzer::InitalizeQWidgets() {
 }
 
 void CloudForgeAnalyzer::InitalizeConnects() {
+    for (auto action : findChildren<QAction*>()) {
+        if (action != ui->action_Clip && action != ui->action_cancel_task) {
+            connect(action, &QAction::triggered, this, [this]() {
+                if (m_clipTool) m_clipTool->stop();
+            });
+        }
+        if (action != ui->measure_line) {
+            connect(action, &QAction::triggered, this, [this]() {
+                if (m_distanceTool) m_distanceTool->stop();
+            });
+        }
+    }
+    connect(ui->measure_line, &QAction::triggered, this, &CloudForgeAnalyzer::Tool_MeasureDistance);
     connect(ui->action_ed_dork, &QAction::triggered, this, &CloudForgeAnalyzer::Slot_ed_dork_Triggered);
     connect(ui->action_ed_cleangeo, &QAction::triggered, this, &CloudForgeAnalyzer::Slot_ed_cleangeo_Triggered);
     connect(ui->action_ed_cleangall, &QAction::triggered, this, &CloudForgeAnalyzer::Slot_ed_cleanall_Triggered);
@@ -2224,63 +2255,105 @@ void CloudForgeAnalyzer::Tool_MeasureParallel() {
     Update_CFmes("平行度(夹角):" + std::to_string(parallelism) + "度");
 }
 
-void CloudForgeAnalyzer::Tool_Clip() {
+void CloudForgeAnalyzer::Tool_MeasureDistance()
+{
+    if (!m_distanceTool) return;
+    if (m_distanceTool->isActive()) {
+        m_distanceTool->stop();
+        return;
+    }
     if (IsTaskRunning()) {
-        TeEDebug(">>: 已有计算任务进行中，请等待完成或点击工具栏“取消计算”。");
+        ui->measure_line->setChecked(false);
+        TeEDebug("计算进行中，请稍后测距。");
         return;
     }
-    ChoseCloudDialog dialog(CloudMap, ColorMap);
-    if (dialog.exec() != QDialog::Accepted) { 
-        TeEDebug(">>:操作取消");
-        return;  
+    std::vector<vtkActor*> clouds;
+    for (const auto& entry : *viewer->getCloudActorMap()) {
+        if (CloudMap.count(entry.first) || RGBCloudMap.count(entry.first)) clouds.push_back(entry.second.actor);
     }
-    if (dialog.getSelectedList().empty()) {
-        TeEDebug(">>:没有点云被选中");
-        return;
+    if (!m_distanceTool->start(clouds)) {
+        ui->measure_line->setChecked(false);
+        TeEDebug("不可测: 当前没有可选取的点云");
     }
-    const std::string clippedSourceName = dialog.getSelectedList()[0];
-    pcl::PointCloud<pcl::PointXYZ>::Ptr tempcloud1(new pcl::PointCloud<pcl::PointXYZ>);
-    pcl::PointCloud<pcl::PointXYZ>::Ptr tempcloud2 = CloudMap[clippedSourceName];
-    *tempcloud1 = *tempcloud2;
-    
-	interactivePolygonCut(tempcloud1);
-    bool result = showConfirmationDialog("确认裁切", "您确定要执行此操作吗？");
-    if (!result) {
-        TeEDebug(">>:操作取消");
-        return;
-    }
+}
 
-    // 裁切结果文件已由交互裁切工具写入, 后台读取(界面保持响应)
-    auto clipedin = std::make_shared<pcl::PointCloud<pcl::PointXYZ>>();
-    auto clipedout = std::make_shared<pcl::PointCloud<pcl::PointXYZ>>();
-    auto clipLoaded = std::make_shared<bool>(false);
+void CloudForgeAnalyzer::Tool_Clip()
+{
+    if (!m_clipTool) return;
+    if (m_clipTool->isActive()) { m_clipTool->stop(); return; }
+    if (IsTaskRunning()) {
+        ui->action_Clip->setChecked(false);
+        TeEDebug("计算进行中，请稍后裁切。");
+        return;
+    }
+    std::vector<PolygonClipTool::Target> targets;
+    const auto actors = viewer->getCloudActorMap();
+    for (const auto& entry : CloudMap) {
+        auto actor = actors->find(entry.first);
+        if (actor != actors->end()) targets.push_back({entry.first, entry.second, actor->second.actor});
+    }
+    if (!m_clipTool->start(targets)) {
+        ui->action_Clip->setChecked(false);
+        TeEDebug("不可裁切: 当前没有可选取的点云");
+    }
+}
 
-    RunAsyncVoid("裁切点云",
-        [this, clipedin, clipedout, clipLoaded]() {
-            PostProgress(0, 0, "裁切: 读取裁切结果点云...");
-            if (pcl::io::loadPCDFile("PCDfiles/temp/cut/inside_points.pcd", *clipedin) == -1) {
-                PostLog(">>:无法加载点云文件clipedin");
-                return;
+void CloudForgeAnalyzer::PreviewPolygonClip()
+{
+    if (IsTaskRunning() || !m_clipTool->isActive()) return;
+    const auto request = m_clipTool->request();
+    const auto ticket = m_clipTool->ticket();
+    auto result = std::make_shared<CloudClipper::Result>();
+    RunAsyncVoid("裁切预览",
+        [this, request, result]() {
+            try {
+                *result = CloudClipper::compute(request, WorkerProgressCallback());
             }
-            if (pcl::io::loadPCDFile("PCDfiles/temp/cut/outside_points.pcd", *clipedout) == -1) {
-                PostLog(">>:无法加载点云文件clipedin");
-                return;
+            catch (const std::exception&) {
+                result->error = "预览失败，请重试";
             }
-            *clipLoaded = true;
         },
-        [this, clipedin, clipedout, clipLoaded, clippedSourceName]() {
-    if (!*clipLoaded) {
-        TeEDebug(">>:无法加载裁切结果点云");
+        [this, result, ticket]() { m_clipTool->finishPreview(result, ticket); });
+}
+
+void CloudForgeAnalyzer::ApplyPolygonClip()
+{
+    if (IsTaskRunning() || !m_clipTool->canApply()) return;
+    const auto source = m_clipTool->target();
+    const auto result = m_clipTool->result();
+    const auto mode = m_clipTool->keepMode();
+    const auto found = CloudMap.find(source.name);
+    if (found == CloudMap.end() || found->second != source.cloud) {
+        m_clipTool->stop();
         return;
     }
-    DelePointCloud(clippedSourceName);
-    ColorManager color1;
-    ColorManager color2;
-    beginUndoBatch("裁剪点云");
-    AddPointCloud(GenerateRandomName(clippedSourceName + "_clippedin"), clipedin, color1);
-    AddPointCloud(GenerateRandomName(clippedSourceName + "_clippedout"), clipedout, color2);
+    const auto color = ColorMap.at(source.name);
+    auto transform = vtkSmartPointer<vtkMatrix4x4>::New();
+    transform->DeepCopy(source.actor->GetMatrix());
+    auto addResult = [this, transform, source](const std::string& name, const CloudClipper::Cloud::Ptr& cloud, const ColorManager& color) {
+        AddPointCloud(name, cloud, color);
+        auto actor = viewer->getCloudActorMap()->at(name).actor;
+        actor->SetUserMatrix(transform);
+        actor->GetProperty()->SetPointSize(source.actor->GetProperty()->GetPointSize());
+        actor->GetProperty()->SetOpacity(source.actor->GetProperty()->GetOpacity());
+    };
+    m_clipTool->stop();
+    beginUndoBatch("多边形裁切");
+    DelePointCloud(source.name);
+    if (mode != PolygonClipTool::KeepMode::Outside) {
+        addResult(GenerateRandomName(source.name + "_inside"), result->inside, color);
+    }
+    if (mode != PolygonClipTool::KeepMode::Inside) {
+        addResult(GenerateRandomName(source.name + "_outside"), result->outside,
+                      mode == PolygonClipTool::KeepMode::Both ? ColorManager(255, 170, 70) : color);
+    }
     endUndoBatch();
-        });
+    ui->winOfAnalyzer->renderWindow()->Render();
+    const size_t kept = mode == PolygonClipTool::KeepMode::Inside ? result->inside->size()
+        : mode == PolygonClipTool::KeepMode::Outside ? result->outside->size() : result->inside->size() + result->outside->size();
+    const auto text = QString("裁切完成: 保留 %1 点").arg(kept);
+    Update_CFmes(text.toStdString());
+    TeEDebug(text.toStdString());
 }
 
 void CloudForgeAnalyzer::Slot_ph_ProtruSeg_Triggered() {
@@ -3439,6 +3512,7 @@ void CloudForgeAnalyzer::Slot_ed_cleangeo_Triggered() {
         TeEDebug(">>: 计算进行中，为保证数据安全，暂不能执行该操作。");
         return;
     }
+    if (m_distanceTool) m_distanceTool->clear();
     viewer->removeAllShapes();
     //clearAllActors();
 
@@ -3796,6 +3870,8 @@ void CloudForgeAnalyzer::Update_CFmes(std::string cfmes) {
 }
 
 void CloudForgeAnalyzer::AddPointCloud(std::string name, pcl::PointCloud<pcl::PointXYZ>::Ptr cloud, ColorManager color) {
+    if (m_clipTool) m_clipTool->stop();
+    if (m_distanceTool) m_distanceTool->clear();
     if (m_undoBatchLevel == 0) {
         saveUndoState("添加点云: " + name);
     }
@@ -3810,6 +3886,8 @@ void CloudForgeAnalyzer::AddPointCloud(std::string name, pcl::PointCloud<pcl::Po
 }
 
 void CloudForgeAnalyzer::ClearAllPointCloudRGB() {
+    if (m_clipTool) m_clipTool->stop();
+    if (m_distanceTool) m_distanceTool->clear();
     for (auto& pair : RGBCloudMap) {
         viewer->removePointCloud(pair.first);
         pair.second.reset();
@@ -3821,6 +3899,8 @@ void CloudForgeAnalyzer::ClearAllPointCloudRGB() {
 
 
 void CloudForgeAnalyzer::ClearAllPointCloud() {
+    if (m_clipTool) m_clipTool->stop();
+    if (m_distanceTool) m_distanceTool->clear();
     if (m_undoBatchLevel == 0) {
         saveUndoState("清除全部点云");
     }
@@ -3836,6 +3916,8 @@ void CloudForgeAnalyzer::ClearAllPointCloud() {
 }
 
 void CloudForgeAnalyzer::DelePointCloud(std::string name) {
+    if (m_clipTool) m_clipTool->stop();
+    if (m_distanceTool) m_distanceTool->clear();
     if (m_undoBatchLevel == 0) {
         saveUndoState("删除点云: " + name);
     }
@@ -3872,6 +3954,8 @@ void CloudForgeAnalyzer::endUndoBatch() {
 }
 
 void CloudForgeAnalyzer::rebuildCloudVisualization() {
+    if (m_clipTool) m_clipTool->stop();
+    if (m_distanceTool) m_distanceTool->clear();
     viewer->removeAllPointClouds();
     for (const auto& pair : CloudMap) {
         auto colorIt = ColorMap.find(pair.first);
@@ -3984,6 +4068,8 @@ void CloudForgeAnalyzer::ResetProgressBar() {
 // ============================================================
 void CloudForgeAnalyzer::BeginAsyncTask(const QString& title)
 {
+    if (m_clipTool && !m_clipTool->isBusy()) m_clipTool->stop();
+    if (m_distanceTool) m_distanceTool->stop();
     m_asyncState = std::make_shared<AsyncTaskState>();
     m_asyncRunning = true;
 

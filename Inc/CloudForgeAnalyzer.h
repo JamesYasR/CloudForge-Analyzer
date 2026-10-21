@@ -27,6 +27,9 @@ QT_BEGIN_NAMESPACE
 namespace Ui { class CloudForgeAnalyzerClass; };
 QT_END_NAMESPACE
 
+class DistanceMeasureTool;
+class PolygonClipTool;
+
 class CloudForgeAnalyzer : public QMainWindow
 {
     Q_OBJECT
@@ -68,6 +71,7 @@ private slots:
     void Slot_ph_ProtruSeg_Triggered();
 
     void Tool_MeasureArc();
+    void Tool_MeasureDistance();
     void Tool_MeasureGeodisic();
     void Tool_MeasureHeight();
     void Tool_MeasureParallel();
@@ -79,6 +83,8 @@ private slots:
     void Tool_MeasurePothole();
     void Update_PointCounts();
 private:
+    void PreviewPolygonClip();
+    void ApplyPolygonClip();
     // 焊前装配阶差/间隙的共同流程(§7): 选两件 → 定接缝区域 → 看 Z 均值 → 设 R 与方向 → 后台计算
     // 口径(2026-09 统一): 阶差 = 径向(e_P - e_Q, 近件在外为正); 间隙 = 沿跨缝方向(环缝=轴向)
     // 两个量由同一次配对同时得到, 只有一个入口; 结果只输出文本报告, 不做三维标注。
@@ -203,6 +209,8 @@ private:
     std::function<bool(int, int, const std::string&)> WorkerProgressCallback();
 
     pcl::visualization::PCLVisualizer::Ptr viewer;
+    std::unique_ptr<DistanceMeasureTool> m_distanceTool;
+    std::unique_ptr<PolygonClipTool> m_clipTool;
     pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZ>::Ptr renderer_custom;
     UndoRedoManager m_undoRedoManager;
     int m_undoBatchLevel = 0; // >0 时 AddPointCloud 等不单独记录 undo

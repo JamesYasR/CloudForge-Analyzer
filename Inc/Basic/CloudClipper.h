@@ -1,35 +1,37 @@
-#ifndef POLYGONCUTTOOL_H
-#define POLYGONCUTTOOL_H
+#pragma once
 
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
-#include <vtkRenderer.h>
-#include <vtkRenderWindow.h>
-#include <vtkRenderWindowInteractor.h>
-#include <vtkInteractorStyleTrackballCamera.h>
-#include <vtkPointPicker.h>
-#include <vtkAreaPicker.h>
-#include <vtkProperty.h>
-#include <vtkCallbackCommand.h>
-#include <vtkCommand.h>
-#include <vtkMath.h>
-#include <vtkCamera.h>
-#include <vtkMatrix4x4.h>
-#include <iostream>
+#include <array>
+#include <functional>
+#include <string>
 #include <vector>
-#include <map>
 
-// 前置声明
-namespace pcl {
-    template <typename PointT>
-    class PointCloud;
-}
+class CloudClipper
+{
+public:
+    using Cloud = pcl::PointCloud<pcl::PointXYZ>;
+    using Point2D = std::array<double, 2>;
+    struct Projection {
+        std::array<double, 16> matrix{};
+        std::array<double, 4> viewport{0, 0, 1, 1};
+        bool operator==(const Projection& other) const { return matrix == other.matrix && viewport == other.viewport; }
+    };
+    struct Request {
+        Cloud::ConstPtr cloud;
+        std::vector<Point2D> polygon;
+        Projection projection;
+    };
+    struct Result {
+        Cloud::Ptr inside{new Cloud};
+        Cloud::Ptr outside{new Cloud};
+        bool success = false;
+        bool cancelled = false;
+        std::string error;
+    };
+    using ProgressCallback = std::function<bool(int, int, const std::string&)>;
 
-// 点云类型定义
-typedef pcl::PointXYZ PointT;
-typedef pcl::PointCloud<PointT> PointCloudT;
-
-// 函数声明
-void interactivePolygonCut(PointCloudT::Ptr cloud);
-
-#endif // POLYGONCUTTOOL_H
+    static std::string validatePolygon(const std::vector<Point2D>& polygon);
+    static bool contains(const std::vector<Point2D>& polygon, const Point2D& point);
+    static Result compute(const Request& request, const ProgressCallback& progress = {});
+};
