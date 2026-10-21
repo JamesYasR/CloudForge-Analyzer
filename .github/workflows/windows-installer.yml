@@ -6,17 +6,25 @@ name: build-windows-installer
 # 日常 push 不触发，避免每次提交都全量编译 PCL/VTK/Qt。
 on:
   workflow_dispatch:
+    inputs:
+      cache_only:
+        description: 'Verify dependency cache: fail instead of building missing packages'
+        type: boolean
+        default: false
   push:
     tags:
       - "v*"
 
 permissions:
   contents: read
-  actions: write # x-gha 二进制缓存需要 cache/actions 权限
+  actions: write # 保存依赖二进制缓存
 
 env:
   VCPKG_ROOT: ${{ github.workspace }}/vcpkg
   VCPKG_DEFAULT_TRIPLET: x64-windows
+  VCPKG_DEFAULT_HOST_TRIPLET: x64-windows
+  # PowerShell/CMake/Ninja 的版本参与 ABI；使用 baseline 固定工具，避免镜像更新使缓存失效。
+  VCPKG_FORCE_DOWNLOADED_BINARIES: '1'
   # 用本地文件二进制缓存配合 actions/cache；不依赖已失效的 x-gha provider。
   VCPKG_BINARY_SOURCES: "clear;files,${{ github.workspace }}/vcpkg-bincache,readwrite"
   # 限制 vcpkg 并行编译数，避免 Windows runner 内存不足
@@ -28,7 +36,7 @@ env:
 
 jobs:
   build-windows-installer:
-    runs-on: windows-latest
+    runs-on: windows-2025-vs2026
     # GitHub Actions 普通 job 上限为 360 分钟；首次全量编译依赖较慢，
     # 之后依靠文件二进制缓存加速。
     timeout-minutes: 360
@@ -56,58 +64,48 @@ jobs:
           & "$env:GITHUB_WORKSPACE/.github/scripts/patch-msys.ps1" -VcpkgRoot $env:VCPKG_ROOT
           .\bootstrap-vcpkg.bat -disableMetrics
 
+      - name: Select pinned dependency toolchain
+        id: toolchain
+        shell: pwsh
+        run: ./.github/scripts/ci-toolchain.ps1
+
       - name: Restore vcpkg binary cache
         id: vcpkg-cache
         uses: actions/cache/restore@v4
         with:
           path: ${{ github.workspace }}/vcpkg-bincache
-          key: vcpkg-${{ runner.os }}-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'vcpkg-ports/**', 'vcpkg-triplets/**', '.github/scripts/**') }}-${{ github.run_id }}-${{ github.run_attempt }}
+          key: vcpkg-v2-windows2025-${{ steps.toolchain.outputs.fingerprint }}-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'vcpkg-ports/**', 'vcpkg-triplets/**', '.github/scripts/patch-msys.ps1', '.github/scripts/msys-packages.json') }}
           restore-keys: |
-            vcpkg-${{ runner.os }}-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'vcpkg-ports/**', 'vcpkg-triplets/**', '.github/scripts/**') }}-
-            vcpkg-${{ runner.os }}-
+            vcpkg-v2-windows2025-${{ steps.toolchain.outputs.fingerprint }}-
 
       - name: Install dependencies (vcpkg install)
+        id: dependencies
         shell: pwsh
-        run: |
-          cd "$env:GITHUB_WORKSPACE"
-          New-Item -ItemType Directory -Force -Path "$env:GITHUB_WORKSPACE/vcpkg-bincache" | Out-Null
-          # 详细日志：输出到 vcpkg-install.log，失败时打印关键错误段
-          & "$env:VCPKG_ROOT\vcpkg.exe" install `
-            --triplet "$env:VCPKG_DEFAULT_TRIPLET" `
-            --x-install-root "$env:VCPKG_INSTALLED_DIR" 2>&1 | Tee-Object -FilePath "$env:GITHUB_WORKSPACE\vcpkg-install.log"
-          $code = $LASTEXITCODE
-          Write-Host "=== vcpkg install exit code: $code ==="
-          if ($code -ne 0) {
-            Write-Host "===== 最近的错误日志 (倒数 60 行) ====="
-            Get-Content "$env:GITHUB_WORKSPACE\vcpkg-install.log" -Tail 60 | ForEach-Object { Write-Host $_ }
-            Write-Host "===== 找 error/FAILED 关键行 ====="
-            Select-String -Path "$env:GITHUB_WORKSPACE\vcpkg-install.log" -Pattern "error:|FAILED:|Download failed|BUILD_FAILED|CMake Error" | Select-Object -Last 20 | ForEach-Object { Write-Host $_.Line }
-            Write-Host "===== vcpkg buildtrees 详细日志 (最近修改的 out/err log 各尾 150 行) ====="
-            Get-ChildItem "$env:VCPKG_ROOT\buildtrees" -Recurse -Include *-out.log,*-err.log -ErrorAction SilentlyContinue |
-              Sort-Object LastWriteTime -Descending |
-              Select-Object -First 8 |
-              ForEach-Object {
-                Write-Host "--- $($_.FullName) ---"
-                Get-Content $_.FullName -Tail 150 -ErrorAction SilentlyContinue | ForEach-Object { Write-Host $_ }
-              }
-            exit $code
-          }
+        env:
+          CACHE_ONLY: ${{ inputs.cache_only || false }}
+        run: ./.github/scripts/install-ci-dependencies.ps1 -CacheOnly:($env:CACHE_ONLY -eq 'true')
 
-      # Persist completed ports even if a later dependency fails.
+      # Only publish a complete dependency cache, and avoid duplicate snapshots
+      # when the exact key was already restored.
       - name: Save vcpkg binary cache
-        if: always() && steps.vcpkg-cache.outputs.cache-primary-key != ''
+        if: steps.dependencies.outcome == 'success' && steps.vcpkg-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
         with:
           path: ${{ github.workspace }}/vcpkg-bincache
           key: ${{ steps.vcpkg-cache.outputs.cache-primary-key }}
 
-      - name: Upload vcpkg install log on failure
-        if: failure()
+      - name: Upload dependency cache diagnostics
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: vcpkg-install-log
-          path: ${{ github.workspace }}/vcpkg-install.log
+          name: dependency-cache-diagnostics
+          path: |
+            ${{ github.workspace }}/ci-diagnostics/
+            ${{ github.workspace }}/vcpkg-install.log
+            ${{ github.workspace }}/vcpkg/buildtrees/**/vcpkg_abi_info.txt
+            ${{ github.workspace }}/vcpkg/buildtrees/**/*vcpkg_abi_info.txt
           if-no-files-found: warn
+          retention-days: 14
 
       # ---------------------------------------------------------------
       # 3. 校验安装出的 VTK 是官方 9.3.0，而不是 ParaView 补丁版 pv5.12.1
@@ -131,9 +129,13 @@ jobs:
       - name: Configure CMake (MSVC x64 Release)
         shell: pwsh
         run: |
-          # runner 已升级到 VS 18 (Enterprise)，不再硬编码 VS17 2022，避免 generator 找不到实例。
+          # 与依赖使用同一 v143 工具集和 Windows SDK。
           cmake -S . -B build `
+            -G "Visual Studio 18 2026" `
             -A x64 `
+            -T "v143,version=14.44.35207" `
+            -DCMAKE_SYSTEM_VERSION=10.0.26100.0 `
+            -DVCPKG_MANIFEST_INSTALL=OFF `
             -DCMAKE_BUILD_TYPE=Release `
             -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" `
             -DVCPKG_INSTALLED_DIR="$env:VCPKG_INSTALLED_DIR" `

@@ -15,3 +15,8 @@ set(VCPKG_CONCURRENCY 16)
 
 # 同时声明 max concurrency，供 vcpkg 工具读取。
 set(VCPKG_MAX_CONCURRENCY 16)
+
+# CI 依赖与应用使用同一已安装工具集，禁止镜像升级时静默改选编译器/SDK。
+set(VCPKG_PLATFORM_TOOLSET v143)
+set(VCPKG_PLATFORM_TOOLSET_VERSION 14.44.35207)
+set(VCPKG_CMAKE_SYSTEM_VERSION 10.0.26100.0)
