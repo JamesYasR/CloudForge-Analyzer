@@ -45,24 +45,28 @@ void MeasurementPresentation::hideSource(const QString& group,vtkActor* source)
         found->second.owners.insert(group);source->VisibilityOff();
     }
 }
-void MeasurementPresentation::addCurve(const QString& group,vtkSmartPointer<vtkActor> actor)
+void MeasurementPresentation::addCurve(const QString& group,vtkSmartPointer<vtkActor> actor,bool outline)
 {
     if (!actor || !renderer_->GetRenderWindow()) return;
     auto window=renderer_->GetRenderWindow();
     if (!foreground_) {
-        originalLayers_=window->GetNumberOfLayers();foreground_=vtkSmartPointer<vtkRenderer>::New();
-        foreground_->SetLayer(originalLayers_);window->SetNumberOfLayers(originalLayers_+1);
-        foreground_->SetActiveCamera(renderer_->GetActiveCamera());foreground_->InteractiveOff();
-        foreground_->SetPreserveDepthBuffer(0);foreground_->SetPreserveColorBuffer(1);window->AddRenderer(foreground_);
+        originalLayers_=window->GetNumberOfLayers();window->SetNumberOfLayers(originalLayers_+2);
+        foregroundOutline_=vtkSmartPointer<vtkRenderer>::New();foreground_=vtkSmartPointer<vtkRenderer>::New();
+        int layer=originalLayers_;
+        for (auto renderer:{foregroundOutline_,foreground_}) {
+            renderer->SetLayer(layer++);renderer->SetActiveCamera(renderer_->GetActiveCamera());renderer->InteractiveOff();
+            renderer->SetPreserveDepthBuffer(0);renderer->SetPreserveColorBuffer(1);window->AddRenderer(renderer);
+        }
     }
     actor->PickableOff();actor->UseBoundsOff();actor->GetProperty()->LightingOff();
-    foreground_->AddActor(actor);groups_[group].foreground.push_back(actor);
+    actor->GetProperty()->SetLineWidth(actor->GetProperty()->GetLineWidth()*legend_->parentWidget()->devicePixelRatioF());
+    (outline ? foregroundOutline_:foreground_)->AddActor(actor);groups_[group].foreground.push_back(actor);
 }
 void MeasurementPresentation::releaseForeground()
 {
     if (!foreground_) return;
     for (const auto& group:groups_) if (!group.second.foreground.empty()) return;
-    auto window=renderer_->GetRenderWindow();window->RemoveRenderer(foreground_);foreground_=nullptr;
+    auto window=renderer_->GetRenderWindow();window->RemoveRenderer(foreground_);window->RemoveRenderer(foregroundOutline_);foreground_=foregroundOutline_=nullptr;
     int layers=originalLayers_;auto renderers=window->GetRenderers();renderers->InitTraversal();
     while (auto renderer=renderers->GetNextItem()) layers=std::max(layers,renderer->GetLayer()+1);
     window->SetNumberOfLayers(layers);
@@ -126,7 +130,7 @@ void MeasurementPresentation::clear(const QString& group)
     auto found=groups_.find(group);if (found==groups_.end()) return;
     for (auto& actor:found->second.heatmaps) renderer_->RemoveActor(actor);
     for (auto& actor:found->second.geometry) renderer_->RemoveActor(actor);
-    for (auto& actor:found->second.foreground) if (foreground_) foreground_->RemoveActor(actor);
+    for (auto& actor:found->second.foreground) if (foreground_) { foreground_->RemoveActor(actor);foregroundOutline_->RemoveActor(actor); }
     for (const auto& id:found->second.legends) legend_->removeEntry(id);
     results_->removeSection(group);restoreContext(group);groups_.erase(found);releaseForeground();updateAnnotations();
 }
@@ -140,7 +144,7 @@ void MeasurementPresentation::clearGeometry()
 {
     for (auto& group:groups_) {
         for (auto& actor:group.second.geometry) renderer_->RemoveActor(actor);
-        for (auto& actor:group.second.foreground) if (foreground_) foreground_->RemoveActor(actor);
+        for (auto& actor:group.second.foreground) if (foreground_) { foreground_->RemoveActor(actor);foregroundOutline_->RemoveActor(actor); }
         group.second.foreground.clear();group.second.geometry.clear();group.second.annotations.clear();results_->removeSection(group.first);
     }
     annotations_->clear();releaseForeground();

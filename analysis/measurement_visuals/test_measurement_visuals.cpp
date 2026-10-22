@@ -1,5 +1,10 @@
 #include "CloudForgeAnalyzer.h"
 #include "Basic/MeasurementPresentation.h"
+#include "Basic/ArcMeasurementTool.h"
+#include "Basic/ViewportPointPicker.h"
+#include <QDockWidget>
+#include <QMouseEvent>
+#include <QKeyEvent>
 #include "Basic/ViewportResultOverlay.h"
 #include "Basic/WeldPreparationOverlay.h"
 #include "Dialog/ParamDialogMeasureWeldHeight.h"
@@ -146,8 +151,75 @@ static void pitsTest()
     check(unchanged,"pit measurements and heatmap colors remain unchanged by UI");
     main.close();pump();
 }
+
+static void clickPoint(QWidget* view,vtkRenderer* renderer,const Eigen::Vector3d& point)
+{
+    renderer->SetWorldPoint(point.x(),point.y(),point.z(),1);renderer->WorldToDisplay();auto p=renderer->GetDisplayPoint();
+    auto window=renderer->GetRenderWindow();const auto size=window->GetSize();
+    const QPointF pos(p[0]*view->width()/size[0],(1-p[1]/size[1])*view->height());
+    QMouseEvent down(QEvent::MouseButtonPress,pos,view->mapToGlobal(pos.toPoint()),Qt::LeftButton,Qt::LeftButton,Qt::NoModifier);
+    QMouseEvent up(QEvent::MouseButtonRelease,pos,view->mapToGlobal(pos.toPoint()),Qt::LeftButton,Qt::NoButton,Qt::NoModifier);
+    QApplication::sendEvent(view,&down);QApplication::sendEvent(view,&up);pump(140);
+}
+static void arcsTest()
+{
+    auto cylinderCloud=pcl::make_shared<pcl::PointCloud<pcl::PointXYZ>>();
+    for(int z=-5;z<=5;++z) for(int i=0;i<=120;++i) { const double a=-.6+i*.01;cylinderCloud->emplace_back(100*std::cos(a),100*std::sin(a),z); }
+    auto cylinder=pcl::make_shared<pcl::ModelCoefficients>();cylinder->values={0,0,0,0,0,1,100};
+    MeasureArc::ArcParams params;params.method=MeasureArc::BSPLINE_LSQ;
+    MeasureArc baseline(cylinderCloud,cylinder,nullptr,params);baseline.compute();
+    check(baseline.success && std::abs(baseline.arcLength-120)<.3,"unchanged B spline algorithm measures analytic 120 mm arc");
+    const auto sourcePositions=baseline.m_fittedPoints2D;
+    params.method=MeasureArc::CARDINAL_SPLINE;MeasureArc cardinal(cylinderCloud,cylinder,nullptr,params);cardinal.compute();
+    check(cardinal.success && cardinal.arcLength>119 && cardinal.arcLength<130,"Cardinal calculation remains available with original defaults");
+    CloudForgeAnalyzer main;main.resize(1500,950);main.show();pump();main.ClearAllPointCloud();main.AddPointCloud("cylinder_surface",cylinderCloud,ColorManager(210,220,230));main.cylinderResultsMap["C001"]=cylinder;
+    auto view=main.ui->winOfAnalyzer;auto renderer=view->renderWindow()->GetRenderers()->GetFirstRenderer();auto camera=renderer->GetActiveCamera();auto style=view->interactor()->GetInteractorStyle();
+    camera->SetPosition(400,0,60);camera->SetFocalPoint(95,0,0);camera->SetViewUp(0,0,1);camera->ParallelProjectionOn();camera->SetParallelScale(70);renderer->ResetCameraClippingRange();view->renderWindow()->Render();
+    main.ui->measure_cylinder->trigger();pump();camera->SetParallelScale(std::max(70.0,70.0*view->height()/std::max(1,view->width())));renderer->ResetCameraClippingRange();view->renderWindow()->Render();auto tool=main.m_arcTool.get();
+    check(tool->isActive() && !tool->isGeodesic() && tool->dock_->isVisible() && !QApplication::activeModalWidget(),"cylinder settings open as native dock without nested dialogs");
+    MeasureArc::ArcParams selected;double radius=0;check(tool->parameters(selected,radius) && selected.method==MeasureArc::BSPLINE_LSQ && selected.downsampleTargetSize==30 && selected.bsplineControlPoints==15 && radius==0,"initial method and all original defaults are retained");
+    check(tool->advanced_->isVisible() && tool->fields_[7]->isHidden(),"all cylinder parameters are visible without collapsed settings");pump();check(tool->fields_[4]->isVisible() && !tool->fields_[2]->isVisible(),"all active spline parameters are directly accessible");
+    tool->method_->setCurrentIndex(0);check(tool->fields_[2]->isVisible() && !tool->fields_[4]->isVisible(),"Cardinal settings follow native method selector");tool->method_->setCurrentIndex(1);
+    tool->measure_->click();waitTask(main);auto display=main.m_presentation.get();
+    check(display->groups_.count("cylinder_arc") && !tool->isBusy(),"middle-section measurement finishes through new dock");
+    if (!display->groups_.count("cylinder_arc")) { main.close();return; }
+    auto& group=display->groups_.at("cylinder_arc");
+    check(group.foreground.size()==2 && group.annotations.size()==1 && group.annotations[0].endpoints.size()==2,"arc has halo, label and endpoint indicators");
+    check(group.annotations[0].title.contains(QString::number(baseline.arcLength,'f',3)),"displayed arc value matches original computation");
+    check(display->foreground_->GetActiveCamera()==camera && !display->foreground_->GetPreserveDepthBuffer() && group.foreground.back()->GetProperty()->GetLineWidth()>=5*view->devicePixelRatioF(),"curve stays visible over geometry and scales with desktop DPI");
+    double pose[3];camera->GetPosition(pose);main.VisualizeArcMeasurement(baseline.getVisualizationActor(),baseline.arcLength);pump();
+    check(sourcePositions==baseline.m_fittedPoints2D && std::equal(pose,pose+3,camera->GetPosition()) && style==view->interactor()->GetInteractorStyle(),"curve styling preserves fitted geometry camera and interaction");
+    pump();const auto arcImage=view->grab().toImage();auto arcData=display->groups_.at("cylinder_arc").foreground.back()->GetMapper()->GetInput();const auto rwsize=view->renderWindow()->GetSize();int bright=0;
+    for(vtkIdType i=10;i<80;i+=5) { double p[3];arcData->GetPoint(i,p);renderer->SetWorldPoint(p[0],p[1],p[2],1);renderer->WorldToDisplay();auto d=renderer->GetDisplayPoint();const int x=qRound(d[0]*arcImage.width()/rwsize[0]),y=qRound((1-d[1]/rwsize[1])*arcImage.height());bool found=false;for(int dx=-3;dx<=3;++dx) for(int dy=-3;dy<=3;++dy) if(arcImage.rect().contains(x+dx,y+dy)) { auto c=arcImage.pixelColor(x+dx,y+dy);found |= c.green()>185 && c.blue()>220 && c.red()<150; }bright+=found; }
+    check(bright>=12,"bright cyan curve remains visible along its actual projected path");capture(main,"arc_cylinder");tool->dock_->setFloating(true);pump();check(tool->dock_->isFloating(),"arc settings can float using native dock behavior");tool->dock_->setFloating(false);pump();
+    tool->position_->setCurrentIndex(1);tool->measure_->click();pump();check(tool->isPicking() && main.m_pointPicker->isSelecting(),"manual section uses the shared distance point picker");
+    clickPoint(view,renderer,Eigen::Vector3d(100,0,0));waitTask(main);check(!tool->isBusy() && !main.m_pointPicker->isSelecting() && display->groups_.count("cylinder_arc"),"single point section selection measures without changing interactor");
+    tool->measure_->click();pump();QKeyEvent escape(QEvent::KeyPress,Qt::Key_Escape,Qt::NoModifier);QApplication::sendEvent(view,&escape);pump();check(!tool->isBusy() && tool->isActive(),"Escape cancels point selection and restores usable settings");
+    tool->stop();pump();check(display->groups_.count("cylinder_arc") && !tool->isActive(),"closing panel keeps completed arc result");main.cleanArcMeasurement();pump();check(!display->foreground_ && !display->groups_.count("cylinder_arc"),"arc cleanup releases foreground renderer and labels");
+    main.ui->measure_cylinder->trigger();pump();tool->position_->setCurrentIndex(0);tool->measure_->click();tool->stop();waitTask(main);check(!display->groups_.count("cylinder_arc"),"closing during calculation discards late results");
+    tool->start(false,{"first","second"},{"C001","C002"});check(tool->cloud_->currentIndex()==-1 && tool->reference_->currentIndex()==-1 && !tool->measure_->isEnabled(),"multiple inputs require explicit selection without name heuristics");tool->stop();
+    main.ClearAllPointCloud();auto plane=pcl::make_shared<pcl::PointCloud<pcl::PointXYZ>>();for(int x=-20;x<=20;++x) for(int y=-10;y<=10;++y) plane->emplace_back(x,y,0);
+    main.AddPointCloud("plane",plane,ColorManager(200,220,230));GeodesicArcMeasurer geodesic(plane,3);auto path=geodesic.measureArcLength(pcl::PointXYZ(-20,0,0),pcl::PointXYZ(20,0,0));
+    check(path.success && std::abs(path.arc_length-40)<1e-6,"unchanged geodesic algorithm measures 40 mm planar path");
+    camera->SetPosition(0,0,100);camera->SetFocalPoint(0,0,0);camera->SetViewUp(0,1,0);camera->SetParallelScale(30);renderer->ResetCameraClippingRange();view->renderWindow()->Render();
+    main.ui->measure_geodisic->trigger();pump();camera->SetParallelScale(std::max(30.0,25.0*view->height()/std::max(1,view->width())));renderer->ResetCameraClippingRange();view->renderWindow()->Render();tool->fields_[7]->setText("3");
+    check(tool->isGeodesic() && tool->fields_[7]->isVisible() && tool->reference_->isHidden() && tool->advanced_->isHidden(),"geodesic dock shows source and original neighborhood setting only");capture(main,"arc_geodesic_parameters");
+    tool->measure_->click();pump();clickPoint(view,renderer,Eigen::Vector3d(-20,0,0));clickPoint(view,renderer,Eigen::Vector3d(20,0,0));waitTask(main);
+    check(display->groups_.count("geodesic_arc") && !tool->isBusy(),"two point desktop selection completes geodesic measurement");
+    if(display->groups_.count("geodesic_arc")) {
+        auto& geo=display->groups_.at("geodesic_arc");check(geo.annotations[0].title.contains("40.000") && geo.foreground.size()==2,"geodesic value has matching bright curve and rectangular callout");
+        main.VisualizeGeodesicMeasurement(geodesic,path);auto data=display->groups_.at("geodesic_arc").foreground.back()->GetMapper()->GetInput();bool exact=data->GetNumberOfPoints()==static_cast<vtkIdType>(path.path_points.size());
+        for(vtkIdType i=0;i<data->GetNumberOfPoints();++i) { double p[3];data->GetPoint(i,p);exact &= (Eigen::Vector3d(p[0],p[1],p[2])-path.path_points[i].cast<double>()).norm()<1e-5; }check(exact,"all rendered geodesic points retain original path coordinates");capture(main,"arc_geodesic");
+        main.ui->action_ed_clean2DActor->trigger();pump();check(display->annotations_->isHidden() && display->groups_.at("geodesic_arc").foreground.size()==2,"2D cleanup removes Qt labels without losing arc curves");
+        tool->clear_->click();pump();check(!display->groups_.count("geodesic_arc") && !display->foreground_,"clear result removes owned path and temporary renderer");
+    }
+    tool->measure_->click();pump();main.ui->action_ed_clean2DActor->trigger();pump();check(!tool->isBusy() && !main.m_pointPicker->isSelecting(),"cleanup during picking cancels selection without locking panel");
+    tool->measure_->click();pump();tool->stop();pump();check(!tool->isBusy() && !main.m_pointPicker->isSelecting(),"closing during picking restores normal interaction");
+    main.close();pump();
+}
+
 int main(int argc,char** argv)
 {
     QSurfaceFormat::setDefaultFormat(QVTKOpenGLNativeWidget::defaultFormat());QApplication app(argc,argv);app.setQuitOnLastWindowClosed(false);
-    if (argc>1 && std::string(argv[1])=="--pits") pitsTest();else weldTest();std::cout<<"pass="<<passed<<" fail="<<failed<<std::endl;return failed ? 1:0;
+    if (argc>1 && std::string(argv[1])=="--pits") pitsTest();else if(argc>1 && std::string(argv[1])=="--arcs") arcsTest();else weldTest();std::cout<<"pass="<<passed<<" fail="<<failed<<std::endl;return failed ? 1:0;
 }

@@ -13,3 +13,13 @@ Pothole desktop 2x: pass=21 fail=0
 Four-pit reference: 4 pits, local maximum 1.54914587 mm, ideal-cylinder maximum 3.14428711 mm
 Pothole parameter defaults and indices preserved
 Ellipse coordinates, measurement values and heatmap RGB unchanged by presentation
+
+Task 3 / 2026-10-22
+Build: pass, max 2 jobs, MemoryMax=8 GiB
+Arc desktop: pass=37 fail=0
+Arc desktop 2x: pass=37 fail=0
+All active arc parameters remain visible; only pothole fixed parameters are hidden
+Analytic B spline: 120.018925 mm; planar geodesic: 40.000 mm
+Projected bright-curve pixels, shared picker, floating panel, cancellation and cleanup verified
+Shared foreground change: pothole desktop and 2x each pass=21 fail=0
+Other feature regressions: not run

@@ -33,6 +33,7 @@ class ViewportResultOverlay;
 class HeightMeasureTool;
 class WeldParallelismTool;
 class MeasurementPresentation;
+class ArcMeasurementTool;
 
 class CloudForgeAnalyzer : public QMainWindow
 {
@@ -91,6 +92,9 @@ private:
     using PickedPoints = std::vector<std::array<double, 3>>;
     void PickCloudPoints(const std::string& cloudName, int count, const QString& title,
                          std::function<void(const PickedPoints&)> onPicked);
+    void OpenArcMeasurement(bool geodesic);
+    void StartArcMeasurement();
+    std::size_t m_arcRequestRevision=0;
     void RunArcMeasurement(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud,
                            pcl::ModelCoefficients::Ptr cylinder, std::shared_ptr<pcl::PointXYZ> point,
                            bool hasPoint, MeasureArc::ArcParams params);
@@ -236,6 +240,7 @@ private:
     std::unique_ptr<HeightMeasureTool> m_heightTool;
     std::unique_ptr<WeldParallelismTool> m_weldParallelTool;
     std::unique_ptr<MeasurementPresentation> m_presentation;
+    std::unique_ptr<ArcMeasurementTool> m_arcTool;
     std::string m_lastThreeStageCylinder;
     pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZ>::Ptr renderer_custom;
     UndoRedoManager m_undoRedoManager;

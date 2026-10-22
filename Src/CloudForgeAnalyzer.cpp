@@ -6,6 +6,7 @@
 #include "Basic/HeightMeasureTool.h"
 #include "Basic/WeldParallelismTool.h"
 #include "Basic/MeasurementPresentation.h"
+#include "Basic/ArcMeasurementTool.h"
 #include "Dialog/ParamDialogMeasureWeldHeight.h"
 #include <thread>
 #include <omp.h> // OpenMP 并行: MSVC(/openmp) 与 GCC(-fopenmp) 双平台兼容
@@ -48,6 +49,7 @@ CloudForgeAnalyzer::~CloudForgeAnalyzer()
     if (m_asyncFuture.isRunning()) {
         m_asyncFuture.waitForFinished();
     }
+    m_arcTool.reset();
     m_presentation.reset();
     m_weldPrepOverlay.reset();
     m_weldParallelTool.reset();
@@ -122,6 +124,24 @@ void CloudForgeAnalyzer::InitalizeRenderer() {
     connect(m_weldParallelTool.get(),&WeldParallelismTool::resultMessage,this,[this](const QString& text) {
         Update_CFmes(text.toStdString());TeEDebug(text.toStdString());
     });
+    m_arcTool=std::make_unique<ArcMeasurementTool>(ui->winOfAnalyzer);
+    ui->measure_cylinder->setCheckable(true);ui->measure_geodisic->setCheckable(true);
+    connect(m_arcTool.get(),&ArcMeasurementTool::measureRequested,this,&CloudForgeAnalyzer::StartArcMeasurement);
+    connect(m_arcTool.get(),&ArcMeasurementTool::cancelRequested,this,[this]() {
+        if (IsTaskRunning()) CancelCurrentTask();else { m_pointPicker->stop();m_arcTool->setBusy(false); }
+    });
+    connect(m_arcTool.get(),&ArcMeasurementTool::closed,this,[this]() {
+        ++m_arcRequestRevision;++m_pointSelectionRevision;disconnect(m_pointSelectionConnection);m_pointPicker->stop();
+        ui->measure_cylinder->setChecked(false);ui->measure_geodisic->setChecked(false);
+    });
+    connect(m_arcTool.get(),&ArcMeasurementTool::clearRequested,this,[this]() {
+        if (m_arcTool->isGeodesic()) cleanGeodesicVisualization();else cleanArcMeasurement();
+        ui->winOfAnalyzer->renderWindow()->Render();ui->winOfAnalyzer->update();
+    });
+    connect(m_pointPicker.get(),&ViewportPointPicker::selectionCompleted,this,[this](bool success) {
+        if (!success && m_arcTool->isActive() && m_arcTool->isPicking()) m_arcTool->setBusy(false);
+    });
+
 }
 
 void CloudForgeAnalyzer::InitalizeQWidgets() {
@@ -130,6 +150,10 @@ void CloudForgeAnalyzer::InitalizeQWidgets() {
 
 void CloudForgeAnalyzer::InitalizeConnects() {
     for (auto action : findChildren<QAction*>()) {
+        if (action!=ui->measure_cylinder && action!=ui->measure_geodisic && action!=ui->action_cancel_task
+            && action!=ui->action_ed_clean2DActor && action!=ui->action_ed_cleangeodetic) {
+            connect(action,&QAction::triggered,this,[this]() { if (m_arcTool) m_arcTool->stop(); });
+        }
         connect(action, &QAction::triggered, this, [this]() {
             ++m_pointSelectionRevision;
         });
@@ -886,147 +910,53 @@ void CloudForgeAnalyzer::FinishFitCy3(const std::shared_ptr<MeasureCylindricity:
     Update_CFmes(finalMsg + ss.str());
 }
 
-void CloudForgeAnalyzer::Tool_MeasureArc() {
+void CloudForgeAnalyzer::Tool_MeasureArc() { OpenArcMeasurement(false); }
+
+void CloudForgeAnalyzer::OpenArcMeasurement(bool geodesic)
+{
     if (IsTaskRunning()) {
-        TeEDebug(">>: 已有计算任务进行中，请等待完成或点击工具栏“取消计算”。");
-        return;
+        ui->measure_cylinder->setChecked(m_arcTool->isActive() && !m_arcTool->isGeodesic());
+        ui->measure_geodisic->setChecked(m_arcTool->isActive() && m_arcTool->isGeodesic());return;
     }
-    ChoseCloudDialog dialog(CloudMap, ColorMap, "选择被测点云");
-    if (dialog.exec() != QDialog::Accepted) {
-        TeEDebug(">>:操作取消");
-        return;
-    }
-    if (dialog.getSelectedList().empty()) {
-        TeEDebug(">>:未选择点云");
-        return;
-    }
-    const std::string cloudName = dialog.getSelectedList()[0];
-    pcl::PointCloud<pcl::PointXYZ>::Ptr Cloud_Temp = CloudMap[cloudName];
+    if (m_arcTool->isActive() && m_arcTool->isGeodesic()==geodesic) { m_arcTool->stop();return; }
+    std::vector<std::string> clouds,cylinders;
+    for (const auto& item:CloudMap) if (item.second && !item.second->empty()) clouds.push_back(item.first);
+    for (const auto& item:cylinderResultsMap) if (item.second && item.second->values.size()==7) cylinders.push_back(item.first);
+    const bool started=m_arcTool->start(geodesic,clouds,cylinders);
+    ui->measure_cylinder->setChecked(started && !geodesic);ui->measure_geodisic->setChecked(started && geodesic);
+    if (!started) TeEDebug("不可测: 当前没有可用点云");
+}
 
-    ChoseCyDialog dialog1(cylinderResultsMap);
-    if (dialog1.getSelectedList().empty()) {
-        return;
-    }
-    pcl::ModelCoefficients::Ptr cy_Temp = cylinderResultsMap[dialog1.getSelectedList()[0]];
-
-    qDebug() << "===== 圆柱参数验证 =====";
-    qDebug() << QString("轴线点: (%1, %2, %3)")
-        .arg(cy_Temp->values[0])
-        .arg(cy_Temp->values[1])
-        .arg(cy_Temp->values[2]);
-
-    Eigen::Vector3f axis_dir(cy_Temp->values[3], cy_Temp->values[4], cy_Temp->values[5]);
-    float norm = axis_dir.norm();
-    qDebug() << "轴线方向向量模长:" << norm;
-
-    if (norm < 0.001f) {
-        TeEDebug("Error: 圆柱轴线方向向量模长过小，拟合可能有问题");
-        return;
-    }
-
-    qDebug() << "圆柱半径:" << cy_Temp->values[6];
-    qDebug() << "点云点数:" << Cloud_Temp->size();
-
-	MeasureArc::FitMethod fitMethod = MeasureArc::BSPLINE_LSQ;
-    // 手动拾取的测量位置点: 用 shared_ptr 承载, 供工作线程期间保持生命周期
-    auto interestPointPtr = std::make_shared<pcl::PointXYZ>();
-    bool hasInterestPoint = false;
-
-    OptionBox box({ "Cardinal样条(插值)", "B样条逼近(平滑)" }, nullptr);
-    box.setTitle("选择拟合方法");
-    box.setMessage("请选择曲线拟合方法:");
-    box.setDefaultOption(1); // 默认选中第一个选项
-
-    if (box.exec() == QDialog::Accepted) {
-        int index = box.getSelectedIndex();
-        QString text = box.getSelectedText();
-
-        if (index == 0) {
-			fitMethod = MeasureArc::CARDINAL_SPLINE;
-            qDebug() << "选择了Cardinal样条";
-            TeEDebug("选择了Cardinal样条");
-        }
-        else if (index == 1) {
-			fitMethod = MeasureArc::BSPLINE_LSQ;
-            qDebug() << "选择了B样条逼近";
-            TeEDebug("选择了B样条逼近");
-        }
-    }
-    else {
-        qDebug() << "操作取消";
-    }
-
-    
-    OptionBox box1({ "测量中线", "手动选择" }, nullptr);
-    box1.setTitle("选择测量位置");
-    box1.setMessage("请选择测量位置:");
-    box1.setDefaultOption(0);
-    if (box1.exec() == QDialog::Accepted) {
-        int index = box1.getSelectedIndex();
-        QString text = box1.getSelectedText();
-
-        if (index == 0) {
-            hasInterestPoint = false;
-            qDebug() << "测量中线";
-            TeEDebug("测量中线");
-        }
-        else if (index == 1) {
-
-            qDebug() << "手动选择测量位置";
-            TeEDebug("手动选择测量位置");
-            hasInterestPoint = true;
-        }
-    }
-    else {
-        qDebug() << "操作取消";
-		TeEDebug("操作取消");
-        return;
-    }
-
-    // 拟合参数对话框在界面线程弹出(原先在 MeasureArc 构造函数里弹框)
-    MeasureArc::ArcParams arcParams;
-    arcParams.method = fitMethod;
-    if (fitMethod == MeasureArc::CARDINAL_SPLINE) {
-        ParamDialogMeaArc arcDialog;
-        if (arcDialog.exec() != QDialog::Accepted) {
-            TeEDebug(">>: 参数设置取消");
-            return;
-        }
-        bool ok1, ok2, ok3, ok4;
-        arcParams.sliceThicknessFactor = arcDialog.getParams()[0].toDouble(&ok1);
-        arcParams.integrationTolerance = arcDialog.getParams()[1].toDouble(&ok2);
-        arcParams.downsampleTargetSize = arcDialog.getParams()[2].toInt(&ok3);
-        arcParams.virtualPointExtrapolation = arcDialog.getParams()[3].toDouble(&ok4);
-        if (!ok1 || !ok2 || !ok3 || !ok4) {
-            TeEDebug(">>: 无效数字");
-            return;
-        }
-    }
-    else {
-        ParamDialogMeaArcB arcDialog;
-        if (arcDialog.exec() != QDialog::Accepted) {
-            TeEDebug(">>: 参数设置取消");
-            return;
-        }
-        bool ok1, ok2, ok3, ok4, ok5;
-        arcParams.sliceThicknessFactor = arcDialog.getParams()[0].toDouble(&ok1);
-        arcParams.integrationTolerance = arcDialog.getParams()[1].toDouble(&ok2);
-        arcParams.bsplineDegree = arcDialog.getParams()[2].toInt(&ok3);
-        arcParams.bsplineControlPoints = arcDialog.getParams()[3].toInt(&ok4);
-        arcParams.bsplineSmoothingFactor = arcDialog.getParams()[4].toDouble(&ok5);
-        if (!ok1 || !ok2 || !ok3 || !ok4 || !ok5) {
-            TeEDebug(">>: 无效数字");
-            return;
-        }
-    }
-
-    if (hasInterestPoint) {
-        PickCloudPoints(cloudName, 1, "圆柱弧长", [this, Cloud_Temp, cy_Temp, interestPointPtr, arcParams](const PickedPoints& points) {
-            *interestPointPtr = pcl::PointXYZ(points[0][0], points[0][1], points[0][2]);
-            RunArcMeasurement(Cloud_Temp, cy_Temp, interestPointPtr, true, arcParams);
+void CloudForgeAnalyzer::StartArcMeasurement()
+{
+    if (!m_arcTool->isActive() || m_arcTool->isBusy() || IsTaskRunning()) return;
+    const auto source=CloudMap.find(m_arcTool->cloudName());if (source==CloudMap.end()) return;
+    MeasureArc::ArcParams params;double radius=.5;
+    if (!m_arcTool->parameters(params,radius)) { TeEDebug("请填写有效的弧长测量参数");return; }
+    const auto cloud=source->second;const auto name=source->first;const auto revision=++m_arcRequestRevision;
+    if (m_arcTool->isGeodesic()) {
+        m_arcTool->setBusy(true,true);
+        PickCloudPoints(name,2,"测地线弧长",[this,cloud,radius,revision](const PickedPoints& points) {
+            if (revision!=m_arcRequestRevision || !m_arcTool->isActive()) return;
+            m_arcTool->setBusy(true);
+            RunGeodesicMeasurement(cloud,radius,pcl::PointXYZ(points[0][0],points[0][1],points[0][2]),pcl::PointXYZ(points[1][0],points[1][1],points[1][2]));
         });
+        if (!m_pointPicker->isSelecting()) m_arcTool->setBusy(false);
+        return;
     }
-    else RunArcMeasurement(Cloud_Temp, cy_Temp, interestPointPtr, false, arcParams);
+    const auto found=cylinderResultsMap.find(m_arcTool->cylinderName());
+    if (found==cylinderResultsMap.end() || !found->second || found->second->values.size()!=7) { TeEDebug("不可测: 参考圆柱无效");return; }
+    const auto cylinder=found->second;const auto& c=cylinder->values;
+    if (!std::all_of(c.begin(),c.end(),[](float v) { return std::isfinite(v); }) || c[6]<=0 || Eigen::Vector3f(c[3],c[4],c[5]).norm()<1e-9) { TeEDebug("不可测: 参考圆柱无效");return; }
+    auto point=std::make_shared<pcl::PointXYZ>();
+    if (m_arcTool->usesPickedPosition()) {
+        m_arcTool->setBusy(true,true);
+        PickCloudPoints(name,1,"圆柱弧长",[this,cloud,cylinder,point,params,revision](const PickedPoints& points) {
+            if (revision!=m_arcRequestRevision || !m_arcTool->isActive()) return;
+            *point=pcl::PointXYZ(points[0][0],points[0][1],points[0][2]);m_arcTool->setBusy(true);RunArcMeasurement(cloud,cylinder,point,true,params);
+        });
+        if (!m_pointPicker->isSelecting()) m_arcTool->setBusy(false);
+    } else { m_arcTool->setBusy(true);RunArcMeasurement(cloud,cylinder,point,false,params); }
 }
 
 void CloudForgeAnalyzer::RunArcMeasurement(pcl::PointCloud<pcl::PointXYZ>::Ptr Cloud_Temp,
@@ -1034,10 +964,11 @@ void CloudForgeAnalyzer::RunArcMeasurement(pcl::PointCloud<pcl::PointXYZ>::Ptr C
     bool hasInterestPoint, MeasureArc::ArcParams arcParams)
 {
     // 后台执行弧长计算(切片投影+样条拟合+积分), 完成后回到界面线程添加曲线Actor
+    const auto revision=m_arcRequestRevision;
     auto measurerHolder = std::make_shared<std::shared_ptr<MeasureArc>>();
     RunAsyncVoid("圆弧测量",
         [this, measurerHolder, Cloud_Temp, cy_Temp, interestPointPtr, hasInterestPoint, arcParams]() {
-            if (!PostProgress(0, 0, "圆弧测量: 切片投影与样条拟合...")) {
+            if (!PostProgress(0, 0, "计算弧长")) {
                 PostLog(">>: 圆弧测量已取消。");
                 return;
             }
@@ -1051,11 +982,13 @@ void CloudForgeAnalyzer::RunArcMeasurement(pcl::PointCloud<pcl::PointXYZ>::Ptr C
                 PostLog("截面弧长: " + std::to_string(m.arcLength) + " mm");
             }
             else {
-                PostLog(">>: 弧长计算失败: " + m.message);
+                PostLog("不可测: 未能计算截面弧长");
             }
             PostProgress(100, 100, "圆弧测量完成");
         },
-        [this, measurerHolder]() {
+        [this, measurerHolder,revision]() {
+    if (revision!=m_arcRequestRevision) return;
+    m_arcTool->setBusy(false);
     if (!*measurerHolder) {
         return;   // 工作线程未执行(开始前已取消)
     }
@@ -1072,45 +1005,44 @@ void CloudForgeAnalyzer::RunArcMeasurement(pcl::PointCloud<pcl::PointXYZ>::Ptr C
         if (splineActor) {
             VisualizeArcMeasurement(splineActor, measurer.arcLength);
 
-            TeEDebug(">>: 弧长曲线已成功添加到3D视图。");
 
             std::string resultMsg = "截面弧长: " + std::to_string(measurer.arcLength) + " mm";
             Update_CFmes(resultMsg);
         }
         else {
-            TeEDebug(">>: 警告：未能获取到有效的曲线可视化对象。");
+            TeEDebug("不可测: 未能显示弧长结果");
         }
     }
     else {
-        TeEDebug(">>: 弧长计算失败，无法生成可视化曲线。");
+        TeEDebug("不可测: 未能计算截面弧长");
     }
 
-    TeEDebug(measurer.message);
+
         });
 }
 
 void CloudForgeAnalyzer::cleanArcMeasurement()
 {
-    auto arc = ActorMap.find("arc_spline_result");
-    if (arc != ActorMap.end()) {
-        viewer->getRendererCollection()->GetFirstRenderer()->RemoveActor(arc->second);
-        ActorMap.erase(arc);
-    }
+    if (m_presentation) m_presentation->clear("cylinder_arc");
+    auto arc=ActorMap.find("arc_spline_result");
+    if (arc!=ActorMap.end()) { viewer->getRendererCollection()->GetFirstRenderer()->RemoveActor(arc->second);ActorMap.erase(arc); }
     if (m_resultOverlay) m_resultOverlay->removeSection("cylinder_arc");
 }
 
-void CloudForgeAnalyzer::VisualizeArcMeasurement(vtkSmartPointer<vtkActor> actor, double length)
+void CloudForgeAnalyzer::VisualizeArcMeasurement(vtkSmartPointer<vtkActor> actor,double length)
 {
-    if (!actor || !std::isfinite(length) || length < 0) return;
-    actor->PickableOff();
-    AddActors("arc_spline_result", actor);
-    m_resultOverlay->setSection("cylinder_arc", {"圆柱弧长", {
-        {"截面弧长", QString::number(length, 'f', 3) + " mm", {}}
-    }});
-    ui->winOfAnalyzer->renderWindow()->Render();
-    ui->winOfAnalyzer->update();
+    if (!actor || !std::isfinite(length) || length<0) return;
+    cleanArcMeasurement();const QString group="cylinder_arc";ActorMap["arc_spline_result"]=actor;
+    auto outline=vtkSmartPointer<vtkActor>::New();outline->SetMapper(actor->GetMapper());outline->GetProperty()->SetColor(.02,.06,.08);outline->GetProperty()->SetLineWidth(9);
+    m_presentation->addCurve(group,outline,true);actor->GetProperty()->SetColor(.32,.84,1);actor->GetProperty()->SetLineWidth(5);m_presentation->addCurve(group,actor);
+    auto data=actor->GetMapper()->GetInput();
+    if (data && data->GetNumberOfPoints()>1) {
+        double first[3],last[3],middle[3];data->GetPoint(0,first);data->GetPoint(data->GetNumberOfPoints()-1,last);data->GetPoint(data->GetNumberOfPoints()/2,middle);
+        m_presentation->setAnnotations(group,{{{middle[0],middle[1],middle[2]},{{first[0],first[1],first[2]},{last[0],last[1],last[2]}},QString("截面弧长 %1 mm").arg(length,0,'f',3),"圆柱弧长",QColor("#52d6ff")}});
+    }
+    m_resultOverlay->setSection(group,{"圆柱弧长",{{"截面弧长",QString::number(length,'f',3)+" mm",{}}}});
+    ui->winOfAnalyzer->renderWindow()->Render();ui->winOfAnalyzer->update();
 }
-
 
 void CloudForgeAnalyzer::visualizeCylindricityHeatMap(
     pcl::PointCloud<pcl::PointXYZRGB>::Ptr heatmap_cloud,
@@ -1599,7 +1531,7 @@ void CloudForgeAnalyzer::VisualizePothole(MeasurePothole& measurement,const Meas
         for (int layer=0;layer<2;++layer) {
             auto actor=vtkSmartPointer<vtkActor>::New();actor->SetMapper(mapper);
             actor->GetProperty()->SetColor(layer ? color.redF():.02,layer ? color.greenF():.06,layer ? color.blueF():.08);
-            actor->GetProperty()->SetLineWidth(layer ? 4:7);m_presentation->addCurve(group,actor);
+            actor->GetProperty()->SetLineWidth(layer ? 4:7);m_presentation->addCurve(group,actor,layer==0);
         }
     }
     m_presentation->setAnnotations(group,std::move(annotations));m_presentation->softenSurfaces(group);
@@ -2358,56 +2290,19 @@ void CloudForgeAnalyzer::Update_PointCounts() {
 }
 
 
-void CloudForgeAnalyzer::Tool_MeasureGeodisic() {
-
-    if (IsTaskRunning()) {
-        TeEDebug(">>: 已有计算任务进行中，请等待完成或点击工具栏“取消计算”。");
-        return;
-    }
-    ChoseCloudDialog dialog(CloudMap, ColorMap);
-    if (dialog.exec() != QDialog::Accepted) {
-        TeEDebug(">>:操作取消");
-        return;
-    }
-    if (dialog.getSelectedList().empty()) {
-        return;
-    }
-	pcl::PointCloud<pcl::PointXYZ>::Ptr tempcloud = CloudMap[dialog.getSelectedList()[0]];
-    ParamDialogMeaGeodetic dialog2;
-    double base_radius = 0.05;
-	bool ok = false;
-    if (dialog2.exec() == QDialog::Accepted) // 如果用户点击了“确定”
-    {
-        QString param = dialog2.getParams()[0]; // 获取输入的参数
-        base_radius = param.toFloat(&ok);
-        if (!ok) {
-            qDebug() << "无效数字";
-            return;
-        }
-        qDebug() << "参数：" << param;
-    }
-    else
-    {
-        qDebug() << "取消操作";
-        return;
-    }
-    PickCloudPoints(dialog.getSelectedList()[0], 2, "测地线弧长", [this, tempcloud, base_radius](const PickedPoints& points) {
-        const pcl::PointXYZ start(points[0][0], points[0][1], points[0][2]);
-        const pcl::PointXYZ end(points[1][0], points[1][1], points[1][2]);
-        RunGeodesicMeasurement(tempcloud, base_radius, start, end);
-    });
-}
+void CloudForgeAnalyzer::Tool_MeasureGeodisic() { OpenArcMeasurement(true); }
 
 void CloudForgeAnalyzer::RunGeodesicMeasurement(pcl::PointCloud<pcl::PointXYZ>::Ptr tempcloud,
     double base_radius, pcl::PointXYZ pointstart, pcl::PointXYZ pointend)
 {
     // 交互拾取与参数收集已在界面线程完成, 计算放到后台线程(界面保持响应)
+    const auto revision=m_arcRequestRevision;
     auto measurerHolder = std::make_shared<std::shared_ptr<GeodesicArcMeasurer>>();
     auto resultPtr = std::make_shared<GeodesicArcMeasurer::MeasurementResult>();
 
     RunAsyncVoid("测地线弧长测量",
         [this, measurerHolder, resultPtr, tempcloud, base_radius, pointstart, pointend]() {
-            PostProgress(0, 0, "测地线弧长: 曲面重建与最短路径搜索...");
+            PostProgress(0, 0, "计算弧长");
             // 计算类在工作线程中构造(MLS 曲面重建耗时)并执行; 构造函数不弹对话框
             *measurerHolder = std::make_shared<GeodesicArcMeasurer>(tempcloud, base_radius);  // 基准半径0.03m
             //(*measurerHolder)->setCurvatureRadius(0.02);  // 曲率计算半径
@@ -2420,7 +2315,9 @@ void CloudForgeAnalyzer::RunGeodesicMeasurement(pcl::PointCloud<pcl::PointXYZ>::
                 PostLog(">>: 测地线弧长计算失败");
             }
         },
-        [this, measurerHolder, resultPtr]() {
+        [this, measurerHolder, resultPtr,revision]() {
+    if (revision!=m_arcRequestRevision) return;
+    m_arcTool->setBusy(false);
     if (!*measurerHolder || (m_asyncState && m_asyncState->cancelRequested.load())) return;
     const auto& result = *resultPtr;
     if (result.success) {
@@ -2435,24 +2332,22 @@ void CloudForgeAnalyzer::RunGeodesicMeasurement(pcl::PointCloud<pcl::PointXYZ>::
         });
 }
 
-void CloudForgeAnalyzer::VisualizeGeodesicMeasurement(GeodesicArcMeasurer& measurer,
-    const GeodesicArcMeasurer::MeasurementResult& result)
+void CloudForgeAnalyzer::VisualizeGeodesicMeasurement(GeodesicArcMeasurer& measurer,const GeodesicArcMeasurer::MeasurementResult& result)
 {
-    if (!result.success || !std::isfinite(result.arc_length) || result.arc_length < 0) return;
-    auto [actors3D, textActors] = measurer.createVisualizationActors(result, true, true, false, false);
-    auto renderer = viewer->getRendererCollection()->GetFirstRenderer();
-    cleanGeodesicVisualization();
-    for (auto& actor : actors3D) {
-        if (!actor) continue;
-        actor->PickableOff();
-        renderer->AddViewProp(actor);
-        m_geodesicVisualizationActors.push_back(actor);
-    }
-    m_resultOverlay->setSection("geodesic_arc", {"测地线弧长", {
-        {"曲面路径长度", QString::number(result.arc_length, 'f', 3) + " mm", {}}
-    }});
-    ui->winOfAnalyzer->renderWindow()->Render();
-    ui->winOfAnalyzer->update();
+    if (!result.success || !std::isfinite(result.arc_length) || result.arc_length<0 || result.path_points.size()<2) return;
+    cleanGeodesicVisualization();const QString group="geodesic_arc";
+    auto [surfaces,texts]=measurer.createVisualizationActors(result,true,false,false,false);
+    auto renderer=viewer->getRendererCollection()->GetFirstRenderer();
+    for (auto& prop:surfaces) { if (auto actor=vtkActor::SafeDownCast(prop)) { actor->GetProperty()->SetOpacity(.1);actor->PickableOff();actor->UseBoundsOff(); }renderer->AddViewProp(prop);m_geodesicVisualizationActors.push_back(prop); }
+    auto points=vtkSmartPointer<vtkPoints>::New();auto lines=vtkSmartPointer<vtkCellArray>::New();
+    for (const auto& point:result.path_points) points->InsertNextPoint(point.x(),point.y(),point.z());
+    lines->InsertNextCell(points->GetNumberOfPoints());for (vtkIdType i=0;i<points->GetNumberOfPoints();++i) lines->InsertCellPoint(i);
+    auto data=vtkSmartPointer<vtkPolyData>::New();data->SetPoints(points);data->SetLines(lines);auto mapper=vtkSmartPointer<vtkPolyDataMapper>::New();mapper->SetInputData(data);
+    for (int layer=0;layer<2;++layer) { auto actor=vtkSmartPointer<vtkActor>::New();actor->SetMapper(mapper);actor->GetProperty()->SetColor(layer?1:.02,layer?.82:.06,layer?.28:.08);actor->GetProperty()->SetLineWidth(layer?5:9);m_presentation->addCurve(group,actor,layer==0); }
+    const auto& first=result.path_points.front();const auto& last=result.path_points.back();const auto& middle=result.path_points[result.path_points.size()/2];
+    m_presentation->setAnnotations(group,{{{middle.x(),middle.y(),middle.z()},{{first.x(),first.y(),first.z()},{last.x(),last.y(),last.z()}},QString("曲面路径 %1 mm").arg(result.arc_length,0,'f',3),"测地线弧长",QColor("#ffd166")}});
+    m_resultOverlay->setSection(group,{"测地线弧长",{{"曲面路径长度",QString::number(result.arc_length,'f',3)+" mm",{}}}});
+    ui->winOfAnalyzer->renderWindow()->Render();ui->winOfAnalyzer->update();
 }
 
 
@@ -3352,6 +3247,7 @@ void CloudForgeAnalyzer::Slot_ed_cleangeo_Triggered() {
 }
 
 void CloudForgeAnalyzer::cleanGeodesicVisualization() {
+    if (m_presentation) m_presentation->clear("geodesic_arc");
     if (m_resultOverlay) m_resultOverlay->removeSection("geodesic_arc");
     if (m_geodesicVisualizationActors.empty()) return;
     vtkRenderer* renderer = viewer->getRendererCollection()->GetFirstRenderer();
@@ -3707,6 +3603,7 @@ void CloudForgeAnalyzer::Update_CFmes(std::string cfmes) {
 }
 
 void CloudForgeAnalyzer::AddPointCloud(std::string name, pcl::PointCloud<pcl::PointXYZ>::Ptr cloud, ColorManager color) {
+    if (m_arcTool) m_arcTool->stop();
     if (m_presentation) m_presentation->clear();
     if (m_heightTool) m_heightTool->stop();
     if (m_weldParallelTool) m_weldParallelTool->stop();
@@ -3729,6 +3626,7 @@ void CloudForgeAnalyzer::AddPointCloud(std::string name, pcl::PointCloud<pcl::Po
 }
 
 void CloudForgeAnalyzer::ClearAllPointCloudRGB() {
+    if (m_arcTool) m_arcTool->stop();
     if (m_presentation) m_presentation->clearHeatmaps();
     if (m_heightTool) m_heightTool->stop();
     if (m_weldParallelTool) m_weldParallelTool->stop();
@@ -3745,6 +3643,7 @@ void CloudForgeAnalyzer::ClearAllPointCloudRGB() {
 
 
 void CloudForgeAnalyzer::ClearAllPointCloud() {
+    if (m_arcTool) m_arcTool->stop();
     if (m_presentation) m_presentation->clear();
     if (m_heightTool) m_heightTool->stop();
     if (m_weldParallelTool) m_weldParallelTool->stop();
@@ -3768,6 +3667,7 @@ void CloudForgeAnalyzer::ClearAllPointCloud() {
 }
 
 void CloudForgeAnalyzer::DelePointCloud(std::string name) {
+    if (m_arcTool) m_arcTool->stop();
     if (m_presentation) m_presentation->clear();
     if (m_heightTool) m_heightTool->stop();
     if (m_weldParallelTool) m_weldParallelTool->stop();
@@ -3812,6 +3712,7 @@ void CloudForgeAnalyzer::endUndoBatch() {
 }
 
 void CloudForgeAnalyzer::rebuildCloudVisualization() {
+    if (m_arcTool) m_arcTool->stop();
     if (m_presentation) m_presentation->clear();
     if (m_heightTool) m_heightTool->stop();
     if (m_weldParallelTool) m_weldParallelTool->stop();

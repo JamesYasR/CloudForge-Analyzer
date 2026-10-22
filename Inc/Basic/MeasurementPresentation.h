@@ -19,7 +19,7 @@ public:
     ~MeasurementPresentation();
     void addHeatmap(const QString& group,pcl::PointCloud<pcl::PointXYZRGB>::ConstPtr cloud,vtkActor* source=nullptr);
     void hideSource(const QString& group,vtkActor* source);
-    void addCurve(const QString& group,vtkSmartPointer<vtkActor> actor);
+    void addCurve(const QString& group,vtkSmartPointer<vtkActor> actor,bool outline=false);
     void addGeometry(const QString& group,vtkSmartPointer<vtkActor> actor);
     void setAnnotations(const QString& group,std::vector<Annotation> annotations,bool append=false);
     void appendResult(const QString& group,const QString& title,ViewportResultOverlay::Row row);
@@ -43,7 +43,7 @@ private:
     void releaseForeground();
     void restoreContext(const QString& group);
     vtkRenderer* renderer_;
-    vtkSmartPointer<vtkRenderer> foreground_;
+    vtkSmartPointer<vtkRenderer> foreground_,foregroundOutline_;
     int originalLayers_=1;
     ViewportResultOverlay* results_;
     std::unique_ptr<ViewportColorLegend> legend_;
