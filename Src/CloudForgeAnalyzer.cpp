@@ -5,6 +5,7 @@
 #include "Basic/ViewportResultOverlay.h"
 #include "Basic/HeightMeasureTool.h"
 #include "Basic/WeldParallelismTool.h"
+#include "Basic/MeasurementPresentation.h"
 #include "Dialog/ParamDialogMeasureWeldHeight.h"
 #include <thread>
 #include <omp.h> // OpenMP 并行: MSVC(/openmp) 与 GCC(-fopenmp) 双平台兼容
@@ -47,6 +48,7 @@ CloudForgeAnalyzer::~CloudForgeAnalyzer()
     if (m_asyncFuture.isRunning()) {
         m_asyncFuture.waitForFinished();
     }
+    m_presentation.reset();
     m_weldPrepOverlay.reset();
     m_weldParallelTool.reset();
     m_heightTool.reset();
@@ -103,6 +105,7 @@ void CloudForgeAnalyzer::InitalizeRenderer() {
     m_resultOverlay = std::make_unique<ViewportResultOverlay>(ui->winOfAnalyzer);
     m_resultOverlay->avoidWidget(ui->winOfAnalyzer->findChild<QWidget*>("distanceMeasureHint"));
     m_weldPrepOverlay = std::make_unique<WeldPreparationOverlay>(ui->winOfAnalyzer, renderer, m_resultOverlay.get());
+    m_presentation=std::make_unique<MeasurementPresentation>(ui->winOfAnalyzer,renderer,m_resultOverlay.get());
     m_heightTool = std::make_unique<HeightMeasureTool>(ui->winOfAnalyzer, renderer, m_resultOverlay.get());
     ui->measure_height->setCheckable(true);
     connect(m_heightTool.get(), &HeightMeasureTool::activeChanged, ui->measure_height, &QAction::setChecked);
@@ -1402,155 +1405,47 @@ void CloudForgeAnalyzer::Tool_MeasureWeldHeight()
                 measurer.getHeightRange(outcome.minH, outcome.maxH);
                 outcome.maxAbsH = measurer.getMaxAbsHeight();
 
+                if (outcome.result.valid_points>0) {
+                    std::ostringstream report;report<<std::fixed<<std::setprecision(3);
+                    report<<weldName<<"\n最大余高: "<<outcome.result.highest_value<<" mm\n"
+                          <<"最小高度: "<<outcome.result.min_height<<" mm\n"
+                          <<"平均高度: "<<outcome.result.mean_height<<" mm\n"
+                          <<"最高点: ("<<outcome.result.highest_point.x<<", "<<outcome.result.highest_point.y<<", "<<outcome.result.highest_point.z<<") mm";
+                    outcome.result.assessment_message=report.str();
+                } else outcome.result.assessment_message="不可测: 未能确定焊缝与壁面的高度关系";
                 PostLog(outcome.result.assessment_message);
                 outcomes->push_back(outcome);
             }
             PostProgress(total, total, "焊缝高度测量完成");
         },
-        [this, outcomes, regionSz]() {
-    // === 6. 可视化与报告（仅在 GUI 线程执行）===
-    m_weldMeasureShapeIds.clear();
-    std::string allReports;
-    for (const auto& outcome : *outcomes) {
-        const std::string& weldName = outcome.weldName;
-        const std::string& prefix = outcome.prefix;
-        const auto& result = outcome.result;
-        auto heatmap = outcome.heatmap;
-        double minH = outcome.minH;
-        double maxH = outcome.maxH;
-        double maxAbsH = outcome.maxAbsH;
-
-        // 追踪形状 ID，供撤销时清理
-        m_weldMeasureShapeIds.push_back(prefix + "heatmap");
-        m_weldMeasureShapeIds.push_back(prefix + "sphere_high");
-        m_weldMeasureShapeIds.push_back(prefix + "text_high");
-
-        if (heatmap && !heatmap->empty()) {
-            std::string heatmap_id = prefix + "heatmap";
-
-            // 清除旧的
-            viewer->removePointCloud(heatmap_id);
-            viewer->removeShape(prefix + "colorbar");
-            viewer->removeShape(prefix + "sphere_high");
-            viewer->removeText3D(prefix + "text_high");
-
-            // 添加热力图点云
-            pcl::visualization::PointCloudColorHandlerRGBField<pcl::PointXYZRGB> rgb(heatmap);
-            viewer->addPointCloud<pcl::PointXYZRGB>(heatmap, rgb, heatmap_id);
-            viewer->setPointCloudRenderingProperties(
-                pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 3, heatmap_id);
-            RGBCloudMap.emplace(heatmap_id, heatmap);
-
-            // --- 颜色条（双方向发散）---
-            vtkRenderer* renderer = viewer->getRendererCollection()->GetFirstRenderer();
-            if (renderer) {
-                // 先清除所有旧的 vtkScalarBarActor，避免累积
-                {
-                    vtkPropCollection* props = renderer->GetViewProps();
-                    props->InitTraversal();
-                    std::vector<vtkProp*> barsToRemove;
-                    vtkProp* prop;
-                    while ((prop = props->GetNextProp()) != nullptr) {
-                        if (vtkScalarBarActor::SafeDownCast(prop)) {
-                            barsToRemove.push_back(prop);
-                        }
-                    }
-                    for (auto p : barsToRemove) {
-                        renderer->RemoveActor2D(static_cast<vtkActor2D*>(p));
-                    }
-                }
-
-                // 用 [0, 1] 正范围构建发散色表（规避 VTK 负值范围标签 bug）
-                vtkNew<vtkLookupTable> lut;
-                lut->SetTableRange(0.0, 1.0);
-                lut->SetNumberOfTableValues(256);
-
-                for (int i = 0; i < 256; ++i) {
-                    double t = i / 255.0;  // 0(蓝) → 0.5(绿) → 1(红)
-                    double r, g, b;
-                    if (t < 0.5) {
-                        double s = t * 2;
-                        r = 0.0; g = s; b = 1.0 - s;
-                    } else {
-                        double s = (t - 0.5) * 2;
-                        r = s; g = 1.0 - s; b = 0.0;
-                    }
-                    lut->SetTableValue(i, r, g, b);
-                }
-
-                // 设置标注：只在三个关键位置显示文字
-                auto fmtVal = [](double v) -> std::string {
-                    char buf[32];
-                    snprintf(buf, sizeof(buf), "%.1f", v);
-                    return std::string(buf);
-                };
-                lut->SetAnnotation(vtkVariant(0.0), fmtVal(-maxAbsH));
-                lut->SetAnnotation(vtkVariant(0.5), "0.0");
-                lut->SetAnnotation(vtkVariant(1.0), fmtVal(maxAbsH));
-                lut->Build();
-
-                vtkNew<vtkScalarBarActor> scalarBar;
-                scalarBar->SetLookupTable(lut);
-                scalarBar->SetTitle("mm");
-                scalarBar->SetMaximumNumberOfColors(256);
-                scalarBar->SetTextPosition(vtkScalarBarActor::PrecedeScalarBar);
-                scalarBar->SetDrawTickLabels(0);   // 关闭自动刻度标签，仅显示 annotations
-
-                vtkNew<vtkTextProperty> titleProp;
-                titleProp->SetFontSize(8);
-                titleProp->BoldOn();
-                titleProp->SetColor(1, 1, 1);
-                scalarBar->SetTitleTextProperty(titleProp);
-
-                vtkNew<vtkTextProperty> labelProp;
-                labelProp->SetFontSize(8);
-                labelProp->SetColor(0.9, 0.9, 0.9);
-                scalarBar->SetLabelTextProperty(labelProp);
-
-                scalarBar->SetPosition(0.87, 0.2);
-                scalarBar->SetWidth(0.06);
-                scalarBar->SetHeight(0.6);
-                scalarBar->SetPickable(0);
-                renderer->AddActor2D(scalarBar);
+        [this, outcomes]() {
+            if (m_asyncState && m_asyncState->cancelRequested.load()) return;
+            cleanWeldMeasureVisuals();
+            std::string reports;
+            for (const auto& outcome:*outcomes) {
+                VisualizeWeldHeight(outcome.weldName,outcome.result,outcome.heatmap,outcome.maxAbsH);
+                if (!reports.empty()) reports+="\n\n";
+                reports+=outcome.result.assessment_message;
             }
-
-            // --- 4b. 最高点标注 ---
-            if (result.valid_points > 0) {
-                std::string sphere_id = prefix + "sphere_high";
-                std::string text_id   = prefix + "text_high";
-
-                viewer->removeShape(sphere_id);
-                viewer->removeText3D(text_id);
-
-                const auto& hp = result.highest_point;
-                viewer->addSphere(hp, regionSz * 0.3, 1.0, 0.84, 0.0, sphere_id);
-                viewer->setShapeRenderingProperties(
-                    pcl::visualization::PCL_VISUALIZER_COLOR, 1.0, 0.84, 0.0, sphere_id);
-                viewer->setShapeRenderingProperties(
-                    pcl::visualization::PCL_VISUALIZER_OPACITY, 0.9, sphere_id);
-
-                // 3D 文字标签
-                std::string labelText = "Max: " + std::to_string(result.highest_value).substr(0, 6) + " mm";
-                viewer->addText3D(labelText,
-                    pcl::PointXYZ(hp.x + regionSz * 0.5, hp.y, hp.z + regionSz * 0.5),
-                    0.5, 1.0, 1.0, 1.0, text_id);
-            }
-
-            TeEDebug(">>: 焊缝 '" + weldName + "' 热力图与最高点标注完成");
-        }
-
-        // --- 4c. 输出报告 ---
-        TeEDebug(result.assessment_message);
-        if (!allReports.empty()) allReports += "\n\n";
-        allReports += result.assessment_message;
-    }
-    Update_CFmes(allReports);
-
-    // === 5. 刷新视图 ===
-    ui->winOfAnalyzer->renderWindow()->Render();
-    ui->winOfAnalyzer->update();
-    TeEDebug(">>: 焊缝高度测量完成。");
+            Update_CFmes(reports);
+            ui->winOfAnalyzer->renderWindow()->Render();ui->winOfAnalyzer->update();
         });
+}
+
+void CloudForgeAnalyzer::VisualizeWeldHeight(const std::string& name,const MeasureWeldHeight::AssessmentResult& result,
+    pcl::PointCloud<pcl::PointXYZRGB>::Ptr heatmap,double maximum)
+{
+    if (!heatmap || heatmap->empty() || result.valid_points<=0) return;
+    const QString group="weld_height",id="weld_height_"+QString::fromStdString(name);
+    const auto actors=viewer->getCloudActorMap();const auto source=actors->find(name);
+    m_presentation->addHeatmap(group,heatmap,source==actors->end() ? nullptr:source->second.actor.GetPointer());
+    RGBCloudMap[id.toStdString()]=heatmap;m_weldMeasureShapeIds.push_back(id.toStdString());
+    m_presentation->setLegend(group,{id,QString::fromStdString(name),-maximum,maximum,ViewportColorLegend::signedHeight()});
+    const auto& point=result.highest_point;
+    m_presentation->setAnnotations(group,{{{point.x,point.y,point.z},{},
+        QString("最大余高 %1 mm").arg(result.highest_value,0,'f',3),QString::fromStdString(name),QColor("#ffd166")}},true);
+    m_presentation->appendResult(group,"焊缝高度",{QString::fromStdString(name),QString::number(result.highest_value,'f',3)+" mm",{}});
+    m_presentation->softenSurfaces(group);
 }
 
 void CloudForgeAnalyzer::Tool_MeasurePothole()
@@ -3561,6 +3456,7 @@ void CloudForgeAnalyzer::Slot_ed_cleangeo_Triggered() {
         TeEDebug(">>: 计算进行中，为保证数据安全，暂不能执行该操作。");
         return;
     }
+    if (m_presentation) m_presentation->clearGeometry();
     if (m_heightTool) m_heightTool->stop();
     if (m_weldParallelTool) m_weldParallelTool->stop();
     cleanGeodesicVisualization();
@@ -3652,6 +3548,7 @@ void CloudForgeAnalyzer::Slot_ed_clean2DActor_Triggered() {
         TeEDebug(">>: 计算进行中，为保证数据安全，暂不能执行该操作。");
         return;
     }
+    if (m_presentation) m_presentation->clearAnnotations();
     if (m_weldParallelTool) m_weldParallelTool->clearAnnotations();
     if (m_resultOverlay) m_resultOverlay->clear();
     if (m_weldPrepOverlay) m_weldPrepOverlay->clear();
@@ -3929,6 +3826,7 @@ void CloudForgeAnalyzer::Update_CFmes(std::string cfmes) {
 }
 
 void CloudForgeAnalyzer::AddPointCloud(std::string name, pcl::PointCloud<pcl::PointXYZ>::Ptr cloud, ColorManager color) {
+    if (m_presentation) m_presentation->clear();
     if (m_heightTool) m_heightTool->stop();
     if (m_weldParallelTool) m_weldParallelTool->stop();
     cleanGeodesicVisualization();
@@ -3950,6 +3848,7 @@ void CloudForgeAnalyzer::AddPointCloud(std::string name, pcl::PointCloud<pcl::Po
 }
 
 void CloudForgeAnalyzer::ClearAllPointCloudRGB() {
+    if (m_presentation) m_presentation->clearHeatmaps();
     if (m_heightTool) m_heightTool->stop();
     if (m_weldParallelTool) m_weldParallelTool->stop();
     if (m_clipTool) m_clipTool->stop();
@@ -3965,6 +3864,7 @@ void CloudForgeAnalyzer::ClearAllPointCloudRGB() {
 
 
 void CloudForgeAnalyzer::ClearAllPointCloud() {
+    if (m_presentation) m_presentation->clear();
     if (m_heightTool) m_heightTool->stop();
     if (m_weldParallelTool) m_weldParallelTool->stop();
     cleanGeodesicVisualization();
@@ -3987,6 +3887,7 @@ void CloudForgeAnalyzer::ClearAllPointCloud() {
 }
 
 void CloudForgeAnalyzer::DelePointCloud(std::string name) {
+    if (m_presentation) m_presentation->clear();
     if (m_heightTool) m_heightTool->stop();
     if (m_weldParallelTool) m_weldParallelTool->stop();
     cleanGeodesicVisualization();
@@ -4030,6 +3931,7 @@ void CloudForgeAnalyzer::endUndoBatch() {
 }
 
 void CloudForgeAnalyzer::rebuildCloudVisualization() {
+    if (m_presentation) m_presentation->clear();
     if (m_heightTool) m_heightTool->stop();
     if (m_weldParallelTool) m_weldParallelTool->stop();
     cleanGeodesicVisualization();
@@ -4052,6 +3954,7 @@ void CloudForgeAnalyzer::rebuildCloudVisualization() {
 
 void CloudForgeAnalyzer::cleanWeldMeasureVisuals()
 {
+    if (m_presentation) m_presentation->clear("weld_height");
     // 清理 PCL 管理的形状（球体、文字、热力图点云）
     for (const auto& id : m_weldMeasureShapeIds) {
         viewer->removeShape(id);

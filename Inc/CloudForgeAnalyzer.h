@@ -32,6 +32,7 @@ class WeldPreparationOverlay;
 class ViewportResultOverlay;
 class HeightMeasureTool;
 class WeldParallelismTool;
+class MeasurementPresentation;
 
 class CloudForgeAnalyzer : public QMainWindow
 {
@@ -234,6 +235,7 @@ private:
     std::unique_ptr<PolygonClipTool> m_clipTool;
     std::unique_ptr<HeightMeasureTool> m_heightTool;
     std::unique_ptr<WeldParallelismTool> m_weldParallelTool;
+    std::unique_ptr<MeasurementPresentation> m_presentation;
     std::string m_lastThreeStageCylinder;
     pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZ>::Ptr renderer_custom;
     UndoRedoManager m_undoRedoManager;
@@ -251,6 +253,8 @@ private:
     // 焊缝高度测量形状追踪（用于撤销时清理）
     std::vector<std::string> m_weldMeasureShapeIds;
     void cleanWeldMeasureVisuals();
+    void VisualizeWeldHeight(const std::string& name,const MeasureWeldHeight::AssessmentResult& result,
+        pcl::PointCloud<pcl::PointXYZRGB>::Ptr heatmap,double maximum);
 
     void cleanGeodesicVisualization();
     void AddLine(const std::string& name,
