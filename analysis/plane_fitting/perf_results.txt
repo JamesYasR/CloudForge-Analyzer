@@ -1,0 +1,17 @@
+2026-10-22, baseline abcb29d, Linux Debug, OMP_NUM_THREADS=2, taskset 0-1
+N=2500 radius=0.000 spacing=0.500 spike=0.000 avg_neighbors=1.000 copy_ms=0.023 detect_ms=0.037 global_ransac_ms=1.844 global_with_original_extract_ms=9.691 linear_extract_ms=0.024 anomaly=0 inliers=2500 outliers=0 equivalent_counts=1
+wall_s=0.02 max_rss_kib=38312
+N=10000 radius=0.000 spacing=0.500 spike=0.000 avg_neighbors=1.000 copy_ms=0.131 detect_ms=0.142 global_ransac_ms=7.038 global_with_original_extract_ms=132.813 linear_extract_ms=0.084 anomaly=0 inliers=10000 outliers=0 equivalent_counts=1
+wall_s=0.15 max_rss_kib=38464
+N=40000 radius=0.000 spacing=0.500 spike=0.000 avg_neighbors=1.000 copy_ms=0.476 detect_ms=0.552 global_ransac_ms=28.197 global_with_original_extract_ms=1672.754 linear_extract_ms=0.331 anomaly=0 inliers=40000 outliers=0 equivalent_counts=1
+wall_s=1.73 max_rss_kib=41916
+N=10000 radius=5.000 spacing=0.500 spike=0.000 avg_neighbors=278.508 copy_ms=0.109 detect_ms=4173.372 global_ransac_ms=5.731 global_with_original_extract_ms=107.059 linear_extract_ms=0.084 anomaly=0 inliers=10000 outliers=0 equivalent_counts=1
+wall_s=4.30 max_rss_kib=40632
+N=40000 radius=5.000 spacing=0.500 spike=0.000 avg_neighbors=291.008 copy_ms=0.414 detect_ms=17352.887 global_ransac_ms=22.860 global_with_original_extract_ms=1637.158 linear_extract_ms=0.259 anomaly=0 inliers=40000 outliers=0 equivalent_counts=1
+wall_s=19.04 max_rss_kib=44324
+N=10000 radius=5.000 spacing=0.250 spike=0.000 avg_neighbors=1037.164 copy_ms=0.109 detect_ms=15796.503 global_ransac_ms=6.377 global_with_original_extract_ms=107.505 linear_extract_ms=0.069 anomaly=0 inliers=10000 outliers=0 equivalent_counts=1
+wall_s=15.94 max_rss_kib=40432
+N=10000 radius=5.000 spacing=0.500 spike=3.000 avg_neighbors=272.227 copy_ms=0.106 detect_ms=4882.830 global_ransac_ms=5.538 global_with_original_extract_ms=100.385 linear_extract_ms=0.064 anomaly=323 inliers=9677 outliers=0 equivalent_counts=1
+wall_s=5.00 max_rss_kib=40708
+N=10000 radius=5.000 spacing=0.500 spike=10.000 avg_neighbors=260.969 copy_ms=0.109 detect_ms=3926.422 global_ransac_ms=8.432 global_with_original_extract_ms=109.652 linear_extract_ms=0.076 anomaly=0 inliers=9677 outliers=323 equivalent_counts=1
+wall_s=4.06 max_rss_kib=40676

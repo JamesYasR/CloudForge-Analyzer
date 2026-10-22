@@ -212,28 +212,28 @@ void CloudForgeAnalyzer::Slot_fit_plane_Triggered() {
         TeEDebug(">>: 参数设置取消");
         return;
     }
-    bool ok1, ok2, ok3, ok4;
+    bool ok1, ok2;
     Fit_Plane::FitParams fp;
-    fp.LocalRadius = fitDialog.getParams()[0].toFloat(&ok1);
-    fp.AnomalyThreshold = fitDialog.getParams()[1].toFloat(&ok2);
-    fp.PlaneFitThreshold = fitDialog.getParams()[2].toFloat(&ok3);
-    fp.MaxIterations = fitDialog.getParams()[3].toInt(&ok4);
-    if (!ok1 || !ok2 || !ok3 || !ok4) {
-        TeEDebug(">>: 无效数字");
+    fp.PlaneFitThreshold = fitDialog.getParams()[0].toFloat(&ok1);
+    fp.MaxIterations = fitDialog.getParams()[1].toInt(&ok2);
+    if (!ok1 || !ok2 || !std::isfinite(fp.PlaneFitThreshold) || fp.PlaneFitThreshold <= 0 || fp.MaxIterations < 1) {
+        TeEDebug("不可拟合: 参数无效");
         return;
     }
 
-    // 后台执行平面拟合(异常点检测+RANSAC), 完成后回到界面线程可视化
+    // 后台拟合，完成后回到界面线程可视化
     auto fpHolder = std::make_shared<std::shared_ptr<Fit_Plane>>();
     RunAsyncVoid("平面拟合",
         [this, fpHolder, Cloud_Temp, fp]() {
-            if (!PostProgress(0, 0, "平面拟合: 异常点检测与RANSAC...")) {
+            if (!PostProgress(0, 100, "准备拟合")) {
                 PostLog(">>: 平面拟合已取消。");
                 return;
             }
             // 计算类在工作线程中构造(参数构造函数只保存参数, 点云拷贝也在此完成)并执行
             *fpHolder = std::make_shared<Fit_Plane>(Cloud_Temp, fp);
+            (*fpHolder)->setProgressCallback(WorkerProgressCallback());
             (*fpHolder)->compute();
+            if ((*fpHolder)->isCancelled) return;
             PostLog((*fpHolder)->message);
             PostProgress(100, 100, "平面拟合完成");
         },
@@ -251,23 +251,22 @@ void CloudForgeAnalyzer::Slot_fit_plane_Triggered() {
         return;
     }
     if (planeFitter.Get_Coeff_in().size() < 4) {
-        TeEDebug(">>: 平面拟合失败：未能获得有效的平面模型系数");
         Update_CFmes(planeFitter.message);
         return;
     }
 	pcl::PointCloud<pcl::PointXYZ>::Ptr Cloud_inliers = planeFitter.Get_Inliers();
 	pcl::PointCloud<pcl::PointXYZ>::Ptr Cloud_outliers = planeFitter.Get_Outliers();
-	pcl::PointCloud<pcl::PointXYZ>::Ptr Cloud_anomaly = planeFitter.Get_AnomalyPoints();
 
 	ColorManager color_inliers(0, 255, 0);   // 绿色-内点
 	ColorManager color_outliers(255, 0, 0);  // 红色-外点
-	ColorManager color_anomaly(255, 255, 0); // 黄色-异常点
 
-	beginUndoBatch("平面拟合");
-	AddPointCloud("plane_fit_inliers", Cloud_inliers, color_inliers);
-	AddPointCloud("plane_fit_outliers", Cloud_outliers, color_outliers);
-    AddPointCloud("plane_fit_anomaly", Cloud_anomaly, color_anomaly);
-	endUndoBatch();
+    beginUndoBatch("平面拟合");
+    for (const auto& name : {"plane_fit_inliers", "plane_fit_outliers"}) {
+        if (CloudMap.count(name)) DelePointCloud(name);
+    }
+    AddPointCloud("plane_fit_inliers", Cloud_inliers, color_inliers);
+    if (!Cloud_outliers->empty()) AddPointCloud("plane_fit_outliers", Cloud_outliers, color_outliers);
+    endUndoBatch();
 
 	std::string message = planeFitter.message;
     Eigen::Vector4f coeff_vec = planeFitter.Get_Coeff_in(); // [A, B, C, D]

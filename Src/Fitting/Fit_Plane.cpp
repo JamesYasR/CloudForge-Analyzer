@@ -1,196 +1,98 @@
 #include "Fitting/Fit_Plane.h"
 #include <pcl/ModelCoefficients.h>
-#include <pcl/common/centroid.h>
-#include <pcl/common/pca.h>
+#include <pcl/common/io.h>
+#include <pcl/sample_consensus/ransac.h>
+#include <pcl/sample_consensus/sac_model_plane.h>
+#include <cmath>
+#include <sstream>
+#include <iomanip>
 
-Fit_Plane::Fit_Plane(pcl::PointCloud<pcl::PointXYZ>::Ptr InputC)
-    : dialog(new ParamDialog_FittingPlane())
-    , cloud_input(new pcl::PointCloud<pcl::PointXYZ>)
-    , cloud_inliers(new pcl::PointCloud<pcl::PointXYZ>)
-    , cloud_outliers(new pcl::PointCloud<pcl::PointXYZ>)
-    , cloud_anomaly(new pcl::PointCloud<pcl::PointXYZ>)
-    , coeff_in(Eigen::Vector4f::Zero())  // 添加初始化
+namespace {
+class CancellablePlaneModel : public pcl::SampleConsensusModelPlane<pcl::PointXYZ>
 {
-    bool ok1, ok2, ok3,ok4;
-
-    if (dialog->exec() != QDialog::Accepted) {
-        isCancelled = true;
-        return;
+public:
+    CancellablePlaneModel(const pcl::PointCloud<pcl::PointXYZ>::Ptr& cloud, std::function<bool()> keepRunning)
+        : pcl::SampleConsensusModelPlane<pcl::PointXYZ>(cloud), keepRunning_(std::move(keepRunning)) {}
+    void getSamples(int& iterations, pcl::Indices& samples) override
+    {
+        if (!keepRunning_()) { samples.clear(); return; }
+        pcl::SampleConsensusModelPlane<pcl::PointXYZ>::getSamples(iterations,samples);
     }
-    else {
-        QString param1 = dialog->getParams()[0];  // 局部拟合半径
-        QString param2 = dialog->getParams()[1];  // 距离阈值
-        QString param3 = dialog->getParams()[2];  // 最大迭代次数
-        QString param4 = dialog->getParams()[3];  // 最大迭代次数
-
-        LocalRadius = param1.toFloat(&ok1);
-        AnomalyThreshold = param2.toFloat(&ok2);    // 读取第二个参数作为异常点阈值
-        PlaneFitThreshold = param3.toFloat(&ok3);   // 读取第三个参数作为平面拟合阈值
-        MaxIterations = param4.toInt(&ok4);         // 读取第四个参数
-
-        if (!ok1 || !ok2 || !ok3) {
-            qDebug() << "无效数字";
-            isCancelled = true;
-            return;
-        }
-    }
-
-    *cloud_input = *InputC;
-    if (cloud_input->empty()) {
-        qDebug() << "点云为空";
-        isCancelled = true;
-        return;
-    }
-
-    Proc();
+private:
+    std::function<bool()> keepRunning_;
+};
 }
 
+
 Fit_Plane::Fit_Plane(pcl::PointCloud<pcl::PointXYZ>::Ptr InputC, const FitParams& params)
-    : dialog(nullptr)
-    , cloud_input(new pcl::PointCloud<pcl::PointXYZ>)
+    : cloud_input(new pcl::PointCloud<pcl::PointXYZ>)
     , cloud_inliers(new pcl::PointCloud<pcl::PointXYZ>)
     , cloud_outliers(new pcl::PointCloud<pcl::PointXYZ>)
-    , cloud_anomaly(new pcl::PointCloud<pcl::PointXYZ>)
-    , coeff_in(Eigen::Vector4f::Zero())
 {
-    // 参数由界面线程收集, 此处仅保存并拷贝输入(不弹框、不计算)
-    LocalRadius = params.LocalRadius;
-    AnomalyThreshold = params.AnomalyThreshold;
     PlaneFitThreshold = params.PlaneFitThreshold;
     MaxIterations = params.MaxIterations;
 
-    *cloud_input = *InputC;
+    if (InputC) *cloud_input = *InputC;
 }
 
-void Fit_Plane::compute() {
-    Proc();
+bool Fit_Plane::reportProgress(int current, const std::string& stage)
+{
+    if (isCancelled) return false;
+    if (!progress_ || progress_(current, 100, stage)) return true;
+    isCancelled = true;
+    return false;
 }
 
-Fit_Plane::~Fit_Plane() = default;
-
-void Fit_Plane::detectAnomalyPoints() {
-    if (LocalRadius <= 0 || AnomalyThreshold <= 0) {
-        // 如果禁用异常点检测，所有点都参与后续拟合
-        *cloud_outliers = *cloud_input;
-        cloud_inliers->clear();
-        cloud_anomaly->clear();
-        return;
-    }
-
-    pcl::KdTreeFLANN<pcl::PointXYZ> kdtree;
-    kdtree.setInputCloud(cloud_input);
-
-    std::vector<int> normal_indices;  // 存放正常点索引
-    std::vector<int> anomaly_indices; // 存放异常点索引
-
-    for (int i = 0; i < static_cast<int>(cloud_input->size()); ++i) {
-        const auto& point = cloud_input->points[i];
-        std::vector<int> pointIdxRadiusSearch;
-        std::vector<float> pointRadiusSquaredDistance;
-
-        if (kdtree.radiusSearch(point, LocalRadius, pointIdxRadiusSearch,
-            pointRadiusSquaredDistance) > 3) {
-            // 有足够邻居点，计算局部平面
-            pcl::PointCloud<pcl::PointXYZ>::Ptr local_cloud(new pcl::PointCloud<pcl::PointXYZ>);
-            for (int idx : pointIdxRadiusSearch) {
-                local_cloud->push_back(cloud_input->points[idx]);
-            }
-
-            // 局部平面拟合
-            pcl::ModelCoefficients::Ptr coefficients(new pcl::ModelCoefficients);
-            pcl::PointIndices::Ptr inliers(new pcl::PointIndices);
-            pcl::SACSegmentation<pcl::PointXYZ> seg;
-
-            seg.setOptimizeCoefficients(true);
-            seg.setModelType(pcl::SACMODEL_PLANE);
-            seg.setMethodType(pcl::SAC_RANSAC);
-            seg.setDistanceThreshold(AnomalyThreshold); // 使用异常点阈值进行局部拟合
-            seg.setInputCloud(local_cloud);
-            seg.segment(*inliers, *coefficients);
-
-            if (coefficients->values.size() >= 4) {
-                // 计算当前点到这个局部拟合平面的距离
-                float A = coefficients->values[0];
-                float B = coefficients->values[1];
-                float C = coefficients->values[2];
-                float D = coefficients->values[3];
-                float distance_to_local_plane = std::abs(A * point.x + B * point.y + C * point.z + D);
-
-                // 判断：如果距离大于异常点阈值，则标记为异常
-                if (distance_to_local_plane > AnomalyThreshold) {
-                    anomaly_indices.push_back(i);
-                }
-                else {
-                    normal_indices.push_back(i);
-                }
-            }
-            else {
-                // 局部拟合失败，保守处理，视为正常点
-                normal_indices.push_back(i);
-            }
-        }
-        else {
-            // 孤立点，保守处理，视为正常点（或根据需求改为异常点）
-            normal_indices.push_back(i);
-        }
-    }
-
-    // 提取点云
-    pcl::copyPointCloud(*cloud_input, normal_indices, *cloud_outliers);
-    pcl::copyPointCloud(*cloud_input, anomaly_indices, *cloud_anomaly);
-
-    qDebug() << "异常点检测完成，正常点（将参与拟合）:" << cloud_outliers->size()
-        << "，异常点（已排除）:" << cloud_anomaly->size();
-}
-
-void Fit_Plane::fitPlaneWithRANSAC() {
-    if (cloud_outliers->empty()) {
-        qDebug() << "没有可用于拟合的点";
-        return;
+bool Fit_Plane::fitPlaneWithRANSAC() {
+    if (cloud_input->empty()) {
+        return false;
     }
 
     pcl::SampleConsensusModelPlane<pcl::PointXYZ>::Ptr model(
-        new pcl::SampleConsensusModelPlane<pcl::PointXYZ>(cloud_outliers));
+        new CancellablePlaneModel(cloud_input, [this]() { return reportProgress(10, "拟合平面"); }));
 
     pcl::RandomSampleConsensus<pcl::PointXYZ> ransac(model);
     ransac.setDistanceThreshold(PlaneFitThreshold);
     ransac.setMaxIterations(MaxIterations);
-    ransac.computeModel();
+    if (!ransac.computeModel() || !reportProgress(85, "整理结果")) return false;
 
     ransac.getModelCoefficients(coeff_in);
 
     std::vector<int> ranSacInliers;
     ransac.getInliers(ranSacInliers);
 
-    pcl::copyPointCloud(*cloud_outliers, ranSacInliers, *cloud_inliers);
+    pcl::copyPointCloud(*cloud_input, ranSacInliers, *cloud_inliers);
 
-    // 重新计算外点（排除异常点后的外点）
+    std::vector<unsigned char> mask(cloud_input->size(), 0);
+    for (int index : ranSacInliers) mask[index]=1;
     std::vector<int> final_outliers;
-    for (int i = 0; i < static_cast<int>(cloud_outliers->size()); ++i) {
-        if (std::find(ranSacInliers.begin(), ranSacInliers.end(), i) == ranSacInliers.end()) {
-            final_outliers.push_back(i);
-        }
+    final_outliers.reserve(cloud_input->size()-ranSacInliers.size());
+    for (int i=0; i<static_cast<int>(mask.size()); ++i) {
+        if (i%4096==0 && !reportProgress(85+static_cast<int>(13.0*i/mask.size()), "整理结果")) return false;
+        if (!mask[i]) final_outliers.push_back(i);
     }
-
-    pcl::PointCloud<pcl::PointXYZ>::Ptr temp_outliers(new pcl::PointCloud<pcl::PointXYZ>);
-    pcl::copyPointCloud(*cloud_outliers, final_outliers, *temp_outliers);
-    *cloud_outliers = *temp_outliers;
+    pcl::copyPointCloud(*cloud_input,final_outliers,*cloud_outliers);
+    return true;
 }
 
-void Fit_Plane::Proc() {
-
-    //*cloud_outliers = *cloud_input;
-    //cloud_anomaly->clear();  // 清空异常点集合
-    detectAnomalyPoints();
-    // 步骤2: 平面拟合
-    fitPlaneWithRANSAC();
-
-    if (coeff_in.size() < 4) {
-        qDebug() << "平面拟合失败：未能获得有效的模型系数";
-        cloud_inliers->clear();
-        *cloud_outliers = *cloud_input;
-        return;
+void Fit_Plane::compute() {
+    coeff_in.resize(0);
+    cloud_inliers->clear(); cloud_outliers->clear();
+    message.clear(); isCancelled=false;
+    auto fail = [this]() {
+        coeff_in.resize(0);
+        cloud_inliers->clear(); cloud_outliers->clear();
+        message=isCancelled ? "平面拟合已取消" : "不可拟合: 未能获得有效的平面";
+    };
+    if (!reportProgress(0, "准备拟合")) { fail(); return; }
+    if (cloud_input->size()<3 || !std::isfinite(PlaneFitThreshold) || PlaneFitThreshold<=0 || MaxIterations<1) { fail(); return; }
+    for (size_t i=0;i<cloud_input->size();++i) {
+        if (i%4096==0 && !reportProgress(1, "检查点云")) { fail(); return; }
+        const auto& p=cloud_input->points[i];
+        if (!std::isfinite(p.x) || !std::isfinite(p.y) || !std::isfinite(p.z)) { fail(); return; }
     }
+    if (!fitPlaneWithRANSAC() || coeff_in.size()<4
+        || !coeff_in.allFinite() || coeff_in.head<3>().squaredNorm()==0 || cloud_inliers->empty()) { fail(); return; }
 
     // 归一化平面法向量
     Eigen::Vector3f normal(coeff_in[0], coeff_in[1], coeff_in[2]);
@@ -202,21 +104,14 @@ void Fit_Plane::Proc() {
         coeff_in[3] /= norm;
     }
 
-    qDebug() << "平面方程系数: A=" << coeff_in[0]
-        << ", B=" << coeff_in[1]
-        << ", C=" << coeff_in[2]
-        << ", D=" << coeff_in[3];
-
     // 计算RMS误差
     float rmse = ComputeRMSE();
-    float planarity_score = ComputePlanarityScore();
 
     // 构建信息消息
     std::stringstream msg;
     msg << "=== 平面拟合结果 ===\n";
     msg << "输入点数: " << cloud_input->size() << "\n";
-    msg << "异常点数（已排除）: " << cloud_anomaly->size() << " (" << Get_Anomaly_Percentage() << "%)\n";
-    msg << "参与拟合点数: " << cloud_outliers->size() << " (" << Get_Outliers_Percentage() + Get_Inliers_Percentage() << "%)\n";
+    msg << "平面外点数: " << cloud_outliers->size() << " (" << Get_Outliers_Percentage() << "%)\n";
     msg << "平面内点数（拟合结果）: " << cloud_inliers->size() << " (" << Get_Inliers_Percentage() << "%)\n";
     msg << "\n平面方程: " << std::fixed << std::setprecision(6)
         << coeff_in[0] << "x + "
@@ -226,10 +121,9 @@ void Fit_Plane::Proc() {
     msg << "法向量: (" << coeff_in[0] << ", " << coeff_in[1] << ", " << coeff_in[2] << ")\n";
     msg << "\n质量指标:\n";
     msg << "RMS误差: " << std::setprecision(4) << rmse << " mm\n";
-    //msg << "平面度评分: " << std::setprecision(2) << planarity_score << "/100\n";
 
     message = msg.str();
-    qDebug() << QString::fromStdString(message);
+    if (!reportProgress(100, "完成拟合")) fail();
 }
 
 pcl::PointCloud<pcl::PointXYZ>::Ptr Fit_Plane::Get_Inliers() {
@@ -240,11 +134,7 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr Fit_Plane::Get_Outliers() {
     return cloud_outliers;
 }
 
-pcl::PointCloud<pcl::PointXYZ>::Ptr Fit_Plane::Get_AnomalyPoints() {
-    return cloud_anomaly;
-}
-
-Eigen::VectorXf Fit_Plane::Get_Coeff_in() {  // 注意：返回类型应该是Eigen::Vector4f
+Eigen::VectorXf Fit_Plane::Get_Coeff_in() {
     return coeff_in;
 }
 
@@ -295,9 +185,4 @@ float Fit_Plane::Get_Inliers_Percentage() {
 float Fit_Plane::Get_Outliers_Percentage() {
     if (cloud_input->empty()) return 0.0f;
     return (static_cast<float>(cloud_outliers->size()) / static_cast<float>(cloud_input->size())) * 100.0f;
-}
-
-float Fit_Plane::Get_Anomaly_Percentage() {
-    if (cloud_input->empty()) return 0.0f;
-    return (static_cast<float>(cloud_anomaly->size()) / static_cast<float>(cloud_input->size())) * 100.0f;
 }

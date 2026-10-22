@@ -1,0 +1,13 @@
+2026-10-22 Linux Debug, baseline abcb29d default, new direct RANSAC, OMP_NUM_THREADS=2, taskset 0-1
+N=10000 spacing=0.500 spike=0.000 old_full_ms=4263.160 new_full_ms=6.223 old_anomaly=0 old_inliers=10000 old_outliers=0 new_inliers=10000 new_outliers=0
+wall_s=4.28 max_rss_kib=38596
+N=40000 spacing=0.500 spike=0.000 old_full_ms=18646.109 new_full_ms=24.748 old_anomaly=0 old_inliers=40000 old_outliers=0 new_inliers=40000 new_outliers=0
+wall_s=18.68 max_rss_kib=40660
+N=10000 spacing=0.250 spike=0.000 old_full_ms=14516.675 new_full_ms=6.227 old_anomaly=0 old_inliers=10000 old_outliers=0 new_inliers=10000 new_outliers=0
+wall_s=14.53 max_rss_kib=38344
+N=10000 spacing=0.500 spike=3.000 old_full_ms=4904.001 new_full_ms=8.921 old_anomaly=323 old_inliers=9677 old_outliers=0 new_inliers=9677 new_outliers=323
+wall_s=4.92 max_rss_kib=38032
+N=10000 spacing=0.500 spike=10.000 old_full_ms=3960.899 new_full_ms=8.963 old_anomaly=0 old_inliers=9677 old_outliers=323 new_inliers=9677 new_outliers=323
+wall_s=3.98 max_rss_kib=39008
+N=1000000 spacing=0.500 spike=0.000 old_full_ms=-1.000 new_full_ms=627.153 old_anomaly=0 old_inliers=0 old_outliers=0 new_inliers=1000000 new_outliers=0
+wall_s=0.73 max_rss_kib=103368

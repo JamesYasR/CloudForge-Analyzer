@@ -1,0 +1,20 @@
+2026-10-22, default local prefilter baseline abcb29d versus new direct RANSAC
+[DELTA] case=0 old_anomaly=0 old_inliers=1024 old_outliers=0 new_inliers=1024 new_outliers=0 inlier_changes=0 normal_angle_deg=0 max_signed_distance_change_mm=0 old_rmse=0 new_rmse=0
+[DELTA] case=1 old_anomaly=0 old_inliers=1024 old_outliers=0 new_inliers=1024 new_outliers=0 inlier_changes=0 normal_angle_deg=0 max_signed_distance_change_mm=0 old_rmse=0.135868713 new_rmse=0.135868713
+[DELTA] case=2 old_anomaly=34 old_inliers=990 old_outliers=0 new_inliers=990 new_outliers=34 inlier_changes=0 normal_angle_deg=1.9392995 max_signed_distance_change_mm=0.518303014 old_rmse=0.13246356 new_rmse=0.139301941
+[DELTA] case=3 old_anomaly=0 old_inliers=990 old_outliers=34 new_inliers=990 new_outliers=34 inlier_changes=0 normal_angle_deg=0 max_signed_distance_change_mm=0 old_rmse=0.139301941 new_rmse=0.139301941
+[DELTA] case=4 old_anomaly=150 old_inliers=874 old_outliers=0 new_inliers=874 new_outliers=150 inlier_changes=0 normal_angle_deg=0.366053547 max_signed_distance_change_mm=0.108459348 old_rmse=0.113493592 new_rmse=0.101485871
+[DELTA] case=5 old_anomaly=0 old_inliers=746 old_outliers=278 new_inliers=746 new_outliers=278 inlier_changes=0 normal_angle_deg=0 max_signed_distance_change_mm=0 old_rmse=0.441491306 new_rmse=0.441491306
+[DELTA] case=6 old_anomaly=0 old_inliers=1024 old_outliers=0 new_inliers=1024 new_outliers=0 inlier_changes=0 normal_angle_deg=0 max_signed_distance_change_mm=0 old_rmse=0.13994427 new_rmse=0.13994427
+[DELTA] case=7 old_anomaly=9 old_inliers=598 old_outliers=417 new_inliers=624 new_outliers=400 inlier_changes=58 normal_angle_deg=9.26232698 max_signed_distance_change_mm=2.2117914 old_rmse=0.253460437 new_rmse=0.500754237
+[DELTA] case=8 old_anomaly=3 old_inliers=931 old_outliers=90 new_inliers=995 new_outliers=29 inlier_changes=64 normal_angle_deg=2.6798158 max_signed_distance_change_mm=0.693653062 old_rmse=0.3730492 new_rmse=0.325627327
+[DELTA] case=9 old_anomaly=6 old_inliers=1006 old_outliers=12 new_inliers=989 new_outliers=35 inlier_changes=45 normal_angle_deg=1.92469515 max_signed_distance_change_mm=0.407773657 old_rmse=0.353556544 new_rmse=0.323487163
+[DELTA] case=10 old_anomaly=0 old_inliers=1024 old_outliers=0 new_inliers=1024 new_outliers=0 inlier_changes=0 normal_angle_deg=0 max_signed_distance_change_mm=0 old_rmse=0.1409114 new_rmse=0.1409114
+[DELTA] case=11 old_anomaly=0 old_inliers=1024 old_outliers=0 new_inliers=1024 new_outliers=0 inlier_changes=0 normal_angle_deg=0 max_signed_distance_change_mm=0 old_rmse=0.140056506 new_rmse=0.140056506
+[DELTA] case=12 old_anomaly=7 old_inliers=945 old_outliers=72 new_inliers=922 new_outliers=102 inlier_changes=45 normal_angle_deg=0.379181133 max_signed_distance_change_mm=0.0850744391 old_rmse=0.263326824 new_rmse=0.218173653
+[DELTA] case=13 old_anomaly=0 old_inliers=1024 old_outliers=0 new_inliers=1024 new_outliers=0 inlier_changes=0 normal_angle_deg=0 max_signed_distance_change_mm=0 old_rmse=0.266852558 new_rmse=0.266852558
+[DELTA] case=14 old_anomaly=328 old_inliers=536 old_outliers=160 new_inliers=652 new_outliers=372 inlier_changes=322 normal_angle_deg=6.01740021 max_signed_distance_change_mm=1.19691323 old_rmse=0.534986913 new_rmse=0.566917241
+[DELTA] case=15 old_anomaly=0 old_inliers=940 old_outliers=84 new_inliers=940 new_outliers=84 inlier_changes=0 normal_angle_deg=0 max_signed_distance_change_mm=0 old_rmse=0.0252438225 new_rmse=0.0252438225
+[DELTA] case=16 old_anomaly=0 old_inliers=1024 old_outliers=0 new_inliers=1024 new_outliers=0 inlier_changes=0 normal_angle_deg=0 max_signed_distance_change_mm=0 old_rmse=0.0293537378 new_rmse=0.0293537378
+[DELTA] case=17 old_anomaly=0 old_inliers=1024 old_outliers=0 new_inliers=1024 new_outliers=0 inlier_changes=0 normal_angle_deg=0 max_signed_distance_change_mm=0 old_rmse=0.140056506 new_rmse=0.140056506
+known_spikes_rejected=1

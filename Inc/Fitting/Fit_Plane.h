@@ -1,64 +1,42 @@
 #pragma once
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
-#include <pcl/search/kdtree.h>
-#include <pcl/features/normal_3d.h>  
-#include <pcl/sample_consensus/ransac.h>
-#include <pcl/sample_consensus/sac_model_plane.h>
-#include <pcl/sample_consensus/method_types.h>
-#include <pcl/sample_consensus/model_types.h>
-#include <pcl/filters/extract_indices.h>
-#include <pcl/segmentation/sac_segmentation.h>
-#include "Dialog/Dialog.h"
-#include <unordered_set>
-#include <iostream>
+#include <Eigen/Core>
+#include <functional>
+#include <string>
+#include <utility>
 
 class Fit_Plane {
 public:
-    // 新增：拟合参数(用于后台计算: 参数已在界面线程收集完毕, 不再弹对话框)
     struct FitParams {
-        float LocalRadius = 5.0f;        // 局部拟合半径(mm)
-        float AnomalyThreshold = 1.0f;   // 异常点判定阈值(mm)
-        float PlaneFitThreshold = 1.0f;  // 平面拟合距离阈值(mm)
-        int MaxIterations = 1000;        // RANSAC最大迭代次数
+        float PlaneFitThreshold = 1.0f;
+        int MaxIterations = 1000;
     };
 
-    Fit_Plane(pcl::PointCloud<pcl::PointXYZ>::Ptr InputC);
-    // 新增：已知参数构造(不弹参数对话框, 不自动计算) —— 配合 compute() 在工作线程中执行
     Fit_Plane(pcl::PointCloud<pcl::PointXYZ>::Ptr InputC, const FitParams& params);
-    ~Fit_Plane();
-
-    // 新增：执行平面拟合计算(可被工作线程调用)
+    using ProgressCallback = std::function<bool(int, int, const std::string&)>;
+    void setProgressCallback(ProgressCallback callback) { progress_ = std::move(callback); }
     void compute();
 
     pcl::PointCloud<pcl::PointXYZ>::Ptr Get_Inliers();
     pcl::PointCloud<pcl::PointXYZ>::Ptr Get_Outliers();
-    pcl::PointCloud<pcl::PointXYZ>::Ptr Get_AnomalyPoints();  // 获取异常点
     Eigen::VectorXf Get_Coeff_in();
     float Get_Inliers_Percentage();
     float Get_Outliers_Percentage();
-    float Get_Anomaly_Percentage();  // 获取异常点百分比
     float ComputeRMSE();
-    float ComputePlanarityScore();  // 计算平面度评分
+    float ComputePlanarityScore();
 
     bool isCancelled = false;
-    std::string message;       // 存储所有信息
+    std::string message;
+
 private:
-    float LocalRadius;         // 局部拟合半径
-    float AnomalyThreshold;    // 新增：异常点判定阈值
-    float PlaneFitThreshold;   // 重命名：平面拟合距离阈值
+    float PlaneFitThreshold;
     int MaxIterations;
-
-    Eigen::VectorXf coeff_in;  // 平面系数 [A, B, C, D]
-
+    Eigen::VectorXf coeff_in;
     pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_input;
     pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_inliers;
     pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_outliers;
-    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_anomaly;  // 异常点
-
-    ParamDialog_FittingPlane* dialog;
-
-    void Proc();
-    void detectAnomalyPoints();  // 异常点检测
-    void fitPlaneWithRANSAC();   // RANSAC平面拟合
+    ProgressCallback progress_;
+    bool reportProgress(int current, const std::string& stage);
+    bool fitPlaneWithRANSAC();
 };
