@@ -29,6 +29,7 @@ QT_END_NAMESPACE
 
 class DistanceMeasureTool;
 class PolygonClipTool;
+class WeldPreparationOverlay;
 
 class CloudForgeAnalyzer : public QMainWindow
 {
@@ -87,14 +88,14 @@ private:
     void ApplyPolygonClip();
     // 焊前装配阶差/间隙的共同流程(§7): 选两件 → 定接缝区域 → 看 Z 均值 → 设 R 与方向 → 后台计算
     // 口径(2026-09 统一): 阶差 = 径向(e_P - e_Q, 近件在外为正); 间隙 = 沿跨缝方向(环缝=轴向)
-    // 两个量由同一次配对同时得到, 只有一个入口; 结果只输出文本报告, 不做三维标注。
+    // 两个量由同一次配对同时得到，共用一个入口。
     void Tool_MeasureWeldPreparation();
     // 焊前装配测量的三维标注(只在 GUI 线程; 数据来自 Result 与参考圆柱框架)
     void VisualizeWeldPreparation(const MeasureWeldPreparation::Result& result,
                                   const CylinderSurfaceFrame& frame);
-    std::vector<std::string> m_weldPrepShapeIds;   // PCL 形状(三维文字)
     std::vector<std::string> m_weldPrepLineIds;    // 直线段(走 LineMap 注册)
     std::vector<std::string> m_weldPrepActorIds;   // vtkActor(折线)
+    std::unique_ptr<WeldPreparationOverlay> m_weldPrepOverlay;
     void cleanWeldPrepVisuals();
 
     //  

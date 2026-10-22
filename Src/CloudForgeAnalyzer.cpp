@@ -1,6 +1,7 @@
 #include "CloudForgeAnalyzer.h"
 #include "Basic/DistanceMeasureTool.h"
 #include "Basic/PolygonClipTool.h"
+#include "Basic/WeldPreparationOverlay.h"
 #include "Dialog/ParamDialogMeasureWeldHeight.h"
 #include <thread>
 #include <omp.h> // OpenMP 并行: MSVC(/openmp) 与 GCC(-fopenmp) 双平台兼容
@@ -43,6 +44,7 @@ CloudForgeAnalyzer::~CloudForgeAnalyzer()
     if (m_asyncFuture.isRunning()) {
         m_asyncFuture.waitForFinished();
     }
+    m_weldPrepOverlay.reset();
     m_clipTool.reset();
     m_distanceTool.reset();
     viewer.reset();
@@ -90,6 +92,7 @@ void CloudForgeAnalyzer::InitalizeRenderer() {
     connect(m_clipTool.get(), &PolygonClipTool::previewRequested, this, &CloudForgeAnalyzer::PreviewPolygonClip);
     connect(m_clipTool.get(), &PolygonClipTool::applyRequested, this, &CloudForgeAnalyzer::ApplyPolygonClip);
     connect(m_clipTool.get(), &PolygonClipTool::cancelPreviewRequested, this, &CloudForgeAnalyzer::CancelCurrentTask);
+    m_weldPrepOverlay = std::make_unique<WeldPreparationOverlay>(ui->winOfAnalyzer, renderer);
 }
 
 void CloudForgeAnalyzer::InitalizeQWidgets() {
@@ -1891,23 +1894,14 @@ void CloudForgeAnalyzer::Tool_MeasureWeldPreparation()
 
 // ============================================================
 // 焊前装配测量 三维标注(只在 GUI 线程调用; 数据全部来自 Result + 参考圆柱框架)
-//   ① 两条缝边: 醒目折线(近件绿 / 远件黄)
-//   ② 点对点映射: 稀疏青色直线(有间距, 用于检查配对是否出错)
-//   ③ 最大值处: 间隙=一小段弧线(红); 阶差=径向直线(蓝);
-//      两边母材对应点的映射连线(橙); 各带空间文本标注
+//   缝边、配对与尺寸沿用原几何，中文结果由视窗叠层显示。
 // ============================================================
 void CloudForgeAnalyzer::cleanWeldPrepVisuals()
 {
+    if (m_weldPrepOverlay) m_weldPrepOverlay->clear();
     // 直线段: 走全局注册(LineMap), 用工程既有 DeleteLine 移除
     for (const auto& id : m_weldPrepLineIds) DeleteLine(id);
     m_weldPrepLineIds.clear();
-    // 三维文字: 工程无封装, 与凹塘一致 -> 记 id + removeText3D
-    for (const auto& id : m_weldPrepShapeIds) {
-        viewer->removeShape(id);
-        viewer->removePointCloud(id);
-        viewer->removeText3D(id);
-    }
-    m_weldPrepShapeIds.clear();
     vtkRenderer* renderer = viewer->getRendererCollection()->GetFirstRenderer();
     for (const auto& id : m_weldPrepActorIds) {
         auto it = ActorMap.find(id);
@@ -1926,28 +1920,31 @@ void CloudForgeAnalyzer::VisualizeWeldPreparation(const MeasureWeldPreparation::
     if (result.near_edge.refined.empty() && result.far_edge.refined.empty()) return;
 
     const auto proj = [&](double a, double s, double e) { return frame.unproject(a, s, e); };
-    const auto radialDir = [&](double a, double s) {
-        return (frame.unproject(a, s, 1.0) - frame.unproject(a, s, 0.0)).normalized();
-    };
+    std::vector<WeldPreparationOverlay::Annotation> annotations;
+    const auto point = [](const Eigen::Vector3d& p) { return WeldPreparationOverlay::Point{p.x(), p.y(), p.z()}; };
+    const double displayScale = ui->winOfAnalyzer->devicePixelRatioF();
 
-    // 字高/标记按场景尺度自适应(与其它测量一致)
-    double textScale = 10.0, markScale = 3.0;
-    {
-        Eigen::Vector3d lo = Eigen::Vector3d::Zero(), hi = Eigen::Vector3d::Zero();
-        bool first = true;
-        for (const auto& e : { &result.near_edge, &result.far_edge }) {
-            for (const auto& p : e->points) {
-                if (!p.valid) continue;
-                if (first) { lo = hi = p.xyz; first = false; }
-                else { lo = lo.cwiseMin(p.xyz); hi = hi.cwiseMax(p.xyz); }
-            }
-        }
-        if (!first) {
-            const double diag = (hi - lo).norm();
-            textScale = std::min(std::max(0.022 * diag, 6.0), 14.0);
-            markScale = std::min(std::max(0.006 * diag, 2.0), 4.5);
-        }
-    }
+    auto addStyledActor = [&](vtkPolyData* poly, const std::string& id,
+                              double r, double g, double b, double width, bool emphasis) {
+        auto mapper = vtkSmartPointer<vtkPolyDataMapper>::New();
+        mapper->SetInputData(poly);
+        auto add = [&](const std::string& name, double red, double green, double blue, double lineWidth, double opacity) {
+            auto actor = vtkSmartPointer<vtkActor>::New();
+            actor->SetMapper(mapper);
+            // 同深度衬线不写入深度，保留主线颜色。
+            actor->ForceTranslucentOn();
+            actor->PickableOff();
+            actor->UseBoundsOff();
+            actor->GetProperty()->LightingOff();
+            actor->GetProperty()->SetColor(red, green, blue);
+            actor->GetProperty()->SetLineWidth(lineWidth * displayScale);
+            actor->GetProperty()->SetOpacity(opacity);
+            AddActors(name, actor);
+            m_weldPrepActorIds.push_back(name);
+        };
+        if (emphasis) add(id + "_outline", 0.025, 0.08, 0.10, width + 3.0, 0.40);
+        add(id, r, g, b, width, emphasis ? 1.0 : 0.35);
+    };
 
     auto addPolyline = [&](const std::vector<Eigen::Vector3d>& pts, const std::string& id,
                            double r, double g, double b, double width) {
@@ -1961,14 +1958,7 @@ void CloudForgeAnalyzer::VisualizeWeldPreparation(const MeasureWeldPreparation::
         vtkSmartPointer<vtkPolyData> poly = vtkSmartPointer<vtkPolyData>::New();
         poly->SetPoints(vpts);
         poly->SetLines(cells);
-        vtkSmartPointer<vtkPolyDataMapper> mapper = vtkSmartPointer<vtkPolyDataMapper>::New();
-        mapper->SetInputData(poly);
-        vtkSmartPointer<vtkActor> actor = vtkSmartPointer<vtkActor>::New();
-        actor->SetMapper(mapper);
-        actor->GetProperty()->SetColor(r, g, b);
-        actor->GetProperty()->SetLineWidth(width);
-        AddActors(id, actor);
-        m_weldPrepActorIds.push_back(id);
+        addStyledActor(poly, id, r, g, b, width, true);
     };
     // 多条线段合成一个 actor: AddLine 每次都会 Render(), 几十条会明显卡顿
     auto addSegments = [&](const std::vector<std::pair<Eigen::Vector3d, Eigen::Vector3d>>& segs,
@@ -1986,14 +1976,7 @@ void CloudForgeAnalyzer::VisualizeWeldPreparation(const MeasureWeldPreparation::
         vtkSmartPointer<vtkPolyData> poly = vtkSmartPointer<vtkPolyData>::New();
         poly->SetPoints(vpts);
         poly->SetLines(cells);
-        vtkSmartPointer<vtkPolyDataMapper> mapper = vtkSmartPointer<vtkPolyDataMapper>::New();
-        mapper->SetInputData(poly);
-        vtkSmartPointer<vtkActor> actor = vtkSmartPointer<vtkActor>::New();
-        actor->SetMapper(mapper);
-        actor->GetProperty()->SetColor(r, g, b);
-        actor->GetProperty()->SetLineWidth(width);
-        AddActors(id, actor);
-        m_weldPrepActorIds.push_back(id);
+        addStyledActor(poly, id, r, g, b, width, false);
     };
 
     // 直线段一律走工程既有封装 AddLine -> 注册进 LineMap(可被 DeleteLine/ClearAllLines 管理)。
@@ -2002,7 +1985,7 @@ void CloudForgeAnalyzer::VisualizeWeldPreparation(const MeasureWeldPreparation::
                           const std::string& id, double r255, double g255, double b255, double width) {
         const pcl::PointXYZ a(static_cast<float>(p0.x()), static_cast<float>(p0.y()), static_cast<float>(p0.z()));
         const pcl::PointXYZ c(static_cast<float>(p1.x()), static_cast<float>(p1.y()), static_cast<float>(p1.z()));
-        AddLine(id, a, c, ColorManager(r255, g255, b255), width);
+        AddLine(id, a, c, ColorManager(r255, g255, b255), width * displayScale);
         m_weldPrepLineIds.push_back(id);
     };
 
@@ -2010,12 +1993,12 @@ void CloudForgeAnalyzer::VisualizeWeldPreparation(const MeasureWeldPreparation::
     for (size_t i = 0; i < result.near_edge.refined.size(); ++i) {
         std::vector<Eigen::Vector3d> poly;
         for (const auto& q : result.near_edge.refined[i]) poly.push_back(proj(q.x(), q.y(), 0.0));
-        addPolyline(poly, "weldprep_near_edge_" + std::to_string(i), 0.10, 1.00, 0.20, 3.0);
+        addPolyline(poly, "weldprep_near_edge_" + std::to_string(i), 0.26, 0.95, 0.58, 4.0);
     }
     for (size_t i = 0; i < result.far_edge.refined.size(); ++i) {
         std::vector<Eigen::Vector3d> poly;
         for (const auto& q : result.far_edge.refined[i]) poly.push_back(proj(q.x(), q.y(), 0.0));
-        addPolyline(poly, "weldprep_far_edge_" + std::to_string(i), 1.00, 0.80, 0.05, 3.0);
+        addPolyline(poly, "weldprep_far_edge_" + std::to_string(i), 1.00, 0.85, 0.33, 4.0);
     }
 
     // ---- ② 点对点映射: 稀疏直线(约 36 条, 不密集) ----
@@ -2038,12 +2021,16 @@ void CloudForgeAnalyzer::VisualizeWeldPreparation(const MeasureWeldPreparation::
         for (const auto& m : result.matches) if (m.valid && m.near_index == nearIndex) return &m;
         return nullptr;
     };
-    auto annotate = [&](const MeasureWeldPreparation::MaxItem& mx, bool isGap,
-                        const char* qty, double median) {
+    auto annotate = [&](const MeasureWeldPreparation::MaxItem& mx, bool isGap, double median) {
         if (!mx.ok) return;
         const auto* mm = findMatch(mx.near_index);
         if (!mm) return;
         const std::string tag = isGap ? "gap" : "step";
+        WeldPreparationOverlay::Annotation annotation;
+        annotation.anchor = point(mm->near_xyz);
+        annotation.color = QColor(isGap ? "#ff6b65" : "#68b7ff");
+        annotation.title = QString(isGap ? "最大轴向间隙 %1 mm" : "最大径向阶差 %1 mm").arg(mx.value, 0, 'f', 3);
+        annotation.detail = QString("整体中值 %1 mm").arg(median, 0, 'f', 3);
         if (isGap) {
             // 间隙: 参考柱面上的一小段弧线(点对映射路径)
             std::vector<Eigen::Vector3d> arc;
@@ -2053,39 +2040,25 @@ void CloudForgeAnalyzer::VisualizeWeldPreparation(const MeasureWeldPreparation::
                 arc.push_back(proj(mx.near_a + f * (mx.far_a - mx.near_a),
                                    mx.near_s + f * (mx.far_s - mx.near_s), 0.0));
             }
-            addPolyline(arc, "weldprep_" + tag + "_arc", 1.00, 0.15, 0.15, 4.0);
+            annotation.endpoints = {point(arc.front()), point(arc.back())};
+            addPolyline(arc, "weldprep_" + tag + "_arc", 1.00, 0.42, 0.40, 5.0);
         }
         else {
             // 阶差: 同一站位上的径向直线, 从远件材料面到近件材料面
             const Eigen::Vector3d pf = proj(mm->near_a, mm->near_s, mm->far_e);
             const Eigen::Vector3d pn = proj(mm->near_a, mm->near_s, mm->near_e);
-            addSegment(pf, pn, "weldprep_" + tag + "_radial", 51.0, 115.0, 255.0, 4.0);
+            annotation.endpoints = {point(pf), point(pn)};
+            addSegment(pf, pn, "weldprep_" + tag + "_radial", 104.0, 183.0, 255.0, 5.0);
         }
         // 两边母材对应点的映射连线(橙色)
         const Eigen::Vector3d qMat = proj(mm->far_a, mm->far_s, mm->far_e);
         addSegment(mm->near_xyz, qMat, "weldprep_" + tag + "_link", 255.0, 140.0, 0.0, 3.0);
 
-        // 空间文本标注(径向向外偏移 + 引线)
-        std::ostringstream lab;
-        lab.setf(std::ios::fixed); lab.precision(3);
-        lab << qty << " max " << mx.value << " mm  中值 " << median << " mm";
-        const Eigen::Vector3d base = mm->near_xyz;
-        const Eigen::Vector3d off = radialDir(mm->near_a, mm->near_s) * (markScale + 2.4 * textScale);
-        const Eigen::Vector3d txt = base + off;
-        const std::string tid = "weldprep_" + tag + "_text";
-        viewer->removeText3D(tid);
-        viewer->addText3D(lab.str(), pcl::PointXYZ(static_cast<float>(txt.x()), static_cast<float>(txt.y()),
-                                                   static_cast<float>(txt.z())),
-                          textScale, isGap ? 1.0 : 0.35, isGap ? 0.25 : 0.65, isGap ? 0.25 : 1.0, tid);
-        m_weldPrepShapeIds.push_back(tid);
-        addSegment(base, txt, "weldprep_" + tag + "_leader",
-                   isGap ? 255.0 : 90.0, isGap ? 64.0 : 165.0, isGap ? 64.0 : 255.0, 1.0);
+        annotations.push_back(std::move(annotation));
     };
-    if (result.maximum.ok) annotate(result.maximum, true, "间隙", result.gap_median);
-    if (result.maximum_step.ok) annotate(result.maximum_step, false, "阶差", result.step_median);
-
-    TeEDebug(">>: 焊前装配标注完成: 近件缝边(绿) / 远件缝边(黄) / 稀疏映射线(青) / "
-             "间隙弧(红) / 阶差径向线(蓝) / 对应点连线(橙)。");
+    if (result.maximum.ok) annotate(result.maximum, true, result.gap_median);
+    if (result.maximum_step.ok) annotate(result.maximum_step, false, result.step_median);
+    m_weldPrepOverlay->setAnnotations(std::move(annotations));
 }
 
 void CloudForgeAnalyzer::Tool_MeasureHeight() {
@@ -3512,6 +3485,7 @@ void CloudForgeAnalyzer::Slot_ed_cleangeo_Triggered() {
         TeEDebug(">>: 计算进行中，为保证数据安全，暂不能执行该操作。");
         return;
     }
+    cleanWeldPrepVisuals();
     if (m_distanceTool) m_distanceTool->clear();
     viewer->removeAllShapes();
     //clearAllActors();
@@ -3870,6 +3844,7 @@ void CloudForgeAnalyzer::Update_CFmes(std::string cfmes) {
 }
 
 void CloudForgeAnalyzer::AddPointCloud(std::string name, pcl::PointCloud<pcl::PointXYZ>::Ptr cloud, ColorManager color) {
+    cleanWeldPrepVisuals();
     if (m_clipTool) m_clipTool->stop();
     if (m_distanceTool) m_distanceTool->clear();
     if (m_undoBatchLevel == 0) {
@@ -3899,6 +3874,7 @@ void CloudForgeAnalyzer::ClearAllPointCloudRGB() {
 
 
 void CloudForgeAnalyzer::ClearAllPointCloud() {
+    cleanWeldPrepVisuals();
     if (m_clipTool) m_clipTool->stop();
     if (m_distanceTool) m_distanceTool->clear();
     if (m_undoBatchLevel == 0) {
@@ -3916,6 +3892,7 @@ void CloudForgeAnalyzer::ClearAllPointCloud() {
 }
 
 void CloudForgeAnalyzer::DelePointCloud(std::string name) {
+    cleanWeldPrepVisuals();
     if (m_clipTool) m_clipTool->stop();
     if (m_distanceTool) m_distanceTool->clear();
     if (m_undoBatchLevel == 0) {
@@ -3954,6 +3931,7 @@ void CloudForgeAnalyzer::endUndoBatch() {
 }
 
 void CloudForgeAnalyzer::rebuildCloudVisualization() {
+    cleanWeldPrepVisuals();
     if (m_clipTool) m_clipTool->stop();
     if (m_distanceTool) m_distanceTool->clear();
     viewer->removeAllPointClouds();
@@ -4683,6 +4661,7 @@ void CloudForgeAnalyzer::visualizeFittedPlane(pcl::PointCloud<pcl::PointXYZ>::Pt
 }
 
 void CloudForgeAnalyzer::clearAllActors() {
+    cleanWeldPrepVisuals();
     if (ActorMap.empty()) {
         return;
     }
