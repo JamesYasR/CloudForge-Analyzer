@@ -11,6 +11,7 @@
 
 class QWidget;
 class QLabel;
+class QPushButton;
 class vtkActor;
 class vtkRenderer;
 class vtkRenderWindow;
@@ -20,28 +21,34 @@ class vtkLineSource;
 class vtkBillboardTextActor3D;
 class vtkCallbackCommand;
 
-class DistanceMeasureTool : public QObject
+class ViewportPointPicker : public QObject
 {
     Q_OBJECT
 public:
-    DistanceMeasureTool(QWidget* view, vtkRenderer* renderer, vtkRenderWindow* window);
-    ~DistanceMeasureTool() override;
+    using Points = std::vector<MeasureDistance::Point>;
+    ViewportPointPicker(QWidget* view, vtkRenderer* renderer, vtkRenderWindow* window);
+    ~ViewportPointPicker() override;
 
     bool start(const std::vector<vtkActor*>& clouds);
+    bool startSelection(const std::vector<vtkActor*>& clouds, int count, const QString& title);
     void stop();
     void clear();
     bool isActive() const { return active_; }
+    bool isSelecting() const { return selecting_; }
+    const Points& selectedPoints() const { return selectedPoints_; }
 
 signals:
     void activeChanged(bool active);
     void resultChanged(const QString& text);
     void measurementCompleted(const QString& text);
+    void selectionCompleted(bool success);
 
 protected:
     bool eventFilter(QObject* watched, QEvent* event) override;
 
 private:
     enum class Stage { Start, End, Complete };
+    bool begin(const std::vector<vtkActor*>& clouds);
     bool pick(const QPoint& pos, MeasureDistance::Point& point);
     void hover();
     void select(const QPoint& pos);
@@ -54,6 +61,7 @@ private:
 
     QPointer<QWidget> view_;
     QLabel* hint_ = nullptr;
+    QPushButton* cancel_ = nullptr;
     vtkRenderer* renderer_ = nullptr;
     vtkSmartPointer<vtkRenderer> overlayRenderer_;
     vtkRenderWindow* window_ = nullptr;
@@ -77,4 +85,8 @@ private:
     bool dragged_ = false;
     bool mouseTracking_ = false;
     QCursor originalCursor_;
+    Points selectedPoints_;
+    QString selectionTitle_;
+    int targetPoints_ = 2;
+    bool selecting_ = false;
 };

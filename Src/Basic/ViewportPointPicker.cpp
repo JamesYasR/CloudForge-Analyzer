@@ -1,8 +1,10 @@
-#include "Basic/DistanceMeasureTool.h"
+#include "Basic/ViewportPointPicker.h"
 #include <QApplication>
+#include <QFontMetrics>
 #include <QKeyEvent>
 #include <QLabel>
 #include <QMouseEvent>
+#include <QPushButton>
 #include <QWidget>
 #include <vtkActor.h>
 #include <vtkBillboardTextActor3D.h>
@@ -20,7 +22,7 @@
 #include <cmath>
 #include <limits>
 
-DistanceMeasureTool::DistanceMeasureTool(QWidget* view, vtkRenderer* renderer, vtkRenderWindow* window)
+ViewportPointPicker::ViewportPointPicker(QWidget* view, vtkRenderer* renderer, vtkRenderWindow* window)
     : view_(view), renderer_(renderer), window_(window)
 {
     overlayRenderer_ = vtkSmartPointer<vtkRenderer>::New();
@@ -35,9 +37,15 @@ DistanceMeasureTool::DistanceMeasureTool(QWidget* view, vtkRenderer* renderer, v
     hint_->setObjectName("distanceMeasureHint");
     hint_->setAttribute(Qt::WA_TransparentForMouseEvents);
     hint_->setStyleSheet("QLabel { color: #fff2ac; background: rgba(15, 27, 35, 220);"
-                         " padding: 9px 12px; border-radius: 5px; font-size: 14px; }");
+                         " padding: 9px 12px; border-radius: 2px; font-size: 14px; }");
     hint_->move(12, 12);
     hint_->hide();
+    cancel_ = new QPushButton("取消", view);
+    cancel_->setObjectName("pointPickCancel");
+    cancel_->setStyleSheet("QPushButton { color: white; background: #183b49; border: 1px solid #62808b;"
+                          " padding: 7px 12px; border-radius: 2px; } QPushButton:hover { background: #2c5261; }");
+    cancel_->hide();
+    connect(cancel_, &QPushButton::clicked, this, &ViewportPointPicker::stop);
     picker_ = vtkSmartPointer<vtkPointPicker>::New();
     picker_->PickFromListOn();
     picker_->UseCellsOff();
@@ -92,27 +100,35 @@ DistanceMeasureTool::DistanceMeasureTool(QWidget* view, vtkRenderer* renderer, v
     renderCallback_ = vtkSmartPointer<vtkCallbackCommand>::New();
     renderCallback_->SetClientData(this);
     renderCallback_->SetCallback([](vtkObject*, unsigned long, void* data, void*) {
-        static_cast<DistanceMeasureTool*>(data)->updateAnnotations();
+        static_cast<ViewportPointPicker*>(data)->updateAnnotations();
     });
     renderObserver_ = renderer_->AddObserver(vtkCommand::StartEvent, renderCallback_);
     hoverTimer_.setSingleShot(true);
     hoverTimer_.setInterval(25);
-    connect(&hoverTimer_, &QTimer::timeout, this, &DistanceMeasureTool::hover);
+    connect(&hoverTimer_, &QTimer::timeout, this, &ViewportPointPicker::hover);
     qApp->installEventFilter(this);
 }
 
-DistanceMeasureTool::~DistanceMeasureTool()
+ViewportPointPicker::~ViewportPointPicker()
 {
     stop();
     renderer_->RemoveObserver(renderObserver_);
     window_->RemoveRenderer(overlayRenderer_);
     qApp->removeEventFilter(this);
     delete hint_;
+    delete cancel_;
 }
 
-bool DistanceMeasureTool::start(const std::vector<vtkActor*>& clouds)
+bool ViewportPointPicker::start(const std::vector<vtkActor*>& clouds)
 {
     if (active_) stop();
+    selecting_ = false;
+    selectedPoints_.clear();
+    return begin(clouds);
+}
+
+bool ViewportPointPicker::begin(const std::vector<vtkActor*>& clouds)
+{
     picker_->InitializePickList();
     double bounds[6] = {std::numeric_limits<double>::max(), std::numeric_limits<double>::lowest(),
                         std::numeric_limits<double>::max(), std::numeric_limits<double>::lowest(),
@@ -140,22 +156,37 @@ bool DistanceMeasureTool::start(const std::vector<vtkActor*>& clouds)
     active_ = true;
     stage_ = result_.success ? Stage::Complete : Stage::Start;
     pressed_ = dragged_ = false;
-    setHint(stage_ == Stage::Complete ? "选择起点继续测量 · Esc 退出" : "选择起点 · Esc 退出");
+    if (selecting_) setHint(selectionTitle_ + (targetPoints_ == 1 ? " · 选择位置 · Esc 取消" : " · 选择起点 · Esc 取消"));
+    else setHint(stage_ == Stage::Complete ? "选择起点继续测量 · Esc 退出" : "选择起点 · Esc 退出");
     emit activeChanged(true);
     return true;
 }
 
-void DistanceMeasureTool::stop()
+bool ViewportPointPicker::startSelection(const std::vector<vtkActor*>& clouds, int count, const QString& title)
+{
+    clear();
+    if (count < 1 || count > 2) return false;
+    selecting_ = true;
+    targetPoints_ = count;
+    selectionTitle_ = title;
+    selectedPoints_.clear();
+    if (!begin(clouds)) { selecting_ = false; return false; }
+    return true;
+}
+
+void ViewportPointPicker::stop()
 {
     if (!active_) return;
+    const bool selection = selecting_;
+    const bool accepted = selection && selectedPoints_.size() == static_cast<size_t>(targetPoints_);
     hoverTimer_.stop();
-    if (stage_ != Stage::Complete) {
+    if (selection || stage_ != Stage::Complete) {
         result_ = {};
         for (auto& point : points_) point->VisibilityOff();
         for (auto& label : labels_) label->VisibilityOff();
         lineActor_->VisibilityOff();
         lineOutline_->VisibilityOff();
-        emit resultChanged(QString());
+        if (!selection) emit resultChanged(QString());
     }
     active_ = false;
     pressed_ = dragged_ = false;
@@ -165,12 +196,19 @@ void DistanceMeasureTool::stop()
         view_->setCursor(originalCursor_);
     }
     hint_->hide();
+    cancel_->hide();
     emit activeChanged(false);
     render();
+    if (selection) {
+        if (!accepted) selectedPoints_.clear();
+        selecting_ = false;
+        emit selectionCompleted(accepted);
+    }
 }
 
-void DistanceMeasureTool::clear()
+void ViewportPointPicker::clear()
 {
+    selectedPoints_.clear();
     const bool hadMeasurement = points_[0]->GetVisibility() || result_.success;
     if (!active_ && !hadMeasurement) return;
     stop();
@@ -184,9 +222,10 @@ void DistanceMeasureTool::clear()
     render();
 }
 
-bool DistanceMeasureTool::eventFilter(QObject* watched, QEvent* event)
+bool ViewportPointPicker::eventFilter(QObject* watched, QEvent* event)
 {
     if (!active_ || !view_) return false;
+    if (watched == view_->window() && event->type() == QEvent::Close) stop();
     if (event->type() == QEvent::KeyPress) {
         auto widget = qobject_cast<QWidget*>(watched);
         if (widget && widget->window() == view_->window() && static_cast<QKeyEvent*>(event)->key() == Qt::Key_Escape) {
@@ -195,6 +234,7 @@ bool DistanceMeasureTool::eventFilter(QObject* watched, QEvent* event)
         }
     }
     if (watched != view_) return false;
+    if (event->type() == QEvent::Resize) setHint(hint_->text());
     if (event->type() == QEvent::MouseButtonPress) {
         auto mouse = static_cast<QMouseEvent*>(event);
         if (mouse->button() == Qt::LeftButton && mouse->modifiers() == Qt::NoModifier) {
@@ -227,7 +267,7 @@ bool DistanceMeasureTool::eventFilter(QObject* watched, QEvent* event)
     return false;
 }
 
-bool DistanceMeasureTool::pick(const QPoint& pos, MeasureDistance::Point& point)
+bool ViewportPointPicker::pick(const QPoint& pos, MeasureDistance::Point& point)
 {
     if (!view_ || !view_->rect().contains(pos)) return false;
     const int* size = window_->GetSize();
@@ -241,7 +281,7 @@ bool DistanceMeasureTool::pick(const QPoint& pos, MeasureDistance::Point& point)
     return MeasureDistance::compute(point, point).success;
 }
 
-void DistanceMeasureTool::hover()
+void ViewportPointPicker::hover()
 {
     if (!active_ || pressed_ || stage_ == Stage::Complete) return;
     MeasureDistance::Point point;
@@ -257,12 +297,27 @@ void DistanceMeasureTool::hover()
     render();
 }
 
-void DistanceMeasureTool::select(const QPoint& pos)
+void ViewportPointPicker::select(const QPoint& pos)
 {
     hoverTimer_.stop();
     MeasureDistance::Point point;
     if (!pick(pos, point)) {
         if (stage_ != Stage::Complete) hidePreview();
+        return;
+    }
+    if (selecting_) {
+        selectedPoints_.push_back(point);
+        if (selectedPoints_.size() == 1) {
+            result_.start = point;
+            stage_ = Stage::End;
+            spheres_[0]->SetCenter(point.data());
+            points_[0]->VisibilityOn();
+            labels_[0]->SetPosition(point.data());
+            labels_[0]->VisibilityOn();
+            setHint(selectionTitle_ + " · 选择终点 · 拖动旋转 / 滚轮缩放 · Esc 取消");
+        }
+        if (selectedPoints_.size() == static_cast<size_t>(targetPoints_)) stop();
+        else render();
         return;
     }
     if (stage_ != Stage::End) {
@@ -287,7 +342,7 @@ void DistanceMeasureTool::select(const QPoint& pos)
     render();
 }
 
-void DistanceMeasureTool::showEnd(const MeasureDistance::Point& point)
+void ViewportPointPicker::showEnd(const MeasureDistance::Point& point)
 {
     result_ = MeasureDistance::compute(result_.start, point);
     if (!result_.success) { hidePreview(); return; }
@@ -295,6 +350,7 @@ void DistanceMeasureTool::showEnd(const MeasureDistance::Point& point)
     points_[1]->VisibilityOn();
     labels_[1]->SetPosition(point[0], point[1], point[2]);
     labels_[1]->VisibilityOn();
+    if (selecting_) return;
     line_->SetPoint1(result_.start.data());
     line_->SetPoint2(point.data());
     lineActor_->VisibilityOn();
@@ -308,7 +364,7 @@ void DistanceMeasureTool::showEnd(const MeasureDistance::Point& point)
     emit resultChanged(resultText());
 }
 
-void DistanceMeasureTool::hidePreview()
+void ViewportPointPicker::hidePreview()
 {
     if (stage_ == Stage::Start) points_[0]->VisibilityOff();
     points_[1]->VisibilityOff();
@@ -317,11 +373,11 @@ void DistanceMeasureTool::hidePreview()
     lineActor_->VisibilityOff();
     lineOutline_->VisibilityOff();
     result_.success = false;
-    emit resultChanged(QString());
+    if (!selecting_) emit resultChanged(QString());
     render();
 }
 
-void DistanceMeasureTool::updateAnnotations()
+void ViewportPointPicker::updateAnnotations()
 {
     const bool visible = points_[0]->GetVisibility() || points_[1]->GetVisibility();
     overlayRenderer_->SetDraw(visible);
@@ -378,7 +434,7 @@ void DistanceMeasureTool::updateAnnotations()
     }
 }
 
-QString DistanceMeasureTool::resultText() const
+QString ViewportPointPicker::resultText() const
 {
     return QString("空间距离: %1 mm\nA: (%2, %3, %4) mm\nB: (%5, %6, %7) mm")
         .arg(result_.distance, 0, 'f', 3)
@@ -386,15 +442,23 @@ QString DistanceMeasureTool::resultText() const
         .arg(result_.end[0], 0, 'f', 3).arg(result_.end[1], 0, 'f', 3).arg(result_.end[2], 0, 'f', 3);
 }
 
-void DistanceMeasureTool::setHint(const QString& text)
+void ViewportPointPicker::setHint(const QString& text)
 {
     hint_->setText(text);
-    hint_->adjustSize();
+    hint_->ensurePolished();
+    const int available = view_ ? std::max(1, view_->width() - 104) : 600;
+    const int width = std::min(available, QFontMetrics(hint_->font()).horizontalAdvance(text) + 28);
+    hint_->setWordWrap(true);
+    hint_->setFixedSize(width, hint_->heightForWidth(width));
     hint_->show();
     hint_->raise();
+    cancel_->adjustSize();
+    cancel_->move(hint_->geometry().right() + 8, hint_->y());
+    cancel_->show();
+    cancel_->raise();
 }
 
-void DistanceMeasureTool::render()
+void ViewportPointPicker::render()
 {
     if (view_ && view_->isVisible()) {
         window_->Render();

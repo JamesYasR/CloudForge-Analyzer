@@ -18,7 +18,6 @@
 #include <QSemaphore>
 #include <QThread>
 #include "Protrusion_Depression_Cylinder.h"
-#include "Linear_Depression_Plane.h"
 
 
 
@@ -27,7 +26,7 @@ QT_BEGIN_NAMESPACE
 namespace Ui { class CloudForgeAnalyzerClass; };
 QT_END_NAMESPACE
 
-class DistanceMeasureTool;
+class ViewportPointPicker;
 class PolygonClipTool;
 class WeldPreparationOverlay;
 class ViewportResultOverlay;
@@ -85,6 +84,16 @@ private slots:
     void Tool_MeasurePothole();
     void Update_PointCounts();
 private:
+    using PickedPoints = std::vector<std::array<double, 3>>;
+    void PickCloudPoints(const std::string& cloudName, int count, const QString& title,
+                         std::function<void(const PickedPoints&)> onPicked);
+    void RunArcMeasurement(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud,
+                           pcl::ModelCoefficients::Ptr cylinder, std::shared_ptr<pcl::PointXYZ> point,
+                           bool hasPoint, MeasureArc::ArcParams params);
+    void RunGeodesicMeasurement(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud, double radius,
+                               pcl::PointXYZ start, pcl::PointXYZ end);
+    QMetaObject::Connection m_pointSelectionConnection;
+    std::size_t m_pointSelectionRevision = 0;
     void PreviewPolygonClip();
     void ApplyPolygonClip();
     // 焊前装配阶差/间隙的共同流程(§7): 选两件 → 定接缝区域 → 看 Z 均值 → 设 R 与方向 → 后台计算
@@ -216,7 +225,7 @@ private:
     std::function<bool(int, int, const std::string&)> WorkerProgressCallback();
 
     pcl::visualization::PCLVisualizer::Ptr viewer;
-    std::unique_ptr<DistanceMeasureTool> m_distanceTool;
+    std::unique_ptr<ViewportPointPicker> m_pointPicker;
     std::unique_ptr<PolygonClipTool> m_clipTool;
     pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZ>::Ptr renderer_custom;
     UndoRedoManager m_undoRedoManager;

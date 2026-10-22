@@ -2,7 +2,7 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 export VCPKG_ROOT="${VCPKG_ROOT:-$(dirname "$ROOT")/vcpkg}"
-taskset -c 0-15 cmake --build "$ROOT/build" --parallel 16
+taskset -c 0-15 cmake --build "$ROOT/build" --parallel 2
 cd "$ROOT/build"
 python3 - "$ROOT/analysis/viewport_results/test_viewport_results.cpp" <<'PY'
 import json, pathlib, re, shlex, subprocess, sys

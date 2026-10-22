@@ -1,5 +1,5 @@
 #include "CloudForgeAnalyzer.h"
-#include "Basic/DistanceMeasureTool.h"
+#include "Basic/ViewportPointPicker.h"
 #include "ui_CloudForgeAnalyzer.h"
 #include <QElapsedTimer>
 #include <QLabel>
@@ -121,8 +121,8 @@ static StartupCamera startupScene(bool withTool)
     viewer->addCoordinateSystem(4.0);
     StartupCamera snapshot;
     snapshot.createdBeforeTool = renderer->IsActiveCameraCreated();
-    std::unique_ptr<DistanceMeasureTool> tool;
-    if (withTool) tool = std::make_unique<DistanceMeasureTool>(&view, renderer, window);
+    std::unique_ptr<ViewportPointPicker> tool;
+    if (withTool) tool = std::make_unique<ViewportPointPicker>(&view, renderer, window);
     snapshot.createdAfterTool = renderer->IsActiveCameraCreated();
     auto cloud = pcl::make_shared<pcl::PointCloud<pcl::PointXYZ>>();
     pcl::io::loadPCDFile("PCDfiles/rabbit.pcd", *cloud);
@@ -183,11 +183,11 @@ static void guiTests()
     std::cout << "[DISPLAY] viewport=" << view.width() << 'x' << view.height()
               << " render=" << window->GetSize()[0] << 'x' << window->GetSize()[1]
               << " dpi=" << window->GetDPI() << " dpr=" << view.devicePixelRatioF() << std::endl;
-    DistanceMeasureTool tool(&view, renderer, window);
+    ViewportPointPicker tool(&view, renderer, window);
     QString text;
     int completed = 0;
-    QObject::connect(&tool, &DistanceMeasureTool::resultChanged, [&](const QString& value) { text = value; });
-    QObject::connect(&tool, &DistanceMeasureTool::measurementCompleted, [&](const QString&) { ++completed; });
+    QObject::connect(&tool, &ViewportPointPicker::resultChanged, [&](const QString& value) { text = value; });
+    QObject::connect(&tool, &ViewportPointPicker::measurementCompleted, [&](const QString&) { ++completed; });
     check(!tool.start({}), "empty scene rejected");
     second->VisibilityOff();
     check(!tool.start({second}), "hidden clouds rejected");

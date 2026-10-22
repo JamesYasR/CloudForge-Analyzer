@@ -1,5 +1,5 @@
 #include "CloudForgeAnalyzer.h"
-#include "Basic/DistanceMeasureTool.h"
+#include "Basic/ViewportPointPicker.h"
 #include "Basic/PolygonClipTool.h"
 #include "Basic/WeldPreparationOverlay.h"
 #include "Basic/ViewportResultOverlay.h"
@@ -49,7 +49,7 @@ CloudForgeAnalyzer::~CloudForgeAnalyzer()
     m_weldPrepOverlay.reset();
     m_resultOverlay.reset();
     m_clipTool.reset();
-    m_distanceTool.reset();
+    m_pointPicker.reset();
     viewer.reset();
     delete ui;
 }
@@ -81,13 +81,15 @@ void CloudForgeAnalyzer::InitalizeRenderer() {
 
     viewer->setBackgroundColor(0, 0.3, 0.4);
     viewer->addCoordinateSystem(4.0);
-    m_distanceTool = std::make_unique<DistanceMeasureTool>(ui->winOfAnalyzer, renderer, renderWindow);
-    connect(m_distanceTool.get(), &DistanceMeasureTool::activeChanged, ui->measure_line, &QAction::setChecked);
-    connect(m_distanceTool.get(), &DistanceMeasureTool::resultChanged, this, [this, previous = QString()](const QString& text) mutable {
+    m_pointPicker = std::make_unique<ViewportPointPicker>(ui->winOfAnalyzer, renderer, renderWindow);
+    connect(m_pointPicker.get(), &ViewportPointPicker::activeChanged, this, [this](bool active) {
+        ui->measure_line->setChecked(active && !m_pointPicker->isSelecting());
+    });
+    connect(m_pointPicker.get(), &ViewportPointPicker::resultChanged, this, [this, previous = QString()](const QString& text) mutable {
         if (!text.isEmpty() || ui->textEdit_Show_CFmes->toPlainText() == previous) Update_CFmes(text.toStdString());
         previous = text;
     });
-    connect(m_distanceTool.get(), &DistanceMeasureTool::measurementCompleted, this, [this](const QString& text) {
+    connect(m_pointPicker.get(), &ViewportPointPicker::measurementCompleted, this, [this](const QString& text) {
         TeEDebug(text.toStdString());
     });
     m_clipTool = std::make_unique<PolygonClipTool>(ui->winOfAnalyzer, renderer, renderWindow);
@@ -106,6 +108,9 @@ void CloudForgeAnalyzer::InitalizeQWidgets() {
 
 void CloudForgeAnalyzer::InitalizeConnects() {
     for (auto action : findChildren<QAction*>()) {
+        connect(action, &QAction::triggered, this, [this]() {
+            ++m_pointSelectionRevision;
+        });
         if (action != ui->action_Clip && action != ui->action_cancel_task) {
             connect(action, &QAction::triggered, this, [this]() {
                 if (m_clipTool) m_clipTool->stop();
@@ -113,7 +118,7 @@ void CloudForgeAnalyzer::InitalizeConnects() {
         }
         if (action != ui->measure_line) {
             connect(action, &QAction::triggered, this, [this]() {
-                if (m_distanceTool) m_distanceTool->stop();
+                if (m_pointPicker) m_pointPicker->stop();
             });
         }
     }
@@ -864,7 +869,8 @@ void CloudForgeAnalyzer::Tool_MeasureArc() {
         TeEDebug(">>:未选择点云");
         return;
     }
-    pcl::PointCloud<pcl::PointXYZ>::Ptr Cloud_Temp = CloudMap[dialog.getSelectedList()[0]];
+    const std::string cloudName = dialog.getSelectedList()[0];
+    pcl::PointCloud<pcl::PointXYZ>::Ptr Cloud_Temp = CloudMap[cloudName];
 
     ChoseCyDialog dialog1(cylinderResultsMap);
     if (dialog1.getSelectedList().empty()) {
@@ -921,9 +927,9 @@ void CloudForgeAnalyzer::Tool_MeasureArc() {
 
     
     OptionBox box1({ "测量中线", "手动选择" }, nullptr);
-    box.setTitle("选择测量位置");
-    box.setMessage("请选择选择测量位置:");
-    box.setDefaultOption(0);
+    box1.setTitle("选择测量位置");
+    box1.setMessage("请选择测量位置:");
+    box1.setDefaultOption(0);
     if (box1.exec() == QDialog::Accepted) {
         int index = box1.getSelectedIndex();
         QString text = box1.getSelectedText();
@@ -937,14 +943,6 @@ void CloudForgeAnalyzer::Tool_MeasureArc() {
 
             qDebug() << "手动选择测量位置";
             TeEDebug("手动选择测量位置");
-            TeEDebug("请选择高度");
-            PointPickerMgr mgr(ui->winOfAnalyzer->interactor(), 1);
-            auto pts_pcl = mgr.GetPickedPCLPoints();
-            if (pts_pcl.size() < 1) {
-                TeEDebug("点选择已取消或不足一个点");
-                return;
-            }
-            *interestPointPtr = pts_pcl[0];//之前写法：interest_point = &pts_pcl[0]; mgr.GetPickedPCLPoints();返回的是临时变量，在此语块后被释放造成错误
             hasInterestPoint = true;
         }
     }
@@ -991,6 +989,19 @@ void CloudForgeAnalyzer::Tool_MeasureArc() {
         }
     }
 
+    if (hasInterestPoint) {
+        PickCloudPoints(cloudName, 1, "圆柱弧长", [this, Cloud_Temp, cy_Temp, interestPointPtr, arcParams](const PickedPoints& points) {
+            *interestPointPtr = pcl::PointXYZ(points[0][0], points[0][1], points[0][2]);
+            RunArcMeasurement(Cloud_Temp, cy_Temp, interestPointPtr, true, arcParams);
+        });
+    }
+    else RunArcMeasurement(Cloud_Temp, cy_Temp, interestPointPtr, false, arcParams);
+}
+
+void CloudForgeAnalyzer::RunArcMeasurement(pcl::PointCloud<pcl::PointXYZ>::Ptr Cloud_Temp,
+    pcl::ModelCoefficients::Ptr cy_Temp, std::shared_ptr<pcl::PointXYZ> interestPointPtr,
+    bool hasInterestPoint, MeasureArc::ArcParams arcParams)
+{
     // 后台执行弧长计算(切片投影+样条拟合+积分), 完成后回到界面线程添加曲线Actor
     auto measurerHolder = std::make_shared<std::shared_ptr<MeasureArc>>();
     RunAsyncVoid("圆弧测量",
@@ -2252,13 +2263,46 @@ void CloudForgeAnalyzer::Tool_MeasureParallel() {
     Update_CFmes("平行度(夹角):" + std::to_string(parallelism) + "度");
 }
 
-void CloudForgeAnalyzer::Tool_MeasureDistance()
+void CloudForgeAnalyzer::PickCloudPoints(const std::string& cloudName, int count, const QString& title,
+    std::function<void(const PickedPoints&)> onPicked)
 {
-    if (!m_distanceTool) return;
-    if (m_distanceTool->isActive()) {
-        m_distanceTool->stop();
+    disconnect(m_pointSelectionConnection);
+    m_pointPicker->clear();
+    const auto cloud = CloudMap.find(cloudName);
+    const auto actors = viewer->getCloudActorMap();
+    const auto actor = actors->find(cloudName);
+    if (cloud == CloudMap.end() || actor == actors->end()) {
+        TeEDebug("无法选点: 当前点云不可用");
         return;
     }
+    const auto source = cloud->second;
+    const auto revision = ++m_pointSelectionRevision;
+    m_pointSelectionConnection = connect(m_pointPicker.get(), &ViewportPointPicker::selectionCompleted,
+        this, [this, cloudName, source, revision, onPicked](bool success) {
+            disconnect(m_pointSelectionConnection);
+            if (!success) return;
+            const auto points = m_pointPicker->selectedPoints();
+            QTimer::singleShot(0, this, [this, cloudName, source, revision, points, onPicked]() {
+                const auto cloud = CloudMap.find(cloudName);
+                if (m_shuttingDown.load() || !isVisible() || revision != m_pointSelectionRevision
+                    || cloud == CloudMap.end() || cloud->second != source) return;
+                onPicked(points);
+            });
+        });
+    if (!m_pointPicker->startSelection({actor->second.actor}, count, title)) {
+        disconnect(m_pointSelectionConnection);
+        TeEDebug("无法选点: 当前点云不可见或没有可选取的点");
+    }
+}
+
+void CloudForgeAnalyzer::Tool_MeasureDistance()
+{
+    if (!m_pointPicker) return;
+    if (m_pointPicker->isActive() && !m_pointPicker->isSelecting()) {
+        m_pointPicker->stop();
+        return;
+    }
+    m_pointPicker->stop();
     if (IsTaskRunning()) {
         ui->measure_line->setChecked(false);
         TeEDebug("计算进行中，请稍后测距。");
@@ -2268,7 +2312,7 @@ void CloudForgeAnalyzer::Tool_MeasureDistance()
     for (const auto& entry : *viewer->getCloudActorMap()) {
         if (CloudMap.count(entry.first) || RGBCloudMap.count(entry.first)) clouds.push_back(entry.second.actor);
     }
-    if (!m_distanceTool->start(clouds)) {
+    if (!m_pointPicker->start(clouds)) {
         ui->measure_line->setChecked(false);
         TeEDebug("不可测: 当前没有可选取的点云");
     }
@@ -2434,18 +2478,6 @@ void CloudForgeAnalyzer::Slot_ph_CurvSeg_Triggered() {
 	}
     pcl::PointCloud<pcl::PointXYZ>::Ptr tempcloud = CloudMap[dialog.getSelectedList()[0]];
 
-    // 交互拾取点与参数对话框都留在界面线程
-    TeEDebug("请选择点 (左键选点，Enter确认，ESC取消)");
-    PointPickerMgr mgr(ui->winOfAnalyzer->interactor(), 1);
-    const auto& pts = mgr.GetPickedPoints();
-    const auto& pts_pcl = mgr.GetPickedPCLPoints();
-    if (pts.size() < 1) {
-        TeEDebug("点选择已取消或不足两个点");
-        return;
-    }
-
-    pcl::PointXYZ picked_point = pts_pcl[0];
-
     // 参数对话框在界面线程弹出(原先在 CurvatureSegmentation 构造函数里弹框)
     ParamDialogCurvSeg csDialog;
     if (csDialog.exec() != QDialog::Accepted) {
@@ -2463,6 +2495,8 @@ void CloudForgeAnalyzer::Slot_ph_CurvSeg_Triggered() {
         return;
     }
 
+    PickCloudPoints(dialog.getSelectedList()[0], 1, "曲率分割", [this, tempcloud, params](const PickedPoints& points) {
+    const pcl::PointXYZ picked_point(points[0][0], points[0][1], points[0][2]);
     // 后台执行曲率区域生长分割, 完成后回到界面线程可视化
     auto csHolder = std::make_shared<std::shared_ptr<CurvatureSegmentation>>();
     RunAsyncVoid("曲率分割",
@@ -2491,6 +2525,7 @@ void CloudForgeAnalyzer::Slot_ph_CurvSeg_Triggered() {
     ColorManager randomColor;
 	AddPointCloud(GenerateRandomName("planar"), plane, randomColor);
         });
+    });
 }
 
 
@@ -2510,26 +2545,6 @@ void CloudForgeAnalyzer::Tool_MeasureGeodisic() {
         TeEDebug(">>: 已有计算任务进行中，请等待完成或点击工具栏“取消计算”。");
         return;
     }
-    TeEDebug("请选择点 (左键选点，Enter确认，ESC取消)");
-    PointPickerMgr mgr(ui->winOfAnalyzer->interactor(), 2);
-    const auto& pts = mgr.GetPickedPoints();
-	const auto& pts_pcl = mgr.GetPickedPCLPoints();
-    if (pts.size() < 2) {
-        TeEDebug("点选择已取消或不足两个点");
-        return;
-    }
-    double p0[3], p1[3];
-	pcl::PointXYZ pointstart, pointend;
-    std::copy(pts[0].begin(), pts[0].end(), p0);std::copy(pts[1].begin(), pts[1].end(), p1);
-	pointstart = pts_pcl[0];
-	pointend = pts_pcl[1];
-
-    std::string msg="选择点: "
-        + std::to_string(p0[0]) + "," + std::to_string(p0[1]) + "," + std::to_string(p0[2])
-        + " 和 "
-		+ std::to_string(p1[0]) + "," + std::to_string(p1[1]) + "," + std::to_string(p1[2]);
-    TeEDebug(msg);
-
     ChoseCloudDialog dialog(CloudMap, ColorMap);
     if (dialog.exec() != QDialog::Accepted) {
         TeEDebug(">>:操作取消");
@@ -2557,6 +2572,16 @@ void CloudForgeAnalyzer::Tool_MeasureGeodisic() {
         qDebug() << "取消操作";
         return;
     }
+    PickCloudPoints(dialog.getSelectedList()[0], 2, "测地线弧长", [this, tempcloud, base_radius](const PickedPoints& points) {
+        const pcl::PointXYZ start(points[0][0], points[0][1], points[0][2]);
+        const pcl::PointXYZ end(points[1][0], points[1][1], points[1][2]);
+        RunGeodesicMeasurement(tempcloud, base_radius, start, end);
+    });
+}
+
+void CloudForgeAnalyzer::RunGeodesicMeasurement(pcl::PointCloud<pcl::PointXYZ>::Ptr tempcloud,
+    double base_radius, pcl::PointXYZ pointstart, pcl::PointXYZ pointend)
+{
     // 交互拾取与参数收集已在界面线程完成, 计算放到后台线程(界面保持响应)
     auto measurerHolder = std::make_shared<std::shared_ptr<GeodesicArcMeasurer>>();
     auto resultPtr = std::make_shared<GeodesicArcMeasurer::MeasurementResult>();
@@ -3496,7 +3521,7 @@ void CloudForgeAnalyzer::Slot_ed_cleangeo_Triggered() {
     cleanGeodesicVisualization();
     cleanArcMeasurement();
     cleanWeldPrepVisuals();
-    if (m_distanceTool) m_distanceTool->clear();
+    if (m_pointPicker) m_pointPicker->clear();
     viewer->removeAllShapes();
     //clearAllActors();
 
@@ -3862,7 +3887,7 @@ void CloudForgeAnalyzer::AddPointCloud(std::string name, pcl::PointCloud<pcl::Po
     cleanArcMeasurement();
     cleanWeldPrepVisuals();
     if (m_clipTool) m_clipTool->stop();
-    if (m_distanceTool) m_distanceTool->clear();
+    if (m_pointPicker) m_pointPicker->clear();
     if (m_undoBatchLevel == 0) {
         saveUndoState("添加点云: " + name);
     }
@@ -3878,7 +3903,7 @@ void CloudForgeAnalyzer::AddPointCloud(std::string name, pcl::PointCloud<pcl::Po
 
 void CloudForgeAnalyzer::ClearAllPointCloudRGB() {
     if (m_clipTool) m_clipTool->stop();
-    if (m_distanceTool) m_distanceTool->clear();
+    if (m_pointPicker) m_pointPicker->clear();
     for (auto& pair : RGBCloudMap) {
         viewer->removePointCloud(pair.first);
         pair.second.reset();
@@ -3894,7 +3919,7 @@ void CloudForgeAnalyzer::ClearAllPointCloud() {
     cleanArcMeasurement();
     cleanWeldPrepVisuals();
     if (m_clipTool) m_clipTool->stop();
-    if (m_distanceTool) m_distanceTool->clear();
+    if (m_pointPicker) m_pointPicker->clear();
     if (m_undoBatchLevel == 0) {
         saveUndoState("清除全部点云");
     }
@@ -3914,7 +3939,7 @@ void CloudForgeAnalyzer::DelePointCloud(std::string name) {
     cleanArcMeasurement();
     cleanWeldPrepVisuals();
     if (m_clipTool) m_clipTool->stop();
-    if (m_distanceTool) m_distanceTool->clear();
+    if (m_pointPicker) m_pointPicker->clear();
     if (m_undoBatchLevel == 0) {
         saveUndoState("删除点云: " + name);
     }
@@ -3955,7 +3980,7 @@ void CloudForgeAnalyzer::rebuildCloudVisualization() {
     cleanArcMeasurement();
     cleanWeldPrepVisuals();
     if (m_clipTool) m_clipTool->stop();
-    if (m_distanceTool) m_distanceTool->clear();
+    if (m_pointPicker) m_pointPicker->clear();
     viewer->removeAllPointClouds();
     for (const auto& pair : CloudMap) {
         auto colorIt = ColorMap.find(pair.first);
@@ -4069,7 +4094,7 @@ void CloudForgeAnalyzer::ResetProgressBar() {
 void CloudForgeAnalyzer::BeginAsyncTask(const QString& title)
 {
     if (m_clipTool && !m_clipTool->isBusy()) m_clipTool->stop();
-    if (m_distanceTool) m_distanceTool->stop();
+    if (m_pointPicker) m_pointPicker->stop();
     m_asyncState = std::make_shared<AsyncTaskState>();
     m_asyncRunning = true;
 
