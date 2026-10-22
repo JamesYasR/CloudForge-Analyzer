@@ -7,3 +7,12 @@ Real angle_degrees=1.5103701035673898
 Real comparison_length_mm=109.81499193688916
 Independent verification: see independent_real.json
 Other feature regressions: not run
+
+2026-10-22 UI refinement
+Local Debug build: PASS, max 2 jobs, 8 GiB guard
+Numeric checks: pass=37 fail=0; real output bitwise identical to 50e4fb2
+Desktop normal: pass=44 fail=0
+Desktop QT_SCALE_FACTOR=2: pass=44 fail=0
+Source color consistency verified for plot legend pixels, seam actors, fitted curves, swapped roles and updated cloud colors
+Space angle label/icon and compact weld controls verified
+Other feature regressions: not run

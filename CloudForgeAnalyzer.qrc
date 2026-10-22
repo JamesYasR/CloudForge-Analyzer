@@ -8,6 +8,7 @@
         <file>Icons/icons_measureArc.png</file>
         <file>Icons/icon_cut.png</file>
         <file>Icons/icon_parallel.png</file>
+        <file>Icons/icon_spatial_angle.png</file>
         <file>Icons/height_icon.png</file>
         <file>Icons/icon_double.png</file>
         <file>Icons/icon_rectangle.png</file>
@@ -17,6 +18,5 @@
         <file>Icons/icon_weldheight.png</file>
         <file>Icons/icon_Pothole.png</file>
         <file>Icons/icon_WeldStep.png</file>
-        <file>Icons/icon_WeldGap.png</file>
     </qresource>
 </RCC>

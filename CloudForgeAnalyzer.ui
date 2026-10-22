@@ -943,10 +943,17 @@ QMenu::item:selected {
   <action name="measure_parallel">
    <property name="icon">
     <iconset resource="CloudForgeAnalyzer.qrc">
-     <normaloff>:/CloudForgeAnalyzer/Icons/icon_parallel.png</normaloff>:/CloudForgeAnalyzer/Icons/icon_parallel.png</iconset>
+     <normaloff>:/CloudForgeAnalyzer/Icons/icon_spatial_angle.png</normaloff>:/CloudForgeAnalyzer/Icons/icon_spatial_angle.png</iconset>
    </property>
    <property name="text">
-    <string>平行度</string>
+    <string>空间夹角</string>
+   </property>
+   <property name="iconText">
+    <string>空间
+夹角</string>
+   </property>
+   <property name="toolTip">
+    <string>测量两条空间直线方向的夹角</string>
    </property>
    <property name="shortcut">
     <string>Ctrl+P</string>

@@ -1,6 +1,7 @@
 #pragma once
 #include "Measure/MeasureWeldParallelism.h"
 #include <QObject>
+#include <QColor>
 #include <QPointer>
 #include <vtkSmartPointer.h>
 #include <memory>
@@ -24,6 +25,7 @@ public:
         std::string name;
         MeasureWeldParallelism::Cloud::Ptr cloud;
         vtkSmartPointer<vtkActor> actor;
+        QColor color=Qt::white;
     };
     struct Reference {
         std::string name;
@@ -48,7 +50,6 @@ signals:
     void activeChanged(bool active);
     void measureRequested();
     void cancelRequested();
-    void fitReferenceRequested();
     void resultMessage(const QString& text);
 protected:
     bool eventFilter(QObject* watched,QEvent* event) override;
@@ -64,7 +65,7 @@ private:
     ViewportResultOverlay* results_;
     QDockWidget* dock_=nullptr;
     QComboBox *first_=nullptr,*second_=nullptr,*reference_=nullptr;
-    QPushButton *measure_=nullptr,*cancel_=nullptr,*clear_=nullptr,*fit_=nullptr;
+    QPushButton *measure_=nullptr,*cancel_=nullptr,*clear_=nullptr;
     QLabel* summary_=nullptr;
     QCheckBox *points_=nullptr,*curves_=nullptr;
     WeldParallelismPlot* plot_=nullptr;

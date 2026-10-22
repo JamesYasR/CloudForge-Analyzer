@@ -15,6 +15,7 @@
 #include <QWheelEvent>
 #include <vtkCamera.h>
 #include <vtkDataSet.h>
+#include <vtkProperty.h>
 #include <fstream>
 #include <iostream>
 #include <iomanip>
@@ -151,7 +152,7 @@ static int guiTests(int argc,char** argv)
     auto clouds=realSeams();auto ref=readReference();
     auto background=pcl::make_shared<Measure::Cloud>();pcl::io::loadPCDFile(root+"圆柱壁面.pcd",*background);
     main.AddPointCloud("圆柱壁面",background,ColorManager(200,210,215));
-    main.AddPointCloud("焊缝1",clouds[0],ColorManager(230,230,235));main.AddPointCloud("焊缝2",clouds[1],ColorManager(235,235,235));
+    main.AddPointCloud("焊缝1",clouds[0],ColorManager(62,215,139));main.AddPointCloud("焊缝2",clouds[1],ColorManager(230,107,199));
     auto coeff=pcl::make_shared<pcl::ModelCoefficients>();coeff->values={float(ref.point.x()),float(ref.point.y()),float(ref.point.z()),float(ref.axis.x()),float(ref.axis.y()),float(ref.axis.z()),float(ref.radius)};
     main.cylinderResultsMap["real_three_stage"]=coeff;main.m_lastThreeStageCylinder="real_three_stage";
     auto view=main.ui->winOfAnalyzer;auto renderer=view->renderWindow()->GetRenderers()->GetFirstRenderer();auto camera=renderer->GetActiveCamera();
@@ -160,6 +161,9 @@ static int guiTests(int argc,char** argv)
     const Eigen::Vector3d delta=center-ref.point,radial=(delta-delta.dot(frame.axisDirection())*frame.axisDirection()).normalized();
     const Eigen::Vector3d position=center+radial*400;camera->SetPosition(position.data());camera->SetFocalPoint(center.data());camera->SetViewUp(frame.axisDirection().data());camera->ParallelProjectionOn();camera->SetParallelScale(95);renderer->ResetCameraClippingRange();view->renderWindow()->Render();
     auto tool=main.m_weldParallelTool.get();auto dock=main.findChild<QDockWidget*>("weldParallelDock");
+    check(main.ui->measure_parallel->text()=="空间夹角" && main.ui->measure_parallel->shortcut()==QKeySequence("Ctrl+P"),"space angle action is renamed and retains shortcut");
+    check(!main.ui->measure_parallel->icon().pixmap(32,32).isNull(),"space angle vector icon is available in resources");
+    check(!dock->findChild<QPushButton*>("weldParallelFit"),"weld controls contain no cylinder fitting button");
     auto original1=main.viewer->getCloudActorMap()->at("焊缝1").actor,original2=main.viewer->getCloudActorMap()->at("焊缝2").actor;
     auto style=view->interactor()->GetInteractorStyle();auto picker=view->interactor()->GetPicker();double oldPosition[3];camera->GetPosition(oldPosition);
     auto open=[&]() { main.ui->measure_weld_parallel->trigger();pump(); };
@@ -167,13 +171,27 @@ static int guiTests(int argc,char** argv)
     auto run=[&]() { click(dock->findChild<QPushButton*>("weldParallelMeasure"));wait(); };
     open();check(tool->isActive() && dock->isVisible() && !dock->isFloating(),"sidebar opens native dock in main window");
     check(dock->findChild<QComboBox*>("weldParallelFirst")->currentText()=="焊缝1" && dock->findChild<QComboBox*>("weldParallelSecond")->currentText()=="焊缝2","two seam roles selected correctly");
-    check(dock->findChild<QComboBox*>("weldParallelReference")->currentText().contains("1940.0 mm"),"shared three-stage cylinder and radius visible");
+    check(dock->findChild<QComboBox*>("weldParallelReference")->currentText()=="real_three_stage","reference selector shows only the cylinder identifier");
     check(std::equal(oldPosition,oldPosition+3,camera->GetPosition()),"opening controls preserves camera pose");
     auto secondBox=dock->findChild<QComboBox*>("weldParallelSecond");const int selectedSecond=secondBox->currentIndex();
     secondBox->setCurrentIndex(dock->findChild<QComboBox*>("weldParallelFirst")->currentIndex());pump();
     check(!dock->findChild<QPushButton*>("weldParallelMeasure")->isEnabled(),"same seam cannot be selected for both roles");secondBox->setCurrentIndex(selectedSecond);pump();
     run();check(tool->actors_.size()==4 && !original1->GetVisibility() && !original2->GetVisibility(),"temporary point and curve actors replace only selected displays");
     auto plot=dock->findChild<QWidget*>("weldParallelPlot");
+    auto colorsMatch=[&](const std::array<QColor,2>& expected) {
+        const auto picture=plot->grab().toImage();const double dpr=picture.devicePixelRatio();
+        bool matches=tool->actors_.size()==4;
+        for (int side=0;side<2 && matches;++side) {
+            matches &= picture.pixelColor(qRound((20+side*105)*dpr),qRound(16*dpr))==expected[side];
+            for (int item=0;item<2;++item) {
+                const double* rgb=tool->actors_[side*2+item]->GetProperty()->GetColor();
+                matches &= std::abs(rgb[0]-expected[side].redF())<1e-5 && std::abs(rgb[1]-expected[side].greenF())<1e-5 && std::abs(rgb[2]-expected[side].blueF())<1e-5;
+            }
+        }
+        return matches;
+    };
+    check(colorsMatch({QColor(62,215,139),QColor(230,107,199)}),"plot legend seam points and fitted curves use source cloud colors");
+    check(tool->actors_[0]->GetProperty()->GetOpacity()==original1->GetProperty()->GetOpacity(),"point highlights retain source opacity");
     check(plot->property("hasData").toBool() && plot->property("xPixelsPerMm").toDouble()==plot->property("yPixelsPerMm").toDouble(),"unfolded chart uses equal millimetre scales");
     const double initialScale=plot->property("xPixelsPerMm").toDouble();const QPointF middle=plot->rect().center();
     QWheelEvent wheel(middle,QPointF(plot->mapToGlobal(middle.toPoint())),QPoint(),QPoint(0,120),Qt::NoButton,Qt::NoModifier,Qt::NoScrollPhase,false);
@@ -197,12 +215,18 @@ static int guiTests(int argc,char** argv)
     click(dock->findChild<QCheckBox*>("weldParallelPoints"));check(original1->GetVisibility() && !tool->actors_[0]->GetVisibility(),"point highlight toggle restores original appearance");click(dock->findChild<QCheckBox*>("weldParallelPoints"));
     click(dock->findChild<QCheckBox*>("weldParallelCurves"));check(!tool->actors_[1]->GetVisibility(),"fitted curve visibility controlled by button");click(dock->findChild<QCheckBox*>("weldParallelCurves"));
     run();check(tool->actors_.size()==4 && main.m_resultOverlay->sections_.size()==1,"remeasurement replaces owned display without accumulation");
+    auto firstBox=dock->findChild<QComboBox*>("weldParallelFirst");const int selectedFirst=firstBox->currentIndex();
+    firstBox->setCurrentIndex(selectedSecond);secondBox->setCurrentIndex(selectedFirst);pump();run();
+    check(colorsMatch({QColor(230,107,199),QColor(62,215,139)}),"exchanging seam roles keeps each cloud color attached to its data");
+    firstBox->setCurrentIndex(selectedFirst);secondBox->setCurrentIndex(selectedSecond);pump();run();
     main.ui->action_ed_clean2DActor->trigger();pump();check(!plot->property("hasData").toBool() && main.m_resultOverlay->isHidden() && tool->actors_.size()==4,"2D cleanup clears Qt chart and labels while retaining geometry");
     run();dock->setFloating(true);pump();check(dock->isFloating(),"native dock can float");check(dock->grab().save("analysis/weld_parallelism/floating_controls"+suffix+".png"),"floating controls screenshot saved");
     QKeyEvent escape(QEvent::KeyPress,Qt::Key_Escape,Qt::NoModifier);QApplication::sendEvent(dock,&escape);pump();check(!tool->isActive() && tool->actors_.empty() && original1->GetVisibility() && original2->GetVisibility(),"floating Esc restores source visibility and removes all results");
     dock->setFloating(false);open();run();click(dock->findChild<QPushButton*>("weldParallelClear"));check(tool->isActive() && tool->actors_.empty() && !plot->property("hasData").toBool(),"clear keeps input panel and removes all owned results");
     main.StartWeldParallelismMeasurement();main.CancelCurrentTask();wait();check(tool->actors_.empty() && tool->isActive() && !tool->isBusy(),"cancel discards pending result");
     main.StartWeldParallelismMeasurement();tool->stop();wait();check(!tool->isActive() && tool->actors_.empty(),"close during calculation cannot recreate late results");
+    main.ColorMap.at("焊缝1")=ColorManager(70,140,235);main.rebuildCloudVisualization();open();run();
+    check(colorsMatch({QColor(70,140,235),QColor(230,107,199)}),"reopening reads updated source cloud colors");tool->stop();pump();
     open();run();main.ui->action_ed_cleangall->trigger();pump();check(!tool->isActive() && tool->actors_.empty() && main.m_resultOverlay->isHidden(),"clear all removes geometry and Qt results together");
     open();check(!tool->isActive(),"empty scene cannot start measurement");
     main.close();pump();std::cout<<"pass="<<passed<<" fail="<<failed<<std::endl;return failed ? 1:0;

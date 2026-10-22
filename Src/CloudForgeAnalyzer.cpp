@@ -116,9 +116,6 @@ void CloudForgeAnalyzer::InitalizeRenderer() {
     connect(m_weldParallelTool.get(),&WeldParallelismTool::activeChanged,ui->measure_weld_parallel,&QAction::setChecked);
     connect(m_weldParallelTool.get(),&WeldParallelismTool::measureRequested,this,&CloudForgeAnalyzer::StartWeldParallelismMeasurement);
     connect(m_weldParallelTool.get(),&WeldParallelismTool::cancelRequested,this,&CloudForgeAnalyzer::CancelCurrentTask);
-    connect(m_weldParallelTool.get(),&WeldParallelismTool::fitReferenceRequested,this,[this]() {
-        m_weldParallelTool->stop();ui->action_fit_cy3->trigger();
-    });
     connect(m_weldParallelTool.get(),&WeldParallelismTool::resultMessage,this,[this](const QString& text) {
         Update_CFmes(text.toStdString());TeEDebug(text.toStdString());
     });
@@ -2259,8 +2256,8 @@ void CloudForgeAnalyzer::Tool_MeasureParallel() {
     line2 = &LineMap[dialog.getSelectedList()[1]];
     MeasurePallel measurer(line1->dir_vector,line2->dir_vector);
 	float parallelism = measurer.parallelism();
-	TeEDebug("平行度(夹角):" + std::to_string(parallelism) + "度");
-    Update_CFmes("平行度(夹角):" + std::to_string(parallelism) + "度");
+	TeEDebug("空间夹角:" + std::to_string(parallelism) + "度");
+    Update_CFmes("空间夹角:" + std::to_string(parallelism) + "度");
 }
 
 void CloudForgeAnalyzer::Tool_MeasureWeldParallelism()
@@ -2271,7 +2268,11 @@ void CloudForgeAnalyzer::Tool_MeasureWeldParallelism()
     const auto actors=viewer->getCloudActorMap();
     for (const auto& entry:CloudMap) {
         const auto actor=actors->find(entry.first);
-        if (actor!=actors->end()) targets.push_back({entry.first,entry.second,actor->second.actor});
+        if (actor==actors->end()) continue;
+        const auto color=ColorMap.find(entry.first);
+        const QColor displayColor=color!=ColorMap.end()
+            ? QColor::fromRgbF(color->second.r/255.0,color->second.g/255.0,color->second.b/255.0):Qt::white;
+        targets.push_back({entry.first,entry.second,actor->second.actor,displayColor});
     }
     std::vector<WeldParallelismTool::Reference> references;
     for (const auto& entry:cylinderResultsMap) {
