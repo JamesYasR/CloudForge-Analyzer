@@ -1464,7 +1464,8 @@ void CloudForgeAnalyzer::Tool_MeasurePothole()
         TeEDebug(">>: 未选择点云");
         return;
     }
-    pcl::PointCloud<pcl::PointXYZ>::Ptr target_cloud = CloudMap[dialog.getSelectedList()[0]];
+    const auto targetName=dialog.getSelectedList()[0];
+    pcl::PointCloud<pcl::PointXYZ>::Ptr target_cloud = CloudMap[targetName];
 
     // 2. 选择已保存的圆柱拟合结果作为理想柱面（与圆柱度测量一致：先拟合、后测量）
     //    注意: 基础"拟合圆柱"不保存结果，请使用"二次优化圆柱"或"焊缝约束优化"入口
@@ -1476,14 +1477,6 @@ void CloudForgeAnalyzer::Tool_MeasurePothole()
 
     std::string selectedCylinderName = dialog1.getSelectedList()[0];
     pcl::ModelCoefficients::Ptr selected_cylinder = cylinderResultsMap[selectedCylinderName];
-
-    // 参考圆柱可视化（青色，以示区别）
-    std::string visualization_id = "pothole_ref_" + selectedCylinderName;
-    viewer->removeShape(visualization_id);
-    viewer->addCylinder(*selected_cylinder, visualization_id);
-    viewer->setShapeRenderingProperties(pcl::visualization::PCL_VISUALIZER_COLOR,
-        0.0, 1.0, 1.0, visualization_id);
-    TeEDebug(">>: 参考圆柱几何体 '" + selectedCylinderName + "' 已可视化(青色)。");
 
     // 3. 测量参数（阈值/容差为0时自动）
     ParamDialog_Pothole pdialog;
@@ -1553,192 +1546,80 @@ void CloudForgeAnalyzer::Tool_MeasurePothole()
                 oss << ">> [凹塘] 检出 " << pitResult->pit_count << " 个（通过 " << okCount
                     << "） | 主坑深 " << pitResult->local_max_depth
                     << " mm | 到理想柱面最大距离 " << pitResult->max_depth
-                    << " mm | W=" << pitResult->local_window << " mm"
+                    << " mm"
                     << " | " << (pitResult->valid ? "检出有效凹塘" : "未判定为凹塘");
                 PostLog(oss.str());
             }
         },
-        [this, potholePtr, pitResult]() {
-            const auto& result = *pitResult;
-
-    // 5. 残差热力图（蓝=凹，白=0，红=凸）
-    auto heatmap_cloud = potholePtr->getHeatMapCloud();
-    if (heatmap_cloud && !heatmap_cloud->empty()) {
-        viewer->removePointCloud("pothole_heatmap");
-        viewer->addPointCloud<pcl::PointXYZRGB>(heatmap_cloud, "pothole_heatmap");
-        viewer->setPointCloudRenderingProperties(
-            pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 2, "pothole_heatmap");
-        RGBCloudMap.erase("pothole_heatmap");
-        RGBCloudMap.emplace("pothole_heatmap", heatmap_cloud);
-        TeEDebug(std::string(">>: 热力图已显示（蓝=凹，红=凸）；当前显示 ")
-            + (potholePtr->getHeatMapFieldUsed() == 0 ? "局部凹陷深度（相对局部基准）"
-                                                      : "到理想柱面距离"));
-    }
-
-    // 6. 凹塘点群（橙色）
-    auto pit_cloud = potholePtr->getPitCloud();
-    if (pit_cloud && !pit_cloud->empty()) {
-        ColorManager color_pit(255, 128, 0);
-        beginUndoBatch("凹塘点群");
-        AddPointCloud("pothole_pit_cloud", pit_cloud, color_pit);
-        endUndoBatch();
-        TeEDebug(">>: 凹塘点群已显示（橙色）。");
-    }
-
-    // 6.5 场景尺度: 3D 文字与标记球按补丁大小自适应
-    //     旧实现 textScale 固定 0.5: 在 300 mm 级补丁上不足 2 个像素高, 实际看不见;
-    //     这里取包围盒对角线的 2.2%(6~14 mm 兜底), 保证标签在整幅视图下清晰可读。
-    double textScale = 10.0;   // 3D 文字高度(mm)
-    double markScale = 4.0;    // 标记球基础半径(mm)
-    {
-        pcl::PointXYZRGB lo, hi;   // 热力图是 XYZRGB, 包围盒类型需与点云一致
-        if (heatmap_cloud && !heatmap_cloud->empty()) {
-            pcl::getMinMax3D(*heatmap_cloud, lo, hi);
-            const double diag = (hi.getVector3fMap() - lo.getVector3fMap()).norm();
-            textScale = std::min(std::max(0.022 * diag, 6.0), 14.0);
-            // 球只是"定位点", 取 0.6% 对角线(约 φ6 mm): 再大就会把小坑整个盖住(φ11 坑短轴仅 6 mm)
-            markScale = std::min(std::max(0.006 * diag, 2.0), 4.5);
-        }
-    }
-
-    // 7. 最深点标注（球 + 3D文字）
-    if (result.fit_ok) {
-        const auto& dp = result.deepest_point;
-        std::string sphere_id = "pothole_sphere_deepest";
-        std::string text_id = "pothole_text_deepest";
-        viewer->removeShape(sphere_id);
-        viewer->removeText3D(text_id);
-
-        double marker_size = std::max(markScale, result.max_depth * 0.5);
-        viewer->addSphere(dp, marker_size, 0.0, 1.0, 1.0, sphere_id);
-        viewer->setShapeRenderingProperties(
-            pcl::visualization::PCL_VISUALIZER_COLOR, 0.0, 1.0, 1.0, sphere_id);
-        viewer->setShapeRenderingProperties(
-            pcl::visualization::PCL_VISUALIZER_OPACITY, 0.9, sphere_id);
-
-        std::stringstream depthSS;
-        depthSS << std::fixed << std::setprecision(3) << result.max_depth;
-        std::string labelText = "MAX dist " + depthSS.str() + " mm";
-        // 这个点常常就在主坑最深处旁边(实测只差几个毫米), 若与各坑标签同高必然叠字。
-        // 所以: 各坑标签抬 1.15 倍字高, 本条抬 2.6 倍字高(二者错开约 1.5 倍字高),
-        // 并画一条引线连回球心, 保证"哪句话说的是哪个点"一目了然。
-        const pcl::PointXYZ maxLabelPos(dp.x, dp.y, dp.z + marker_size + 2.6 * textScale);
-        const std::string line_id = "pothole_line_deepest";
-        viewer->removeShape(line_id);
-        viewer->addLine<pcl::PointXYZ>(dp, maxLabelPos, 0.1, 1.0, 1.0, line_id);
-        viewer->setShapeRenderingProperties(
-            pcl::visualization::PCL_VISUALIZER_LINE_WIDTH, 2, line_id);
-        viewer->addText3D(labelText, maxLabelPos,
-            textScale, 0.1, 1.0, 1.0, text_id);
-    }
-
-    // 7b. 多凹坑逐个标注(每个坑一个球 + 编号文字): 主坑洋红, 其余橙色;
-    //     校验未通过的坑用灰白色球提示"该坑不判定"(仍给出编号与深度, 便于人工复核).
-    //     PitItem::index 与报告中的坑编号一一对应.
-    if (!result.pits.empty()) {
-        for (int i = 0; i < static_cast<int>(result.pits.size()); ++i) {
-            const auto& it = result.pits[i];
-            if (!std::isfinite(it.centroid.x)) continue;
-            const std::string tag = std::to_string(it.index);
-            const std::string sphere_id = "pothole_pit_sphere_" + tag;
-            const std::string text_id = "pothole_pit_text_" + tag;
-            viewer->removeShape(sphere_id);
-            viewer->removeText3D(text_id);
-
-            // 标注位置: 优先用该坑最深点, 缺失时退化到质心
-            pcl::PointXYZ mk = std::isfinite(it.deepest_point.x) ? it.deepest_point : it.centroid;
-            const double depthForSize = it.judged_by_local ? it.local_max_depth : it.global_max_depth;
-            const double marker_size = std::max(markScale, depthForSize * 0.5);
-
-            // 球体颜色 = 状态; 文字颜色单独取高对比度(未通过的球是浅灰, 文字必须用深灰才看得清)
-            double cr = 1.0, cg = 1.0, cb = 1.0;   // 未通过校验: 灰白
-            double tr = 0.30, tg = 0.30, tb = 0.30;
-            if (it.valid && it.is_main) { cr = 1.0; cg = 0.0; cb = 1.0; tr = 1.0; tg = 0.15; tb = 1.0; }
-            else if (it.valid) { cr = 1.0; cg = 0.65; cb = 0.0; tr = 1.0; tg = 0.62; tb = 0.0; }
-            viewer->addSphere(mk, marker_size, cr, cg, cb, sphere_id);
-            viewer->setShapeRenderingProperties(
-                pcl::visualization::PCL_VISUALIZER_COLOR, cr, cg, cb, sphere_id);
-            viewer->setShapeRenderingProperties(
-                pcl::visualization::PCL_VISUALIZER_OPACITY, 0.9, sphere_id);
-
-            // 文字: 只保留"编号 + 主坑标记 + 深度(2 位小数)", 放大到 textScale
-            std::stringstream pitSS;
-            pitSS << std::fixed << std::setprecision(2);
-            pitSS << "PIT " << it.index << (it.is_main ? " (MAIN)" : "")
-                  << "  " << depthForSize << " mm" << (it.valid ? "" : "  reject");
-            viewer->addText3D(pitSS.str(),
-                pcl::PointXYZ(mk.x, mk.y, mk.z + marker_size + 1.15 * textScale),
-                textScale, tr, tg, tb, text_id);
-        }
-        {
-            std::string msg = ">>: 已逐个标注 " + std::to_string(result.pits.size())
-                + " 个凹塘（文字=编号+深度，字高 "
-                + std::to_string(static_cast<int>(textScale + 0.5))
-                + " mm；球色区分主坑/其余/未通过）";
-            TeEDebug(msg);
-        }
-    }
-
-    // 8. 椭圆可视化（闭合折线，已回投到柱面）: 逐个绘制，仅绘制校验通过的坑；
-    //    主坑青色，其余黄色(与球的橙色区分)。
-    //    校验不通过的坑不画椭圆: 画出会把参考面偏差或边界缺失误示为凹坑。
-    {
-        int drawn = 0, skipped = 0;
-        for (const auto& it : result.pits) {
-            if (it.ellipse_points.empty()) { ++skipped; continue; }
-            if (!it.valid) { ++skipped; continue; }
-
-            vtkSmartPointer<vtkPoints> points = vtkSmartPointer<vtkPoints>::New();
-            vtkSmartPointer<vtkCellArray> lines = vtkSmartPointer<vtkCellArray>::New();
-            std::vector<vtkIdType> ids;
-            ids.reserve(it.ellipse_points.size());
-            for (const auto& p : it.ellipse_points) {
-                ids.push_back(points->InsertNextPoint(p.x(), p.y(), p.z()));
-            }
-            lines->InsertNextCell(static_cast<vtkIdType>(ids.size()), ids.data());
-
-            vtkSmartPointer<vtkPolyData> poly = vtkSmartPointer<vtkPolyData>::New();
-            poly->SetPoints(points);
-            poly->SetLines(lines);
-
-            vtkSmartPointer<vtkPolyDataMapper> mapper = vtkSmartPointer<vtkPolyDataMapper>::New();
-            mapper->SetInputData(poly);
-
-            vtkSmartPointer<vtkActor> ellipseActor = vtkSmartPointer<vtkActor>::New();
-            ellipseActor->SetMapper(mapper);
-            if (it.is_main) ellipseActor->GetProperty()->SetColor(0.0, 1.0, 1.0);   // 主坑: 青色
-            else            ellipseActor->GetProperty()->SetColor(1.0, 1.0, 0.0);   // 其余: 黄色
-            ellipseActor->GetProperty()->SetLineWidth(3.0);
-
-            AddActors(GenerateRandomName("pothole_ellipse_" + std::to_string(it.index)),
-                ellipseActor);
-            ++drawn;
-        }
-        {
-            std::string msg = ">>: 凹塘轮廓椭圆已显示 " + std::to_string(drawn)
-                + " 个（主坑青色 / 其余黄色）";
-            if (skipped > 0) msg += "，另有 " + std::to_string(skipped) + " 个未绘制（未通过校验或椭圆拟合失败）";
-            TeEDebug(msg);
-        }
-    }
-
-    // 9. 输出报告并刷新视图
-    Update_CFmes(result.assessment_message);
-    TeEDebug(">>: 凹塘测量完成。");
-    ui->winOfAnalyzer->renderWindow()->Render();
-    ui->winOfAnalyzer->update();
+        [this, potholePtr, pitResult,targetName]() {
+            if (m_asyncState && m_asyncState->cancelRequested.load()) return;
+            VisualizePothole(*potholePtr,*pitResult,targetName);
         });
 }
 
-// ============================================================
-// 焊前装配阶差(1.3) / 焊前装配间隙(1.4)
-// 依据: docs/当前需新增功能/焊前装配阶差与间隙-独立执行方案.md §6/§7
-//
-// 操作路径(§7): 选两件 → 定接缝区域/测量段 → 确认近远角色(Z 均值) → 设 R 与测量方向
-//              → 后台计算 → 检查边缘及极值。
-// 约束: 计算只在 worker 线程; Qt/VTK actor/点云表/撤销只在 GUI 线程;
-//       结果用 std::shared_ptr 回传(沿用 RunAsyncVoid / WorkerProgressCallback)。
-// ============================================================
+void CloudForgeAnalyzer::VisualizePothole(MeasurePothole& measurement,const MeasurePothole::PitResult& result,const std::string& source)
+{
+    const QString group="pothole";
+    m_presentation->clear(group);
+    auto pitCloud=measurement.getPitCloud();
+    if (pitCloud && !pitCloud->empty()) {
+        beginUndoBatch("凹坑点群");
+        if (!m_potholeOutputName.empty() && m_potholeOutputName!=source && CloudMap.count(m_potholeOutputName)) DelePointCloud(m_potholeOutputName);
+        const std::string name=CloudMap.count("pothole_pit_cloud") ? GenerateRandomName("pothole_pit_cloud"):"pothole_pit_cloud";
+        AddPointCloud(name,pitCloud,ColorManager(255,128,0));m_potholeOutputName=name;endUndoBatch();
+    }
+    auto heatmap=measurement.getHeatMapCloud();
+    const auto actors=viewer->getCloudActorMap();const auto original=actors->find(source);
+    m_presentation->addHeatmap(group,heatmap,original==actors->end() ? nullptr:original->second.actor.GetPointer());
+    if (heatmap && !heatmap->empty()) RGBCloudMap["pothole_heatmap"]=heatmap;
+    const auto derived=actors->find(m_potholeOutputName);
+    if (derived!=actors->end()) m_presentation->hideSource(group,derived->second.actor);
+    std::vector<MeasurementPresentation::Annotation> annotations;
+    if (result.fit_ok) {
+        const auto& point=result.deepest_point;
+        annotations.push_back({{point.x,point.y,point.z},{},QString("最大距离 %1 mm").arg(result.max_depth,0,'f',3),"到理想柱面",QColor("#68dfff")});
+        m_presentation->appendResult(group,"凹坑测量",{"到理想柱面最大距离",QString::number(result.max_depth,'f',3)+" mm",{}});
+        m_presentation->appendResult(group,"凹坑测量",{"检出凹坑",QString::number(result.pit_count)+" 个",{}});
+    }
+    for (const auto& pit:result.pits) {
+        if (!std::isfinite(pit.centroid.x)) continue;
+        const auto& point=std::isfinite(pit.deepest_point.x) ? pit.deepest_point:pit.centroid;
+        const double depth=pit.judged_by_local ? pit.local_max_depth:pit.global_max_depth;
+        const QColor color=!pit.valid ? QColor("#c7d3db"):pit.is_main ? QColor("#ff73d3"):QColor("#ffd166");
+        const QString title=QString("凹坑 %1%2 · %3 mm").arg(pit.index).arg(pit.is_main ? "（主坑）":"").arg(depth,0,'f',3);
+        const QString detail=pit.valid ? QString("长轴 %1 · 短轴 %2 mm").arg(pit.major_axis,0,'f',2).arg(pit.minor_axis,0,'f',2):QString("未通过");
+        annotations.push_back({{point.x,point.y,point.z},{},title,detail,color});
+        if (!pit.valid || pit.ellipse_points.size()<2) continue;
+        auto points=vtkSmartPointer<vtkPoints>::New();auto cells=vtkSmartPointer<vtkCellArray>::New();
+        for (const auto& p:pit.ellipse_points) points->InsertNextPoint(p.x(),p.y(),p.z());
+        cells->InsertNextCell(static_cast<vtkIdType>(points->GetNumberOfPoints()));
+        for (vtkIdType i=0;i<points->GetNumberOfPoints();++i) cells->InsertCellPoint(i);
+        auto data=vtkSmartPointer<vtkPolyData>::New();data->SetPoints(points);data->SetLines(cells);
+        auto mapper=vtkSmartPointer<vtkPolyDataMapper>::New();mapper->SetInputData(data);
+        for (int layer=0;layer<2;++layer) {
+            auto actor=vtkSmartPointer<vtkActor>::New();actor->SetMapper(mapper);
+            actor->GetProperty()->SetColor(layer ? color.redF():.02,layer ? color.greenF():.06,layer ? color.blueF():.08);
+            actor->GetProperty()->SetLineWidth(layer ? 4:7);m_presentation->addCurve(group,actor);
+        }
+    }
+    m_presentation->setAnnotations(group,std::move(annotations));m_presentation->softenSurfaces(group);
+    std::ostringstream report;report<<std::fixed<<std::setprecision(3);
+    if (!result.fit_ok) report<<"不可测: 参考圆柱或测量点云无效";
+    else {
+        int valid=0;for (const auto& pit:result.pits) valid+=pit.valid;
+        report<<"检出凹坑 "<<result.pit_count<<" 个，通过 "<<valid<<" 个\n";
+        for (const auto& pit:result.pits) {
+            const auto& point=std::isfinite(pit.deepest_point.x) ? pit.deepest_point:pit.centroid;
+            report<<"坑 "<<pit.index<<(pit.is_main ? "（主坑）":"")<<" | 深度 "<<(pit.judged_by_local ? pit.local_max_depth:pit.global_max_depth)
+                  <<" mm | 长短轴 "<<pit.major_axis<<" × "<<pit.minor_axis<<" mm | "<<pit.pit_points<<" 点 | 位置 ("
+                  <<point.x<<", "<<point.y<<", "<<point.z<<") mm | "<<(pit.valid ? "通过":"未通过")<<"\n";
+        }
+        report<<"到理想柱面最大距离 "<<result.max_depth<<" mm | 位置 ("<<result.deepest_point.x<<", "<<result.deepest_point.y<<", "<<result.deepest_point.z<<") mm";
+    }
+    Update_CFmes(report.str());
+    ui->winOfAnalyzer->renderWindow()->Render();ui->winOfAnalyzer->update();
+}
+
 void CloudForgeAnalyzer::Tool_MeasureWeldPreparation()
 {
     // 口径(2026-09 统一): 阶差 = 径向(近件在外为正); 间隙 = 沿跨缝方向(环缝=轴向)。

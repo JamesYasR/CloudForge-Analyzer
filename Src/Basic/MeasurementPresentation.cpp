@@ -9,6 +9,8 @@
 #include <vtkPolyDataMapper.h>
 #include <vtkProperty.h>
 #include <vtkRenderer.h>
+#include <vtkRenderWindow.h>
+#include <vtkRendererCollection.h>
 #include <vtkUnsignedCharArray.h>
 #include <algorithm>
 
@@ -33,11 +35,37 @@ void MeasurementPresentation::addHeatmap(const QString& group,pcl::PointCloud<pc
     auto actor=vtkSmartPointer<vtkActor>::New();actor->SetMapper(mapper);actor->PickableOff();actor->UseBoundsOff();
     actor->GetProperty()->SetPointSize(3);actor->GetProperty()->LightingOff();
     renderer_->AddActor(actor);groups_[group].heatmaps.push_back(actor);
+    hideSource(group,source);
+}
+void MeasurementPresentation::hideSource(const QString& group,vtkActor* source)
+{
     if (source) {
         auto found=sources_.find(source);
         if (found==sources_.end()) found=sources_.emplace(source,Source{source,source->GetVisibility(),{}}).first;
         found->second.owners.insert(group);source->VisibilityOff();
     }
+}
+void MeasurementPresentation::addCurve(const QString& group,vtkSmartPointer<vtkActor> actor)
+{
+    if (!actor || !renderer_->GetRenderWindow()) return;
+    auto window=renderer_->GetRenderWindow();
+    if (!foreground_) {
+        originalLayers_=window->GetNumberOfLayers();foreground_=vtkSmartPointer<vtkRenderer>::New();
+        foreground_->SetLayer(originalLayers_);window->SetNumberOfLayers(originalLayers_+1);
+        foreground_->SetActiveCamera(renderer_->GetActiveCamera());foreground_->InteractiveOff();
+        foreground_->SetPreserveDepthBuffer(0);foreground_->SetPreserveColorBuffer(1);window->AddRenderer(foreground_);
+    }
+    actor->PickableOff();actor->UseBoundsOff();actor->GetProperty()->LightingOff();
+    foreground_->AddActor(actor);groups_[group].foreground.push_back(actor);
+}
+void MeasurementPresentation::releaseForeground()
+{
+    if (!foreground_) return;
+    for (const auto& group:groups_) if (!group.second.foreground.empty()) return;
+    auto window=renderer_->GetRenderWindow();window->RemoveRenderer(foreground_);foreground_=nullptr;
+    int layers=originalLayers_;auto renderers=window->GetRenderers();renderers->InitTraversal();
+    while (auto renderer=renderers->GetNextItem()) layers=std::max(layers,renderer->GetLayer()+1);
+    window->SetNumberOfLayers(layers);
 }
 void MeasurementPresentation::addGeometry(const QString& group,vtkSmartPointer<vtkActor> actor)
 {
@@ -98,8 +126,9 @@ void MeasurementPresentation::clear(const QString& group)
     auto found=groups_.find(group);if (found==groups_.end()) return;
     for (auto& actor:found->second.heatmaps) renderer_->RemoveActor(actor);
     for (auto& actor:found->second.geometry) renderer_->RemoveActor(actor);
+    for (auto& actor:found->second.foreground) if (foreground_) foreground_->RemoveActor(actor);
     for (const auto& id:found->second.legends) legend_->removeEntry(id);
-    results_->removeSection(group);restoreContext(group);groups_.erase(found);updateAnnotations();
+    results_->removeSection(group);restoreContext(group);groups_.erase(found);releaseForeground();updateAnnotations();
 }
 void MeasurementPresentation::clear() { while (!groups_.empty()) clear(groups_.begin()->first); }
 void MeasurementPresentation::clearAnnotations()
@@ -111,9 +140,10 @@ void MeasurementPresentation::clearGeometry()
 {
     for (auto& group:groups_) {
         for (auto& actor:group.second.geometry) renderer_->RemoveActor(actor);
-        group.second.geometry.clear();group.second.annotations.clear();results_->removeSection(group.first);
+        for (auto& actor:group.second.foreground) if (foreground_) foreground_->RemoveActor(actor);
+        group.second.foreground.clear();group.second.geometry.clear();group.second.annotations.clear();results_->removeSection(group.first);
     }
-    annotations_->clear();
+    annotations_->clear();releaseForeground();
 }
 void MeasurementPresentation::clearHeatmaps()
 {

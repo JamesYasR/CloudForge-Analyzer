@@ -3,6 +3,11 @@
 #include "Basic/ViewportResultOverlay.h"
 #include "Basic/WeldPreparationOverlay.h"
 #include "Dialog/ParamDialogMeasureWeldHeight.h"
+#include "Dialog/ParamDialog_Pothole.h"
+#include <QToolButton>
+#include <QLineEdit>
+#include <QFrame>
+#include <pcl/io/pcd_io.h>
 #include "ui_CloudForgeAnalyzer.h"
 #include <QCheckBox>
 #include <QComboBox>
@@ -86,8 +91,63 @@ static void weldTest()
     std::ofstream out("analysis/measurement_visuals/weld_values.txt");out<<std::setprecision(17)<<result.highest_value<<' '<<result.highest_point.x<<' '<<result.highest_point.y<<' '<<result.highest_point.z<<' '<<result.valid_points<<'\n';
     main.close();pump();
 }
+static void pitsTest()
+{
+    ParamDialog_Pothole dialog;dialog.show();pump();
+    const QVector<QString> defaults={"0","0","200","0","20","90","0.35","1","0"};
+    check(dialog.getParams()==defaults,"hidden pothole parameters preserve all nine defaults and indices");
+    int visible=0;for (auto edit:dialog.paramEdits) visible+=edit->isVisible();check(visible==2,"pothole form initially shows only threshold and baseline window");
+    capture(dialog,"pothole_parameters");dialog.findChild<QToolButton*>("potholeAdvanced")->click();pump();
+    visible=0;for (auto edit:dialog.paramEdits) visible+=edit->isVisible();check(visible==4 && dialog.getParams()==defaults,"advanced settings expose clustering controls without changing defaults");dialog.reject();
+    auto cloud=pcl::make_shared<pcl::PointCloud<pcl::PointXYZ>>();check(pcl::io::loadPCDFile("PCDfiles/pothole_dent_form.pcd",*cloud)==0,"four-pit reference cloud loaded");
+    auto cylinder=pcl::make_shared<pcl::ModelCoefficients>();cylinder->values.resize(7);std::ifstream axis("analysis/cylinder_patch/out_multipit/axis_form.txt");for(int i=0;i<6;++i) axis>>cylinder->values[i];cylinder->values[6]=1940;
+    MeasurePothole measure;measure.setInputCloud(cloud);measure.setCylinder(cylinder);measure.setDistanceThreshold(0);measure.setClusterTolerance(5);measure.setMinClusterSize(60);
+    measure.setTrendMode(0);measure.setMaxAreaFraction(.2);measure.setUseLocalBaseline(true);measure.setLocalWindow(90);measure.setLocalThreshold(.35);measure.setBoundaryExclude(true);measure.setHeatMapField(0);measure.setVerbose(false);
+    const auto result=measure.evaluate();const auto snapshot=result;
+    check(result.pit_count==4 && result.pits.size()==4 && result.valid,"four-pit baseline still detects all four pits");
+    check(std::abs(result.local_max_depth-1.54914587)<5e-9 && std::abs(result.max_depth-3.14428711)<5e-9,"local and ideal-cylinder depth values match frozen baseline");
+    auto heatmap=measure.getHeatMapCloud();std::vector<uint32_t> colors;for(size_t i=0;i<heatmap->size();i+=97) colors.push_back((*heatmap)[i].rgba);
+    CloudForgeAnalyzer main;main.resize(1550,1000);main.show();pump();main.ClearAllPointCloud();main.AddPointCloud("specimen",cloud,ColorManager(210,220,230));main.cylinderResultsMap["reference"]=cylinder;
+    auto view=main.ui->winOfAnalyzer;auto renderer=view->renderWindow()->GetRenderers()->GetFirstRenderer();const int initialLayers=view->renderWindow()->GetNumberOfLayers();
+    pcl::PointXYZ lo,hi;pcl::getMinMax3D(*cloud,lo,hi);const Eigen::Vector3d center=((lo.getVector3fMap()+hi.getVector3fMap())*.5f).cast<double>();
+    const Eigen::Vector3d origin(cylinder->values[0],cylinder->values[1],cylinder->values[2]),u=Eigen::Vector3d(cylinder->values[3],cylinder->values[4],cylinder->values[5]).normalized();
+    const Eigen::Vector3d delta=center-origin,radial=(delta-u*delta.dot(u)).normalized(),eye=center+500*radial;
+    auto camera=renderer->GetActiveCamera();camera->SetPosition(eye.data());camera->SetFocalPoint(center.data());camera->SetViewUp(u.data());camera->ParallelProjectionOn();camera->SetParallelScale(175);renderer->ResetCameraClippingRange();view->renderWindow()->Render();
+    double pose[3];camera->GetPosition(pose);auto style=view->interactor()->GetInteractorStyle();main.VisualizePothole(measure,result,"specimen");pump();
+    auto display=main.m_presentation.get();auto& group=display->groups_.at("pothole");
+    check(group.annotations.size()==5 && group.foreground.size()==8,"four pit callouts and global maximum pair with haloed ellipse outlines");
+    check(group.heatmaps.size()==1 && !main.viewer->getCloudActorMap()->at("specimen").actor->GetVisibility(),"pothole heatmap replaces coincident raw display");
+    check(main.CloudMap.count(main.m_potholeOutputName) && !main.viewer->getCloudActorMap()->at(main.m_potholeOutputName).actor->GetVisibility(),"extracted pit cloud remains available without covering heatmap");
+    check(display->foreground_ && display->foreground_->GetActiveCamera()==camera && !display->foreground_->GetPreserveDepthBuffer(),"contours remain visible using unchanged projected geometry");
+    bool ellipses=true;for(size_t i=0;i<result.pits.size();++i) {
+        auto data=group.foreground[i*2+1]->GetMapper()->GetInput();ellipses &= data->GetNumberOfPoints()==static_cast<vtkIdType>(result.pits[i].ellipse_points.size());
+        for(vtkIdType j=0;j<data->GetNumberOfPoints();++j) { double p[3];data->GetPoint(j,p);ellipses &= (Eigen::Vector3d(p[0],p[1],p[2])-result.pits[i].ellipse_points[j].cast<double>()).norm()<1e-5; }
+    }
+    check(ellipses,"displayed ellipses preserve original fitted coordinates");
+    pump();const auto image=view->grab().toImage();const auto size=view->renderWindow()->GetSize();int colored=0;
+    for(size_t side=0;side<result.pits.size();++side) {
+        const auto expected=result.pits[side].is_main ? QColor("#ff73d3"):QColor("#ffd166");bool visibleColor=false;
+        for(size_t j=0;j<result.pits[side].ellipse_points.size();j+=5) {
+            const auto& p=result.pits[side].ellipse_points[j];renderer->SetWorldPoint(p.x(),p.y(),p.z(),1);renderer->WorldToDisplay();const auto screen=renderer->GetDisplayPoint();
+            const int x=qRound(screen[0]*image.width()/size[0]),y=qRound((1-screen[1]/size[1])*image.height());
+            for(int dx=-3;dx<=3;++dx) for(int dy=-3;dy<=3;++dy) if(image.rect().contains(x+dx,y+dy)) { const auto pixel=image.pixelColor(x+dx,y+dy);visibleColor |= std::abs(pixel.red()-expected.red())+std::abs(pixel.green()-expected.green())+std::abs(pixel.blue()-expected.blue())<35; }
+        }
+        colored+=visibleColor;
+    }
+    check(colored==4,"each fitted ellipse has visible colored pixels on the desktop");
+    check(!main.ui->textEdit_Show_CFmes->toPlainText().contains("窗口") && main.ui->textEdit_Show_CFmes->toPlainText().contains("到理想柱面最大距离"),"pothole report contains results without internal tuning parameters");
+
+    check(std::equal(pose,pose+3,camera->GetPosition()) && style==view->interactor()->GetInteractorStyle(),"pothole presentation preserves camera and interaction");capture(main,"pothole_result");
+    main.VisualizePothole(measure,result,"specimen");pump();check(display->groups_.at("pothole").foreground.size()==8 && main.CloudMap.size()==2,"repeated pit results replace contours and extracted output without accumulating");
+    main.ui->action_ed_clean2DActor->trigger();pump();check(display->annotations_->isHidden() && display->groups_.at("pothole").foreground.size()==8,"2D cleanup removes pit callouts while retaining fitted outlines");
+    main.ui->action_ed_cleanRGB->trigger();pump();check(display->groups_.empty() && !display->foreground_ && view->renderWindow()->GetNumberOfLayers()==initialLayers,"RGB cleanup releases heatmap contours and temporary renderer");
+    check(main.viewer->getCloudActorMap()->at("specimen").actor->GetVisibility(),"pit cleanup restores source visibility");
+    bool unchanged=result.max_depth==snapshot.max_depth && result.local_max_depth==snapshot.local_max_depth && result.pits.size()==snapshot.pits.size();size_t k=0;for(size_t i=0;i<heatmap->size();i+=97) unchanged &= (*heatmap)[i].rgba==colors[k++];
+    check(unchanged,"pit measurements and heatmap colors remain unchanged by UI");
+    main.close();pump();
+}
 int main(int argc,char** argv)
 {
     QSurfaceFormat::setDefaultFormat(QVTKOpenGLNativeWidget::defaultFormat());QApplication app(argc,argv);app.setQuitOnLastWindowClosed(false);
-    weldTest();std::cout<<"pass="<<passed<<" fail="<<failed<<std::endl;return failed ? 1:0;
+    if (argc>1 && std::string(argv[1])=="--pits") pitsTest();else weldTest();std::cout<<"pass="<<passed<<" fail="<<failed<<std::endl;return failed ? 1:0;
 }

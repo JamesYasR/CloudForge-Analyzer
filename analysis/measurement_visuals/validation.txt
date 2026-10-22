@@ -5,3 +5,11 @@ Weld height desktop 2x: pass=20 fail=0
 Known peak: 5.000 mm
 Point coordinates and RGB: bitwise unchanged by rendering
 Other feature regressions: not run
+
+Task 2 / 2026-10-22
+Build: pass, max 2 jobs, MemoryMax=8 GiB
+Pothole desktop: pass=21 fail=0
+Pothole desktop 2x: pass=21 fail=0
+Four-pit reference: 4 pits, local maximum 1.54914587 mm, ideal-cylinder maximum 3.14428711 mm
+Pothole parameter defaults and indices preserved
+Ellipse coordinates, measurement values and heatmap RGB unchanged by presentation

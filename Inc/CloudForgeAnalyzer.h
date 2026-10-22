@@ -253,6 +253,8 @@ private:
     // 焊缝高度测量形状追踪（用于撤销时清理）
     std::vector<std::string> m_weldMeasureShapeIds;
     void cleanWeldMeasureVisuals();
+    void VisualizePothole(MeasurePothole& measurement,const MeasurePothole::PitResult& result,const std::string& source);
+    std::string m_potholeOutputName;
     void VisualizeWeldHeight(const std::string& name,const MeasureWeldHeight::AssessmentResult& result,
         pcl::PointCloud<pcl::PointXYZRGB>::Ptr heatmap,double maximum);
 

@@ -1,20 +1,28 @@
 #include "Dialog/ParamDialog_Pothole.h"
+#include <QFormLayout>
+#include <QFrame>
+#include <QToolButton>
+#include <QHBoxLayout>
+#include <QDoubleValidator>
+#include <QIntValidator>
 
-ParamDialog_Pothole::ParamDialog_Pothole(QWidget* parent)
-    : ParamDialogBase(parent)
+ParamDialog_Pothole::ParamDialog_Pothole(QWidget* parent):ParamDialogBase(parent)
 {
-    // 注意: 前 5 项为既有项, 顺序不可变更(流程按下标读取);
-    //       局部基准(口径B)相关项一律追加在末尾.
-    // "局部基准窗口 W" 默认 90mm: 按缺陷尺寸规范(10~30mm 凹坑)取 W ≈ 3 x 最大坑尺寸,
-    // 保证基准窗口内以"周围正常表面"为主(规格 §3.3: W 必须 ≥ 2~3 x 坑尺寸,
-    // W=60 时深度误差增大到 -0.08~-0.15mm, W=90 时 -0.02~-0.11mm).
-    QVector<QString> labels = {"距离阈值（mm，0=自动）", "聚类容差（mm，0=自动）", "最小点群点数",
-                               "形面趋势处理（0=自动/1=不扣除/2=强制扣除）", "点群面积占比上限（%）",
-                               "局部基准窗口 W（mm，默认90，建议≥3×最大坑）",
-                               "局部阈值 T_local（mm，默认0.35）",
-                               "使用局部基准判断（1=是/0=否，默认1）",
-                               "热力图显示（0=局部凹陷d/1=到理想柱面e）"};
-    QVector<QString> defaults = {"0", "0", "200", "0", "20", "90", "0.35", "1", "0"};
-    setupUI(labels, defaults);
-    setWindowTitle("凹塘测量参数");
+    setObjectName("potholeParameters");setWindowTitle("凹坑测量");setMinimumWidth(350);
+    const QVector<QString> defaults={"0","0","200","0","20","90","0.35","1","0"};
+    for (int i=0;i<defaults.size();++i) {
+        auto edit=new QLineEdit(defaults[i],this);edit->setObjectName(QString("potholeParam%1").arg(i));paramEdits.append(edit);
+        if (i!=1 && i!=2 && i!=5 && i!=6) edit->hide();
+    }
+    for (int i:{1,5,6}) paramEdits[i]->setValidator(new QDoubleValidator(0,1e6,6,paramEdits[i]));
+    paramEdits[2]->setValidator(new QIntValidator(1,10000000,paramEdits[2]));
+    auto form=new QFormLayout();form->addRow("凹陷阈值 (mm)",paramEdits[6]);form->addRow("局部基准窗口 (mm)",paramEdits[5]);mainLayout->addLayout(form);
+    auto toggle=new QToolButton(this);toggle->setObjectName("potholeAdvanced");toggle->setText("更多设置");toggle->setCheckable(true);toggle->setArrowType(Qt::RightArrow);toggle->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);mainLayout->addWidget(toggle);
+    auto advanced=new QFrame(this);advanced->setObjectName("potholeAdvancedFields");auto extra=new QFormLayout(advanced);extra->setContentsMargins(0,4,0,4);
+    extra->addRow("聚类容差 (mm，0为自动)",paramEdits[1]);extra->addRow("最小点数",paramEdits[2]);mainLayout->addWidget(advanced);advanced->hide();
+    connect(toggle,&QToolButton::toggled,this,[this,toggle,advanced](bool checked) { advanced->setVisible(checked);toggle->setArrowType(checked?Qt::DownArrow:Qt::RightArrow);adjustSize(); });
+    auto buttons=new QHBoxLayout();auto cancel=new QPushButton("取消",this);auto start=new QPushButton("开始测量",this);start->setDefault(true);
+    buttons->addStretch();buttons->addWidget(cancel);buttons->addWidget(start);mainLayout->addLayout(buttons);
+    connect(cancel,&QPushButton::clicked,this,&QDialog::reject);connect(start,&QPushButton::clicked,this,&ParamDialog_Pothole::accept);
+    setStyleSheet("QPushButton { border: 1px solid palette(mid); border-radius: 0; padding: 6px 12px; }");
 }

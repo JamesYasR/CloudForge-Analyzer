@@ -10,6 +10,7 @@
 
 class vtkActor;
 class vtkProperty;
+class vtkRenderer;
 class MeasurementPresentation
 {
 public:
@@ -17,6 +18,8 @@ public:
     MeasurementPresentation(QWidget* view,vtkRenderer* renderer,ViewportResultOverlay* results);
     ~MeasurementPresentation();
     void addHeatmap(const QString& group,pcl::PointCloud<pcl::PointXYZRGB>::ConstPtr cloud,vtkActor* source=nullptr);
+    void hideSource(const QString& group,vtkActor* source);
+    void addCurve(const QString& group,vtkSmartPointer<vtkActor> actor);
     void addGeometry(const QString& group,vtkSmartPointer<vtkActor> actor);
     void setAnnotations(const QString& group,std::vector<Annotation> annotations,bool append=false);
     void appendResult(const QString& group,const QString& title,ViewportResultOverlay::Row row);
@@ -29,7 +32,7 @@ public:
     void clearHeatmaps();
 private:
     struct Group {
-        std::vector<vtkSmartPointer<vtkActor>> heatmaps,geometry;
+        std::vector<vtkSmartPointer<vtkActor>> heatmaps,geometry,foreground;
         std::vector<Annotation> annotations;
         std::vector<QString> legends;
         ViewportResultOverlay::Section result;
@@ -37,8 +40,11 @@ private:
     struct Source { vtkSmartPointer<vtkActor> actor;int visibility=1;std::set<QString> owners; };
     struct Surface { vtkSmartPointer<vtkActor> actor;vtkSmartPointer<vtkProperty> property;std::set<QString> owners; };
     void updateAnnotations();
+    void releaseForeground();
     void restoreContext(const QString& group);
     vtkRenderer* renderer_;
+    vtkSmartPointer<vtkRenderer> foreground_;
+    int originalLayers_=1;
     ViewportResultOverlay* results_;
     std::unique_ptr<ViewportColorLegend> legend_;
     std::unique_ptr<ViewportAnnotationOverlay> annotations_;
