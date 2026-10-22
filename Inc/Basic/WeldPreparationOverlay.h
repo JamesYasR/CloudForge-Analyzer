@@ -8,6 +8,7 @@
 
 class vtkRenderer;
 class vtkCallbackCommand;
+class ViewportResultOverlay;
 
 class WeldPreparationOverlay : public QWidget
 {
@@ -21,7 +22,7 @@ public:
         QColor color;
     };
 
-    WeldPreparationOverlay(QWidget* view, vtkRenderer* renderer);
+    WeldPreparationOverlay(QWidget* view, vtkRenderer* renderer, ViewportResultOverlay* results = nullptr);
     ~WeldPreparationOverlay() override;
     void setAnnotations(std::vector<Annotation> annotations);
     void clear();
@@ -36,4 +37,5 @@ private:
     vtkSmartPointer<vtkCallbackCommand> callback_;
     unsigned long observer_ = 0;
     std::vector<Annotation> annotations_;
+    ViewportResultOverlay* results_ = nullptr;
 };

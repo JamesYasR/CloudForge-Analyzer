@@ -1,9 +1,9 @@
 #include "Basic/WeldPreparationOverlay.h"
+#include "Basic/ViewportResultOverlay.h"
 #include <QEvent>
 #include <QFontMetricsF>
 #include <QPainter>
 #include <QPainterPath>
-#include <QStringList>
 #include <vtkCallbackCommand.h>
 #include <vtkCamera.h>
 #include <vtkRenderer.h>
@@ -11,8 +11,8 @@
 #include <algorithm>
 #include <cmath>
 
-WeldPreparationOverlay::WeldPreparationOverlay(QWidget* view, vtkRenderer* renderer)
-    : QWidget(view), renderer_(renderer)
+WeldPreparationOverlay::WeldPreparationOverlay(QWidget* view, vtkRenderer* renderer, ViewportResultOverlay* results)
+    : QWidget(view), renderer_(renderer), results_(results)
 {
     setObjectName("weldPreparationOverlay");
     setAttribute(Qt::WA_TransparentForMouseEvents);
@@ -37,6 +37,13 @@ WeldPreparationOverlay::~WeldPreparationOverlay()
 void WeldPreparationOverlay::setAnnotations(std::vector<Annotation> annotations)
 {
     annotations_ = std::move(annotations);
+    if (results_) {
+        if (annotations_.empty()) results_->removeSection("weld_preparation");
+        else results_->setSection("weld_preparation", {{}, {
+            {"近件缝边", {}, QColor("#42f294")}, {"远件缝边", {}, QColor("#ffda55")},
+            {"径向阶差", {}, QColor("#68b7ff")}, {"轴向间隙", {}, QColor("#ff6b65")}
+        }, 2});
+    }
     setGeometry(parentWidget()->rect());
     setVisible(!annotations_.empty());
     lower();
@@ -45,6 +52,7 @@ void WeldPreparationOverlay::setAnnotations(std::vector<Annotation> annotations)
 
 void WeldPreparationOverlay::clear()
 {
+    if (results_) results_->removeSection("weld_preparation");
     annotations_.clear();
     hide();
 }
@@ -87,21 +95,9 @@ void WeldPreparationOverlay::paintEvent(QPaintEvent*)
     detailFont.setPixelSize(13);
     const QFontMetricsF titleMetrics(titleFont), detailMetrics(detailFont);
     const QRectF available(10, 10, width() - 20, height() - 20);
-    const QRectF legend(12, 12, std::min(320, width() - 24), 66);
-    painter.setPen(QPen(QColor("#42616d"), 1));
-    painter.setBrush(QColor(10, 30, 41, 238));
-    painter.drawRoundedRect(legend, 8, 8);
-    painter.setFont(detailFont);
-    const std::array<QColor, 4> colors{QColor("#42f294"), QColor("#ffda55"), QColor("#68b7ff"), QColor("#ff6b65")};
-    const QStringList names{"近件缝边", "远件缝边", "径向阶差", "轴向间隙"};
-    for (int i = 0; i < 4; ++i) {
-        const QPointF pos(legend.left() + 16 + i % 2 * 153, legend.top() + 21 + i / 2 * 25);
-        painter.setPen(QPen(colors[i], 3));
-        painter.drawLine(pos, pos + QPointF(16, 0));
-        painter.setPen(QColor("#edf5f7"));
-        painter.drawText(pos + QPointF(24, 4), names[i]);
-    }
-    std::vector<QRectF> occupied{legend.adjusted(-8, -8, 8, 8)};
+    std::vector<QRectF> occupied;
+    if (results_ && !results_->occupiedRect().isEmpty())
+        occupied.push_back(QRectF(results_->occupiedRect()).adjusted(-8, -8, 8, 8));
     std::vector<QPointF> anchors;
     for (const auto& annotation : annotations_) {
         QPointF anchor;
@@ -111,7 +107,7 @@ void WeldPreparationOverlay::paintEvent(QPaintEvent*)
         QPointF anchor;
         if (!project(annotation.anchor, anchor)) continue;
         const double cardWidth = std::min(available.width(), std::max(titleMetrics.horizontalAdvance(annotation.title),
-                                                                 detailMetrics.horizontalAdvance(annotation.detail)) + 34);
+                                                                 detailMetrics.horizontalAdvance(annotation.detail)) + 24);
         const QSizeF cardSize(cardWidth, 65);
         auto bounded = [&](double x, double y) {
             return QRectF(QPointF(std::clamp(x, available.left(), available.right() - cardSize.width()),
@@ -152,19 +148,14 @@ void WeldPreparationOverlay::paintEvent(QPaintEvent*)
         painter.setPen(QPen(annotation.color, 2.5));
         painter.setBrush(QColor("#ffffff"));
         painter.drawEllipse(anchor, 4.5, 4.5);
-        painter.setPen(Qt::NoPen);
-        painter.setBrush(QColor(0, 8, 14, 65));
-        painter.drawRoundedRect(card.translated(2, 3), 8, 8);
-        painter.setPen(QPen(annotation.color, 1.3));
-        painter.setBrush(QColor(10, 30, 41, 245));
-        painter.drawRoundedRect(card, 8, 8);
-        painter.setPen(QPen(annotation.color, 3, Qt::SolidLine, Qt::RoundCap));
-        painter.drawLine(card.topLeft() + QPointF(10, 13), card.bottomLeft() + QPointF(10, -13));
+        painter.setPen(QPen(annotation.color, 1));
+        painter.setBrush(ViewportResultOverlay::backgroundColor());
+        painter.drawRect(card);
         painter.setFont(titleFont);
         painter.setPen(QColor("#ffffff"));
-        painter.drawText(card.adjusted(21, 9, -8, -32), Qt::AlignVCenter | Qt::AlignLeft, annotation.title);
+        painter.drawText(card.adjusted(12, 9, -12, -32), Qt::AlignVCenter | Qt::AlignLeft, annotation.title);
         painter.setFont(detailFont);
         painter.setPen(QColor("#c4d6dc"));
-        painter.drawText(card.adjusted(21, 34, -8, -8), Qt::AlignVCenter | Qt::AlignLeft, annotation.detail);
+        painter.drawText(card.adjusted(12, 34, -12, -8), Qt::AlignVCenter | Qt::AlignLeft, annotation.detail);
     }
 }

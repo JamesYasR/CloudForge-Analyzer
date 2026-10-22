@@ -3,6 +3,7 @@
 #include "ui_CloudForgeAnalyzer.h"
 #include <QCheckBox>
 #include <QComboBox>
+#include <QDockWidget>
 #include <QElapsedTimer>
 #include <QKeyEvent>
 #include <QLabel>
@@ -68,7 +69,12 @@ static void key(QWidget* view, int key, Qt::KeyboardModifiers modifiers = Qt::No
     pump(10);
 }
 
-static QPushButton* button(QWidget* view, const char* name) { return view->findChild<QPushButton*>(name); }
+static QWidget* controls(QWidget* view)
+{
+    auto dock = view->window()->findChild<QDockWidget*>("polygonClipDock");
+    return dock ? dock->widget() : view;
+}
+static QPushButton* button(QWidget* view, const char* name) { return controls(view)->findChild<QPushButton*>(name); }
 static void quad(QWidget* view)
 {
     for (const auto& point : {QPointF(.50, .20), QPointF(.80, .20), QPointF(.80, .80), QPointF(.50, .80)})
@@ -201,7 +207,8 @@ static void toolTests()
     });
     check(!tool.start({}), "empty target list rejected");
     check(tool.start({{"grid",cloud,actor}}), "start without a separate window");
-    auto panel = view.findChild<QFrame*>("polygonClipPanel");
+    auto panel = controls(&view)->findChild<QFrame*>("polygonClipPanel");
+    if (!panel) panel = qobject_cast<QFrame*>(controls(&view));
     check(panel && panel->isVisible(), "visible mouse-operated control panel");
     quad(&view);
     check(button(&view,"polygonPreview")->isEnabled(), "close contour with a button");
@@ -209,9 +216,9 @@ static void toolTests()
     check(tool.result() && tool.result()->inside->size() > 0 && tool.result()->outside->size() > 0, "in-memory preview splits actual visible cloud");
     check(actor->GetVisibility() == 0 && button(&view,"polygonApply")->isEnabled(), "preview highlights classification without replacing source");
     view.grab().save(capture("preview"));
-    view.findChild<QComboBox*>("polygonMode")->setCurrentIndex(1);
+    controls(&view)->findChild<QComboBox*>("polygonMode")->setCurrentIndex(1);
     check(tool.keepMode() == PolygonClipTool::KeepMode::Outside && tool.canApply(), "switch to retaining outside without recomputing");
-    view.findChild<QComboBox*>("polygonMode")->setCurrentIndex(2);
+    controls(&view)->findChild<QComboBox*>("polygonMode")->setCurrentIndex(2);
     check(tool.keepMode() == PolygonClipTool::KeepMode::Both && tool.canApply(), "split mode available");
     double position[3]; renderer->GetActiveCamera()->GetPosition(position);
     QPointF vertex(view.width()*.5, view.height()*.2);
@@ -240,12 +247,12 @@ static void toolTests()
     check(view.interactor()->GetInteractorStyle() == style, "navigation uses original VTK interactor style");
     button(&view,"polygonDraw")->click();
     key(&view,Qt::Key_S);
-    check(!view.findChild<QCheckBox*>("polygonContourVisible")->isChecked(), "S shortcut retained");
+    check(!controls(&view)->findChild<QCheckBox*>("polygonContourVisible")->isChecked(), "S shortcut retained");
     key(&view,Qt::Key_R);
     check(tool.request().polygon.empty(), "R shortcut retained");
     for (const auto& p : {QPointF(.5,.2),QPointF(.8,.8),QPointF(.5,.8),QPointF(.8,.2)}) click(&view,{p.x()*view.width(),p.y()*view.height()});
     button(&view,"polygonClose")->click();
-    check(!button(&view,"polygonPreview")->isEnabled() && view.findChild<QLabel*>("polygonHint")->text().contains("交叉"), "self-intersection explained and preview disabled");
+    check(!button(&view,"polygonPreview")->isEnabled() && controls(&view)->findChild<QLabel*>("polygonHint")->text().contains("交叉"), "self-intersection explained and preview disabled");
     button(&view,"polygonReset")->click();
     quad(&view);
     QObject::disconnect(connection);
@@ -253,7 +260,7 @@ static void toolTests()
     auto ticket = tool.ticket();
     auto request = tool.request();
     check(tool.isBusy(), "preview pending state");
-    button(&view,"polygonCancel")->click();
+    button(&view,"polygonExit")->click();
     tool.finishPreview(std::make_shared<CloudClipper::Result>(CloudClipper::compute(request)),ticket);
     check(!tool.isActive() && !tool.result() && actor->GetVisibility(), "late preview result ignored after cancellation");
     viewer->addPointCloud<pcl::PointXYZ>(cloud,"second");
@@ -262,7 +269,7 @@ static void toolTests()
     quad(&view);
     button(&view,"polygonPreview")->click();
     tool.finishPreview(std::make_shared<CloudClipper::Result>(CloudClipper::compute(tool.request())),tool.ticket());
-    view.findChild<QComboBox*>("polygonSource")->setCurrentIndex(1);
+    controls(&view)->findChild<QComboBox*>("polygonSource")->setCurrentIndex(1);
     check(actor->GetVisibility() && second->GetVisibility() && !tool.result() && tool.request().polygon.empty(),
           "switching source restores previous actor and clears contour");
     tool.stop();
@@ -270,7 +277,7 @@ static void toolTests()
     check(!tool.start({{"grid",cloud,actor}}), "fully transparent cloud is not a clipping target");
     actor->GetProperty()->SetOpacity(1);
     tool.start({{"grid",cloud,actor}});
-    view.findChild<QComboBox*>("polygonMode")->setCurrentIndex(0);
+    controls(&view)->findChild<QComboBox*>("polygonMode")->setCurrentIndex(0);
     for (const auto& p : {QPointF(.86,.86),QPointF(.96,.86),QPointF(.96,.96),QPointF(.86,.96)})
         click(&view,{p.x()*view.width(),p.y()*view.height()});
     button(&view,"polygonClose")->click();
@@ -278,7 +285,7 @@ static void toolTests()
     tool.finishPreview(std::make_shared<CloudClipper::Result>(CloudClipper::compute(tool.request())),tool.ticket());
     check(tool.result() && tool.result()->inside->empty() && !button(&view,"polygonApply")->isEnabled(),
           "empty retained region cannot be applied");
-    view.findChild<QComboBox*>("polygonMode")->setCurrentIndex(1);
+    controls(&view)->findChild<QComboBox*>("polygonMode")->setCurrentIndex(1);
     check(tool.canApply() && tool.result()->outside->size() == cloud->size(), "outside retention remains available when inside is empty");
     tool.stop();
     for (int i = 0; i < 15; ++i) { tool.start({{"grid",cloud,actor}}); tool.stop(); }
@@ -300,7 +307,22 @@ static void mainTests()
     const size_t original = registeredPoints(renderer);
     auto entry = main.ui->mainToolBar->widgetForAction(main.ui->action_Clip);
     click(entry,entry->rect().center());
-    check(main.ui->action_Clip->isChecked() && view->findChild<QFrame*>("polygonClipPanel")->isVisible(), "actual sidebar opens in-window clipping panel");
+    auto dock = main.findChild<QDockWidget*>("polygonClipDock");
+    check(main.ui->action_Clip->isChecked() && dock->isVisible(), "actual sidebar opens Qt clipping dock");
+    check(main.dockWidgetArea(dock) == Qt::LeftDockWidgetArea && !dock->isFloating()
+          && !view->isAncestorOf(dock), "clipping controls dock outside the VTK viewport");
+    dock->setFloating(true); pump();
+    check(dock->isFloating() && dock->height() < main.height() && main.ui->action_Clip->isChecked(), "compact floating Qt dock preserves clipping session");
+    dock->grab().save(capture("floating_controls"));
+    dock->setFloating(false); pump();
+    check(!dock->isFloating() && main.ui->action_Clip->isChecked(), "Qt dock can return to the main window");
+    key(controls(view),Qt::Key_Escape);
+    check(!dock->isVisible() && !main.ui->action_Clip->isChecked(), "Esc from dock controls closes clipping session");
+    click(entry,entry->rect().center());
+    dock->close(); pump();
+    check(!main.ui->action_Clip->isChecked() && !dock->isVisible(), "native dock close exits clipping session");
+    click(entry,entry->rect().center());
+    pump();
     quad(view);
     key(view,Qt::Key_Z,Qt::ControlModifier);
     check(main.ui->action_Clip->isChecked() && button(view,"polygonClose")->isEnabled() && registeredPoints(renderer) == original,
@@ -326,13 +348,13 @@ static void mainTests()
         QElapsedTimer elapsed;
         elapsed.start();
         click(entry,entry->rect().center());
-        view->findChild<QComboBox*>("polygonMode")->setCurrentIndex(i%3);
+        controls(view)->findChild<QComboBox*>("polygonMode")->setCurrentIndex(i%3);
         quad(view);
         button(view,"polygonPreview")->click();
         if (!waitFor([&]() { return button(view,"polygonApply")->isEnabled(); })) {
             std::cout << "[CYCLE] " << i << " preview unavailable: "
-                      << view->findChild<QLabel*>("polygonHint")->text().toStdString()
-                      << " / " << view->findChild<QLabel*>("polygonCount")->text().toStdString()
+                      << controls(view)->findChild<QLabel*>("polygonHint")->text().toStdString()
+                      << " / " << controls(view)->findChild<QLabel*>("polygonCount")->text().toStdString()
                       << " elapsed=" << elapsed.elapsed() << std::endl;
             cycles = false;
             break;
@@ -349,12 +371,12 @@ static void mainTests()
     click(entry,entry->rect().center());
     quad(view);
     button(view,"polygonPreview")->click();
-    button(view,"polygonCancel")->click();
+    button(view,"polygonExit")->click();
     waitFor([&]() { return !main.ui->action_cancel_task->isEnabled(); });
     check(!main.ui->action_Clip->isChecked() && registeredPoints(renderer) == original, "cancel during async preview preserves source");
     click(entry,entry->rect().center());
     main.ui->action_ed_cleangeo->trigger();
-    check(!main.ui->action_Clip->isChecked() && !view->findChild<QFrame*>("polygonClipPanel")->isVisible(), "cleanup exits clipping without stale overlay");
+    check(!main.ui->action_Clip->isChecked() && !dock->isVisible(), "cleanup exits clipping without stale dock");
     main.close(); pump();
 }
 

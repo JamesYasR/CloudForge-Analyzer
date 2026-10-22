@@ -2,11 +2,13 @@
 #include "Basic/DistanceMeasureTool.h"
 #include "Basic/PolygonClipTool.h"
 #include "Basic/WeldPreparationOverlay.h"
+#include "Basic/ViewportResultOverlay.h"
 #include "Dialog/ParamDialogMeasureWeldHeight.h"
 #include <thread>
 #include <omp.h> // OpenMP 并行: MSVC(/openmp) 与 GCC(-fopenmp) 双平台兼容
 #include <random> // 线程私有随机数 (std::mt19937)
 #include <QElapsedTimer>
+#include <QShortcut>
 #include <vtkPoints.h>
 #include <vtkCellArray.h>
 #include <vtkPolyData.h>
@@ -45,6 +47,7 @@ CloudForgeAnalyzer::~CloudForgeAnalyzer()
         m_asyncFuture.waitForFinished();
     }
     m_weldPrepOverlay.reset();
+    m_resultOverlay.reset();
     m_clipTool.reset();
     m_distanceTool.reset();
     viewer.reset();
@@ -92,7 +95,9 @@ void CloudForgeAnalyzer::InitalizeRenderer() {
     connect(m_clipTool.get(), &PolygonClipTool::previewRequested, this, &CloudForgeAnalyzer::PreviewPolygonClip);
     connect(m_clipTool.get(), &PolygonClipTool::applyRequested, this, &CloudForgeAnalyzer::ApplyPolygonClip);
     connect(m_clipTool.get(), &PolygonClipTool::cancelPreviewRequested, this, &CloudForgeAnalyzer::CancelCurrentTask);
-    m_weldPrepOverlay = std::make_unique<WeldPreparationOverlay>(ui->winOfAnalyzer, renderer);
+    m_resultOverlay = std::make_unique<ViewportResultOverlay>(ui->winOfAnalyzer);
+    m_resultOverlay->avoidWidget(ui->winOfAnalyzer->findChild<QWidget*>("distanceMeasureHint"));
+    m_weldPrepOverlay = std::make_unique<WeldPreparationOverlay>(ui->winOfAnalyzer, renderer, m_resultOverlay.get());
 }
 
 void CloudForgeAnalyzer::InitalizeQWidgets() {
@@ -1023,10 +1028,7 @@ void CloudForgeAnalyzer::Tool_MeasureArc() {
         vtkSmartPointer<vtkActor> splineActor = measurer.getVisualizationActor();
 
         if (splineActor) {
-            // 2. 生成一个唯一的ID用于管理
-            std::string actorId = GenerateRandomName("arc_spline_");
-
-            AddActors(actorId, splineActor);
+            VisualizeArcMeasurement(splineActor, measurer.arcLength);
 
             TeEDebug(">>: 弧长曲线已成功添加到3D视图。");
 
@@ -1043,6 +1045,28 @@ void CloudForgeAnalyzer::Tool_MeasureArc() {
 
     TeEDebug(measurer.message);
         });
+}
+
+void CloudForgeAnalyzer::cleanArcMeasurement()
+{
+    auto arc = ActorMap.find("arc_spline_result");
+    if (arc != ActorMap.end()) {
+        viewer->getRendererCollection()->GetFirstRenderer()->RemoveActor(arc->second);
+        ActorMap.erase(arc);
+    }
+    if (m_resultOverlay) m_resultOverlay->removeSection("cylinder_arc");
+}
+
+void CloudForgeAnalyzer::VisualizeArcMeasurement(vtkSmartPointer<vtkActor> actor, double length)
+{
+    if (!actor || !std::isfinite(length) || length < 0) return;
+    actor->PickableOff();
+    AddActors("arc_spline_result", actor);
+    m_resultOverlay->setSection("cylinder_arc", {"圆柱弧长", {
+        {"截面弧长", QString::number(length, 'f', 3) + " mm", {}}
+    }});
+    ui->winOfAnalyzer->renderWindow()->Render();
+    ui->winOfAnalyzer->update();
 }
 
 
@@ -2553,54 +2577,38 @@ void CloudForgeAnalyzer::Tool_MeasureGeodisic() {
             }
         },
         [this, measurerHolder, resultPtr]() {
-    GeodesicArcMeasurer& measurer = **measurerHolder;
+    if (!*measurerHolder || (m_asyncState && m_asyncState->cancelRequested.load())) return;
     const auto& result = *resultPtr;
     if (result.success) {
-            std::string mesg2 = "测地线弧长: " + std::to_string(result.arc_length)+" mm";
-            TeEDebug(mesg2);
-            Update_CFmes(mesg2);
-
- //           4. 可视化
-            auto [actors3D, textActors] = measurer.createVisualizationActors(
-                result,
-                true,  // 显示曲面
-                true,  // 显示路径
-                false, // 不显示原始点云
-                false   // 不显示长度标注
-            );
-
-            // 将actors添加到VTK渲染器...
-            vtkRenderer* renderer = viewer->getRendererCollection()->GetFirstRenderer();
-
-            cleanGeodesicVisualization();
-            // 添加 3D actors（先设置不可拾取，避免干扰后续点拾取）
-            // 添加 3D actors（先设置不可拾取，避免干扰后续点拾取）
-            for (auto& actor : actors3D) {
-                if (actor) {
-                    actor->PickableOff();
-                    renderer->AddViewProp(actor);
-                    // 保存Actor指针，以便后续清除
-                    m_geodesicVisualizationActors.push_back(actor);
-                }
-            }
-            // 添加 2D 文本 actors（也设置不可拾取）
-            for (auto& textActor : textActors) {
-                if (textActor) {
-                    textActor->PickableOff();
-                    renderer->AddViewProp(textActor);
-                    // 保存文本Actor指针
-                    m_geodesicVisualizationActors.push_back(textActor);
-                }
-            }
-
-            // 刷新渲染
-            ui->winOfAnalyzer->renderWindow()->Render();
-            ui->winOfAnalyzer->update();
-        }
-       else{
-           TeEDebug("计算失败");
-       }
+        std::string message = "测地线弧长: " + std::to_string(result.arc_length) + " mm";
+        TeEDebug(message);
+        Update_CFmes(message);
+        VisualizeGeodesicMeasurement(**measurerHolder, result);
+    }
+    else {
+        TeEDebug("计算失败");
+    }
         });
+}
+
+void CloudForgeAnalyzer::VisualizeGeodesicMeasurement(GeodesicArcMeasurer& measurer,
+    const GeodesicArcMeasurer::MeasurementResult& result)
+{
+    if (!result.success || !std::isfinite(result.arc_length) || result.arc_length < 0) return;
+    auto [actors3D, textActors] = measurer.createVisualizationActors(result, true, true, false, false);
+    auto renderer = viewer->getRendererCollection()->GetFirstRenderer();
+    cleanGeodesicVisualization();
+    for (auto& actor : actors3D) {
+        if (!actor) continue;
+        actor->PickableOff();
+        renderer->AddViewProp(actor);
+        m_geodesicVisualizationActors.push_back(actor);
+    }
+    m_resultOverlay->setSection("geodesic_arc", {"测地线弧长", {
+        {"曲面路径长度", QString::number(result.arc_length, 'f', 3) + " mm", {}}
+    }});
+    ui->winOfAnalyzer->renderWindow()->Render();
+    ui->winOfAnalyzer->update();
 }
 
 
@@ -3485,6 +3493,8 @@ void CloudForgeAnalyzer::Slot_ed_cleangeo_Triggered() {
         TeEDebug(">>: 计算进行中，为保证数据安全，暂不能执行该操作。");
         return;
     }
+    cleanGeodesicVisualization();
+    cleanArcMeasurement();
     cleanWeldPrepVisuals();
     if (m_distanceTool) m_distanceTool->clear();
     viewer->removeAllShapes();
@@ -3495,6 +3505,8 @@ void CloudForgeAnalyzer::Slot_ed_cleangeo_Triggered() {
 }
 
 void CloudForgeAnalyzer::cleanGeodesicVisualization() {
+    if (m_resultOverlay) m_resultOverlay->removeSection("geodesic_arc");
+    if (m_geodesicVisualizationActors.empty()) return;
     vtkRenderer* renderer = viewer->getRendererCollection()->GetFirstRenderer();
     if (!renderer) {
         return;
@@ -3570,6 +3582,8 @@ void CloudForgeAnalyzer::Slot_ed_clean2DActor_Triggered() {
         TeEDebug(">>: 计算进行中，为保证数据安全，暂不能执行该操作。");
         return;
     }
+    if (m_resultOverlay) m_resultOverlay->clear();
+    if (m_weldPrepOverlay) m_weldPrepOverlay->clear();
     vtkRenderer* renderer = viewer->getRendererCollection()->GetFirstRenderer();
     if (renderer) {
         vtkPropCollection* props = renderer->GetViewProps();
@@ -3844,6 +3858,8 @@ void CloudForgeAnalyzer::Update_CFmes(std::string cfmes) {
 }
 
 void CloudForgeAnalyzer::AddPointCloud(std::string name, pcl::PointCloud<pcl::PointXYZ>::Ptr cloud, ColorManager color) {
+    cleanGeodesicVisualization();
+    cleanArcMeasurement();
     cleanWeldPrepVisuals();
     if (m_clipTool) m_clipTool->stop();
     if (m_distanceTool) m_distanceTool->clear();
@@ -3874,6 +3890,8 @@ void CloudForgeAnalyzer::ClearAllPointCloudRGB() {
 
 
 void CloudForgeAnalyzer::ClearAllPointCloud() {
+    cleanGeodesicVisualization();
+    cleanArcMeasurement();
     cleanWeldPrepVisuals();
     if (m_clipTool) m_clipTool->stop();
     if (m_distanceTool) m_distanceTool->clear();
@@ -3892,6 +3910,8 @@ void CloudForgeAnalyzer::ClearAllPointCloud() {
 }
 
 void CloudForgeAnalyzer::DelePointCloud(std::string name) {
+    cleanGeodesicVisualization();
+    cleanArcMeasurement();
     cleanWeldPrepVisuals();
     if (m_clipTool) m_clipTool->stop();
     if (m_distanceTool) m_distanceTool->clear();
@@ -3931,6 +3951,8 @@ void CloudForgeAnalyzer::endUndoBatch() {
 }
 
 void CloudForgeAnalyzer::rebuildCloudVisualization() {
+    cleanGeodesicVisualization();
+    cleanArcMeasurement();
     cleanWeldPrepVisuals();
     if (m_clipTool) m_clipTool->stop();
     if (m_distanceTool) m_distanceTool->clear();
@@ -4210,8 +4232,22 @@ void CloudForgeAnalyzer::ClearAllLines() {
 void CloudForgeAnalyzer::visualizeMeasurementResults(MeasureHeight& measurer,
     pcl::PointCloud<pcl::PointXYZ>::Ptr measureCloud,
     pcl::PointCloud<pcl::PointXYZ>::Ptr refCloud) {
-    // 创建可视化器[6](@ref)
-    pcl::visualization::PCLVisualizer::Ptr viewer(new pcl::visualization::PCLVisualizer("高度测量可视化"));
+    auto window = new QMainWindow();
+    window->setAttribute(Qt::WA_DeleteOnClose);
+    window->setWindowTitle("高度测量可视化");
+    window->resize(1000, 760);
+    auto closeShortcut = new QShortcut(QKeySequence(Qt::Key_Q), window);
+    QObject::connect(closeShortcut, &QShortcut::activated, window, &QWidget::close);
+    auto view = new QVTKOpenGLNativeWidget(window);
+    window->setCentralWidget(view);
+    auto renderer = vtkSmartPointer<vtkRenderer>::New();
+    auto renderWindow = vtkSmartPointer<vtkGenericOpenGLRenderWindow>::New();
+    renderWindow->AddRenderer(renderer);
+    pcl::visualization::PCLVisualizer::Ptr viewer(new pcl::visualization::PCLVisualizer(
+        renderer, renderWindow, "height", false));
+    view->setRenderWindow(renderWindow);
+    viewer->setupInteractor(view->interactor(), renderWindow);
+    QObject::connect(window, &QObject::destroyed, [viewer]() {});
     viewer->setBackgroundColor(0.05, 0.05, 0.05); // 深灰色背景
 
     // 获取平面系数
@@ -4248,34 +4284,17 @@ void CloudForgeAnalyzer::visualizeMeasurementResults(MeasureHeight& measurer,
     // 5. 添加坐标系和文本信息[6](@ref)
     viewer->addCoordinateSystem(1.0, "coord_system");
 
-    // 添加结果文本
-    std::stringstream results_text;
-    results_text << "results:\n";
-    results_text << "max: " << std::fixed << std::setprecision(3) << measurer.GetMaxDistance() << " mm\n";
-    results_text << "min: " << measurer.GetMinDistance() << " mm\n";
-    results_text << "avr: " << measurer.GetMeanDistance() << " mm";
-
-    viewer->addText(results_text.str(), 10, 70, 24, 1.0, 1.0, 1.0, "results_text");
-
-    // 6. 设置相机位置以获得更好的视角[6](@ref)
+    auto results = new ViewportResultOverlay(view);
+    results->setSection("height", {"高度测量", {
+        {"最大高度", QString::number(measurer.GetMaxDistance(), 'f', 3) + " mm", {}},
+        {"最小高度", QString::number(measurer.GetMinDistance(), 'f', 3) + " mm", {}},
+        {"平均高度", QString::number(measurer.GetMeanDistance(), 'f', 3) + " mm", {}}
+    }});
     viewer->initCameraParameters();
     viewer->resetCamera();
-    // 添加交互说明文本
-    viewer->addText("按 'r' 重置视角, 按 'q' 退出", 10, 30, 12, 1.0, 1.0, 1.0, "help_text");
+    window->show();
+    view->renderWindow()->Render();
 
-    // 7. 显示可视化窗口
-    // 非阻塞: 用定时器在 GUI 线程驱动 spinOnce, 避免像原来那样在此自旋阻塞主窗口
-    auto visHolder = std::make_shared<pcl::visualization::PCLVisualizer::Ptr>(viewer);
-    QTimer* spinTimer = new QTimer();
-    QObject::connect(spinTimer, &QTimer::timeout, [visHolder, spinTimer]() {
-        if (!(*visHolder) || (*visHolder)->wasStopped()) {
-            spinTimer->stop();
-            spinTimer->deleteLater();
-            return;
-        }
-        (*visHolder)->spinOnce(10);
-    });
-    spinTimer->start(50);
 }
 
 void CloudForgeAnalyzer::colorPointCloudByHeight(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud,
@@ -4661,6 +4680,7 @@ void CloudForgeAnalyzer::visualizeFittedPlane(pcl::PointCloud<pcl::PointXYZ>::Pt
 }
 
 void CloudForgeAnalyzer::clearAllActors() {
+    if (m_resultOverlay) m_resultOverlay->removeSection("cylinder_arc");
     cleanWeldPrepVisuals();
     if (ActorMap.empty()) {
         return;

@@ -11,6 +11,7 @@
 
 class QWidget;
 class QFrame;
+class QDockWidget;
 class QLabel;
 class QPushButton;
 class QComboBox;
@@ -81,6 +82,7 @@ private:
     vtkRenderWindow* window_ = nullptr;
     QWidget* canvas_ = nullptr;
     QFrame* panel_ = nullptr;
+    QDockWidget* dock_ = nullptr;
     QWidget* body_ = nullptr;
     QComboBox* source_ = nullptr;
     QComboBox* mode_ = nullptr;

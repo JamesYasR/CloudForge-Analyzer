@@ -1,13 +1,16 @@
 #include "Basic/PolygonClipTool.h"
+#include <QAction>
 #include <QApplication>
 #include <QButtonGroup>
 #include <QCheckBox>
 #include <QComboBox>
+#include <QDockWidget>
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QKeyEvent>
 #include <QLabel>
 #include <QMenu>
+#include <QMainWindow>
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPushButton>
@@ -70,44 +73,31 @@ PolygonClipTool::~PolygonClipTool()
 {
     stop();
     qApp->removeEventFilter(this);
-    delete panel_;
+    delete dock_;
     delete canvas_;
 }
 
 void PolygonClipTool::buildPanel()
 {
-    panel_ = new QFrame(view_);
+    auto mainWindow = qobject_cast<QMainWindow*>(view_->window());
+    dock_ = new QDockWidget("多边形裁切", view_->window());
+    dock_->setObjectName("polygonClipDock");
+    dock_->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
+    dock_->setFeatures(QDockWidget::DockWidgetClosable | QDockWidget::DockWidgetMovable | QDockWidget::DockWidgetFloatable);
+    panel_ = new QFrame(dock_);
     panel_->setObjectName("polygonClipPanel");
     panel_->setStyleSheet(
-        "QFrame#polygonClipPanel { background: #102e39; border: 1px solid #41606a; border-radius: 10px; }"
-        "QLabel { color: #e3f0f2; border: none; background: transparent; }"
-        "QPushButton { color: #e3f0f2; background: #244651; border: none; border-radius: 5px; padding: 6px 9px; }"
-        "QPushButton:hover { background: #345e69; } QPushButton:checked { background: #18786e; }"
-        "QPushButton:disabled { color: #69858c; background: #1c3943; }"
-        "QPushButton#polygonApply { color: #062c29; background: #48d7b2; font-weight: bold; }"
-        "QPushButton#polygonApply:disabled { color: #69858c; background: #1c3943; }"
-        "QComboBox { color: #ecf5f6; background: #244651; border: 1px solid #41606a; border-radius: 4px; padding: 4px 7px; }"
-        "QComboBox QAbstractItemView { color: #ecf5f6; background: #244651; selection-background-color: #18786e; }"
-        "QCheckBox { color: #adc4c9; background: transparent; }"
+        "QFrame#polygonClipPanel { border: none; }"
+        "QPushButton { background: palette(button); color: palette(button-text); border: 1px solid palette(mid); border-radius: 0; padding: 5px 8px; }"
+        "QPushButton:hover { background: palette(light); }"
+        "QPushButton:pressed { background: palette(midlight); }"
+        "QPushButton:disabled { color: palette(mid); border-color: palette(midlight); }"
+        "QPushButton:checked { background: palette(highlight); color: palette(highlighted-text); border-color: palette(highlight); }"
+        "QPushButton#polygonApply { font-weight: bold; }"
     );
     auto layout = new QVBoxLayout(panel_);
     layout->setContentsMargins(12, 10, 12, 10);
     layout->setSpacing(8);
-    auto header = new QHBoxLayout;
-    auto title = new QLabel("多边形裁切", panel_);
-    title->setStyleSheet("font-size: 15px; font-weight: bold; color: #74e2c5;");
-    header->addWidget(title, 1);
-    auto collapse = new QPushButton("−", panel_);
-    collapse->setObjectName("polygonCollapse");
-    collapse->setFixedWidth(30);
-    collapse->setToolTip("收起 / 展开操作面板");
-    header->addWidget(collapse);
-    auto cancel = new QPushButton("×", panel_);
-    cancel->setObjectName("polygonCancel");
-    cancel->setFixedWidth(30);
-    cancel->setToolTip("取消裁切（Esc / Q）");
-    header->addWidget(cancel);
-    layout->addLayout(header);
     body_ = new QWidget(panel_);
     auto body = new QVBoxLayout(body_);
     body->setContentsMargins(0, 0, 0, 0);
@@ -130,7 +120,7 @@ void PolygonClipTool::buildPanel()
     hint_->setObjectName("polygonHint");
     hint_->setWordWrap(true);
     hint_->setMinimumHeight(34);
-    hint_->setStyleSheet("color: #adc4c9; font-size: 12px;");
+    hint_->setStyleSheet("font-size: 12px;");
     body->addWidget(hint_);
     auto edit = new QHBoxLayout;
     close_ = new QPushButton("闭合轮廓", body_);
@@ -151,7 +141,7 @@ void PolygonClipTool::buildPanel()
     count_ = new QLabel("描边后预览裁切结果", body_);
     count_->setObjectName("polygonCount");
     count_->setWordWrap(true);
-    count_->setStyleSheet("color: #74e2c5; font-size: 12px;");
+    count_->setStyleSheet("font-size: 12px;");
     body->addWidget(count_);
     auto actions = new QHBoxLayout;
     preview_ = new QPushButton("预览裁切", body_);
@@ -174,14 +164,24 @@ void PolygonClipTool::buildPanel()
     footer->addWidget(exit);
     body->addLayout(footer);
     layout->addWidget(body_);
-    panel_->setFixedWidth(306);
-    panel_->move(12, 12);
-    panel_->hide();
-    connect(cancel, &QPushButton::clicked, this, &PolygonClipTool::stop);
+    layout->addStretch();
+    panel_->setMinimumWidth(280);
+    dock_->setWidget(panel_);
+    if (mainWindow) {
+        mainWindow->addDockWidget(Qt::LeftDockWidgetArea, dock_);
+        mainWindow->resizeDocks({dock_}, {306}, Qt::Horizontal);
+    }
+    else {
+        dock_->setFloating(true);
+        dock_->resize(306, dock_->sizeHint().height());
+    }
+    dock_->hide();
+    connect(dock_, &QDockWidget::topLevelChanged, this, [this](bool floating) {
+        if (floating) dock_->resize(dock_->width(), dock_->sizeHint().height());
+    });
     connect(exit, &QPushButton::clicked, this, &PolygonClipTool::stop);
-    connect(collapse, &QPushButton::clicked, this, [this]() {
-        body_->setVisible(!body_->isVisible());
-        panel_->adjustSize();
+    connect(dock_->toggleViewAction(), &QAction::triggered, this, [this](bool visible) {
+        if (!visible) stop();
     });
     connect(draw_, &QPushButton::clicked, this, [this]() { setDrawing(true); });
     connect(navigate_, &QPushButton::clicked, this, [this]() { setDrawing(false); });
@@ -229,10 +229,8 @@ bool PolygonClipTool::start(const std::vector<Target>& targets)
     canvas_->show();
     canvas_->raise();
     body_->show();
-    panel_->setFixedWidth(std::min(306, view_->width() - 24));
-    panel_->adjustSize();
-    panel_->show();
-    panel_->raise();
+    dock_->show();
+    dock_->raise();
     contourVisible_->setChecked(true);
     viewTimer_.start();
     updateUi();
@@ -249,7 +247,7 @@ void PolygonClipTool::stop()
     ++ticket_;
     viewTimer_.stop();
     clearPreview();
-    panel_->hide();
+    dock_->hide();
     canvas_->hide();
     if (view_) { view_->setCursor(originalCursor_); view_->setMouseTracking(mouseTracking_); }
     emit activeChanged(false);
@@ -457,7 +455,7 @@ void PolygonClipTool::updateUi()
     preview_->setEnabled(!busy_ && valid);
     apply_->setEnabled(!busy_ && result_ && (keepMode() == KeepMode::Inside ? !result_->inside->empty()
         : keepMode() == KeepMode::Outside ? !result_->outside->empty() : !result_->inside->empty() && !result_->outside->empty()));
-    count_->setText(result_ ? QString("<span style='color:#74e2c5'>框内 %1 点</span>　·　<span style='color:#ffb18e'>框外 %2 点</span>").arg(result_->inside->size()).arg(result_->outside->size())
+    count_->setText(result_ ? QString("框内 %1 点　·　框外 %2 点").arg(result_->inside->size()).arg(result_->outside->size())
                            : "描边后预览裁切结果");
 }
 
@@ -490,10 +488,14 @@ int PolygonClipTool::hitEdge(const QPointF& point) const
 bool PolygonClipTool::eventFilter(QObject* watched, QEvent* event)
 {
     if (!active_ || !view_) return false;
+    if (watched == dock_ && event->type() == QEvent::Close) {
+        stop();
+        return false;
+    }
     if (event->type() == QEvent::ShortcutOverride) {
         auto widget = qobject_cast<QWidget*>(watched);
         auto key = static_cast<QKeyEvent*>(event);
-        if (widget && widget->window() == view_->window() && key->key() == Qt::Key_Z
+        if (widget && (widget->window() == view_->window() || widget->window() == dock_->window()) && key->key() == Qt::Key_Z
             && (key->modifiers() & Qt::ControlModifier)) {
             event->accept();
             return true;
@@ -502,7 +504,7 @@ bool PolygonClipTool::eventFilter(QObject* watched, QEvent* event)
     if (event->type() == QEvent::KeyPress) {
         auto widget = qobject_cast<QWidget*>(watched);
         auto key = static_cast<QKeyEvent*>(event);
-        if (!widget || widget->window() != view_->window()) return false;
+        if (!widget || (widget->window() != view_->window() && widget->window() != dock_->window())) return false;
         if (key->key() == Qt::Key_Escape) { stop(); return true; }
         if (widget == source_ || widget == mode_) return false;
         switch (key->key()) {
@@ -520,8 +522,6 @@ bool PolygonClipTool::eventFilter(QObject* watched, QEvent* event)
     if (watched != view_) return false;
     if (event->type() == QEvent::Resize) {
         canvas_->setGeometry(view_->rect());
-        panel_->setFixedWidth(std::min(306, view_->width() - 24));
-        panel_->adjustSize();
         invalidatePreview();
         return false;
     }

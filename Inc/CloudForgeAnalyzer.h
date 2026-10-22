@@ -30,6 +30,7 @@ QT_END_NAMESPACE
 class DistanceMeasureTool;
 class PolygonClipTool;
 class WeldPreparationOverlay;
+class ViewportResultOverlay;
 
 class CloudForgeAnalyzer : public QMainWindow
 {
@@ -96,7 +97,12 @@ private:
     std::vector<std::string> m_weldPrepLineIds;    // 直线段(走 LineMap 注册)
     std::vector<std::string> m_weldPrepActorIds;   // vtkActor(折线)
     std::unique_ptr<WeldPreparationOverlay> m_weldPrepOverlay;
+    std::unique_ptr<ViewportResultOverlay> m_resultOverlay;
     void cleanWeldPrepVisuals();
+    void VisualizeArcMeasurement(vtkSmartPointer<vtkActor> actor, double length);
+    void cleanArcMeasurement();
+    void VisualizeGeodesicMeasurement(GeodesicArcMeasurer& measurer,
+                                     const GeodesicArcMeasurer::MeasurementResult& result);
 
     //  
     void visualizeFittedPlane(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud,
