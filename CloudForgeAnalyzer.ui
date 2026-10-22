@@ -517,6 +517,7 @@ font: 700 8pt &quot;Microsoft YaHei UI&quot;;</string>
    <addaction name="measure_cylinder"/>
    <addaction name="measure_geodisic"/>
    <addaction name="measure_parallel"/>
+   <addaction name="measure_weld_parallel"/>
    <addaction name="measure_height"/>
    <addaction name="measure_Cylindricity"/>
    <addaction name="measure_planarity"/>
@@ -953,6 +954,15 @@ QMenu::item:selected {
    <property name="menuRole">
     <enum>QAction::MenuRole::NoRole</enum>
    </property>
+  </action>
+  <action name="measure_weld_parallel">
+   <property name="checkable"><bool>true</bool></property>
+   <property name="icon"><iconset resource="CloudForgeAnalyzer.qrc"><normaloff>:/CloudForgeAnalyzer/Icons/icon_parallel.png</normaloff>:/CloudForgeAnalyzer/Icons/icon_parallel.png</iconset></property>
+   <property name="text"><string>焊缝平行度</string></property>
+   <property name="iconText"><string>焊缝
+平行度</string></property>
+   <property name="toolTip"><string>在同一参考圆柱的展开面内比较两条焊缝走向</string></property>
+   <property name="menuRole"><enum>QAction::MenuRole::NoRole</enum></property>
   </action>
   <action name="measure_height">
    <property name="icon">

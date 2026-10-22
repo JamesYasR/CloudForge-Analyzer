@@ -31,6 +31,7 @@ class PolygonClipTool;
 class WeldPreparationOverlay;
 class ViewportResultOverlay;
 class HeightMeasureTool;
+class WeldParallelismTool;
 
 class CloudForgeAnalyzer : public QMainWindow
 {
@@ -77,6 +78,7 @@ private slots:
     void Tool_MeasureGeodisic();
     void Tool_MeasureHeight();
     void Tool_MeasureParallel();
+    void Tool_MeasureWeldParallelism();
     void Tool_MeasurePlanarity();
     void Tool_MeasureAngleP2P();
     void Tool_Clip();
@@ -98,6 +100,7 @@ private:
     void PreviewPolygonClip();
     void ApplyPolygonClip();
     void StartHeightMeasurement();
+    void StartWeldParallelismMeasurement();
     // 焊前装配阶差/间隙的共同流程(§7): 选两件 → 定接缝区域 → 看 Z 均值 → 设 R 与方向 → 后台计算
     // 口径(2026-09 统一): 阶差 = 径向(e_P - e_Q, 近件在外为正); 间隙 = 沿跨缝方向(环缝=轴向)
     // 两个量由同一次配对同时得到，共用一个入口。
@@ -230,6 +233,8 @@ private:
     std::unique_ptr<ViewportPointPicker> m_pointPicker;
     std::unique_ptr<PolygonClipTool> m_clipTool;
     std::unique_ptr<HeightMeasureTool> m_heightTool;
+    std::unique_ptr<WeldParallelismTool> m_weldParallelTool;
+    std::string m_lastThreeStageCylinder;
     pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZ>::Ptr renderer_custom;
     UndoRedoManager m_undoRedoManager;
     int m_undoBatchLevel = 0; // >0 时 AddPointCloud 等不单独记录 undo

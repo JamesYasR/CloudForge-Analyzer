@@ -1,0 +1,28 @@
+{
+  "reference_source": "未处理的点云.pcd",
+  "sha256": {
+    "未处理的点云.pcd": "106b54cef847426e702f652739de01ba02df079e934e1dc2991010bf44c1b3f4",
+    "焊缝1.pcd": "c77441310f6a87cb384ed28bd2af35fcfba0bf137b6b8155797ed4b6026145b6",
+    "焊缝2.pcd": "878707c0de15b9bd07492e1a4457c088e062e349cbd79cc4b61077fbd0914c38",
+    "圆柱壁面.pcd": "777946f890b934008800c5e033da802eb5eadcbfd671597bbe8505a09e6b2142"
+  },
+  "design_radius_mm": 1940,
+  "weld_constraint_applied": true,
+  "fit_parameters": {
+    "normal_neighbors": 60,
+    "ransac_distance_mm": 3,
+    "ransac_iterations": 1000,
+    "optimization_iterations": 2000,
+    "tolerance_mm": 1,
+    "weld_threshold_factor": 3,
+    "weld_cluster_tolerance_mm": 2,
+    "weld_min_cluster_size": 20,
+    "weld_constraint_weight": 1
+  },
+  "independent_angle_degrees": 1.510370103567391,
+  "comparison_length_mm": 109.8149919368902,
+  "angle_difference_degrees": 1.3322676295501878e-15,
+  "projection_max_difference_mm": 1.7337242752546445e-12,
+  "length_difference_mm": 1.0373923942097463e-12,
+  "common_center_count": 54
+}

@@ -1,0 +1,9 @@
+2026-10-22
+Local Debug build: PASS, Qt 6.7.3 / PCL 1.14.0 / VTK 9.3.0, max 2 jobs, 8 GiB guard
+Numeric checks: pass=37 fail=0
+Desktop normal: pass=34 fail=0
+Desktop QT_SCALE_FACTOR=2: pass=34 fail=0
+Real angle_degrees=1.5103701035673898
+Real comparison_length_mm=109.81499193688916
+Independent verification: see independent_real.json
+Other feature regressions: not run

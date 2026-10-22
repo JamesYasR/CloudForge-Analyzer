@@ -4,6 +4,7 @@
 #include "Basic/WeldPreparationOverlay.h"
 #include "Basic/ViewportResultOverlay.h"
 #include "Basic/HeightMeasureTool.h"
+#include "Basic/WeldParallelismTool.h"
 #include "Dialog/ParamDialogMeasureWeldHeight.h"
 #include <thread>
 #include <omp.h> // OpenMP 并行: MSVC(/openmp) 与 GCC(-fopenmp) 双平台兼容
@@ -47,6 +48,7 @@ CloudForgeAnalyzer::~CloudForgeAnalyzer()
         m_asyncFuture.waitForFinished();
     }
     m_weldPrepOverlay.reset();
+    m_weldParallelTool.reset();
     m_heightTool.reset();
     m_resultOverlay.reset();
     m_clipTool.reset();
@@ -110,6 +112,16 @@ void CloudForgeAnalyzer::InitalizeRenderer() {
         Update_CFmes(text.toStdString());
         TeEDebug(text.toStdString());
     });
+    m_weldParallelTool=std::make_unique<WeldParallelismTool>(ui->winOfAnalyzer,renderer,m_resultOverlay.get());
+    connect(m_weldParallelTool.get(),&WeldParallelismTool::activeChanged,ui->measure_weld_parallel,&QAction::setChecked);
+    connect(m_weldParallelTool.get(),&WeldParallelismTool::measureRequested,this,&CloudForgeAnalyzer::StartWeldParallelismMeasurement);
+    connect(m_weldParallelTool.get(),&WeldParallelismTool::cancelRequested,this,&CloudForgeAnalyzer::CancelCurrentTask);
+    connect(m_weldParallelTool.get(),&WeldParallelismTool::fitReferenceRequested,this,[this]() {
+        m_weldParallelTool->stop();ui->action_fit_cy3->trigger();
+    });
+    connect(m_weldParallelTool.get(),&WeldParallelismTool::resultMessage,this,[this](const QString& text) {
+        Update_CFmes(text.toStdString());TeEDebug(text.toStdString());
+    });
 }
 
 void CloudForgeAnalyzer::InitalizeQWidgets() {
@@ -121,6 +133,10 @@ void CloudForgeAnalyzer::InitalizeConnects() {
         connect(action, &QAction::triggered, this, [this]() {
             ++m_pointSelectionRevision;
         });
+        if (action != ui->measure_weld_parallel && action != ui->action_cancel_task
+            && action != ui->action_ed_clean2DActor && action != ui->action_ed_cleangeodetic) {
+            connect(action,&QAction::triggered,this,[this]() { if (m_weldParallelTool) m_weldParallelTool->stop(); });
+        }
         if (action != ui->measure_height && action != ui->action_cancel_task
             && action != ui->action_ed_clean2DActor && action != ui->action_ed_cleangeodetic) {
             connect(action, &QAction::triggered, this, [this]() { if (m_heightTool) m_heightTool->stop(); });
@@ -163,6 +179,7 @@ void CloudForgeAnalyzer::InitalizeConnects() {
     connect(ui->measure_cylinder, &QAction::triggered,this, &CloudForgeAnalyzer::Tool_MeasureArc);
     connect(ui->measure_geodisic, &QAction::triggered, this, &CloudForgeAnalyzer::Tool_MeasureGeodisic);
     connect(ui->measure_parallel, &QAction::triggered, this, &CloudForgeAnalyzer::Tool_MeasureParallel);
+    connect(ui->measure_weld_parallel,&QAction::triggered,this,&CloudForgeAnalyzer::Tool_MeasureWeldParallelism);
     connect(ui->measure_height, &QAction::triggered, this, &CloudForgeAnalyzer::Tool_MeasureHeight);
     connect(ui->measure_planarity, &QAction::triggered, this, &CloudForgeAnalyzer::Tool_MeasurePlanarity);
     connect(ui->measure_angleP2P, &QAction::triggered, this, &CloudForgeAnalyzer::Tool_MeasureAngleP2P);
@@ -849,6 +866,7 @@ void CloudForgeAnalyzer::FinishFitCy3(const std::shared_ptr<MeasureCylindricity:
     // 7. 存储最终优化结果
     std::string storedName = GenerateRandomName("optimized_cylinder");
     addCylinderResult(storedName, cycoeff2);
+    if (evaluator->isWeldConstraintApplied()) m_lastThreeStageCylinder=storedName;
 
     std::stringstream ss;
     ss << "圆柱拟合与焊缝约束优化完成。\n";
@@ -2245,6 +2263,48 @@ void CloudForgeAnalyzer::Tool_MeasureParallel() {
     Update_CFmes("平行度(夹角):" + std::to_string(parallelism) + "度");
 }
 
+void CloudForgeAnalyzer::Tool_MeasureWeldParallelism()
+{
+    if (m_weldParallelTool->isActive()) { m_weldParallelTool->stop();return; }
+    if (IsTaskRunning()) { ui->measure_weld_parallel->setChecked(false);return; }
+    std::vector<WeldParallelismTool::Target> targets;
+    const auto actors=viewer->getCloudActorMap();
+    for (const auto& entry:CloudMap) {
+        const auto actor=actors->find(entry.first);
+        if (actor!=actors->end()) targets.push_back({entry.first,entry.second,actor->second.actor});
+    }
+    std::vector<WeldParallelismTool::Reference> references;
+    for (const auto& entry:cylinderResultsMap) {
+        if (!entry.second || entry.second->values.size()!=7) continue;
+        const auto& c=entry.second->values;
+        MeasureWeldParallelism::Cylinder cylinder{{c[0],c[1],c[2]},{c[3],c[4],c[5]},c[6]};
+        if (cylinder.point.allFinite() && cylinder.axis.allFinite() && cylinder.axis.norm()>1e-9 && std::isfinite(cylinder.radius) && cylinder.radius>0)
+            references.push_back({entry.first,cylinder});
+    }
+    if (!m_weldParallelTool->start(targets,references,m_lastThreeStageCylinder)) {
+        ui->measure_weld_parallel->setChecked(false);TeEDebug("不可测: 当前没有可用的焊缝点云");
+    }
+}
+
+void CloudForgeAnalyzer::StartWeldParallelismMeasurement()
+{
+    if (IsTaskRunning() || !m_weldParallelTool->isActive() || m_weldParallelTool->isBusy()) return;
+    const auto request=m_weldParallelTool->beginMeasurement();
+    if (!request.ticket) return;
+    auto result=std::make_shared<MeasureWeldParallelism::Result>();
+    RunAsyncVoid("焊缝平行度",
+        [this,result,first=request.first.cloud,second=request.second.cloud,cylinder=request.reference.cylinder]() {
+            MeasureWeldParallelism measurement(first,second,cylinder);measurement.setProgressCallback(WorkerProgressCallback());
+            *result=measurement.compute();
+        },
+        [this,result,ticket=request.ticket]() {
+            if (m_asyncState && m_asyncState->cancelRequested.load()) { result->success=false;result->cancelled=true;result->message="焊缝平行度测量已取消"; }
+            if (!m_weldParallelTool->finish(result,ticket)) return;
+            const QString text=QString("焊缝平行度\n展开面夹角: %1°\n比较长度: %2 mm").arg(result->angleDegrees,0,'f',3).arg(result->comparisonLength,0,'f',2);
+            Update_CFmes(text.toStdString());TeEDebug(text.toStdString());
+        });
+}
+
 void CloudForgeAnalyzer::PickCloudPoints(const std::string& cloudName, int count, const QString& title,
     std::function<void(const PickedPoints&)> onPicked)
 {
@@ -3501,6 +3561,7 @@ void CloudForgeAnalyzer::Slot_ed_cleangeo_Triggered() {
         return;
     }
     if (m_heightTool) m_heightTool->stop();
+    if (m_weldParallelTool) m_weldParallelTool->stop();
     cleanGeodesicVisualization();
     cleanArcMeasurement();
     cleanWeldPrepVisuals();
@@ -3590,6 +3651,7 @@ void CloudForgeAnalyzer::Slot_ed_clean2DActor_Triggered() {
         TeEDebug(">>: 计算进行中，为保证数据安全，暂不能执行该操作。");
         return;
     }
+    if (m_weldParallelTool) m_weldParallelTool->clearAnnotations();
     if (m_resultOverlay) m_resultOverlay->clear();
     if (m_weldPrepOverlay) m_weldPrepOverlay->clear();
     vtkRenderer* renderer = viewer->getRendererCollection()->GetFirstRenderer();
@@ -3867,6 +3929,7 @@ void CloudForgeAnalyzer::Update_CFmes(std::string cfmes) {
 
 void CloudForgeAnalyzer::AddPointCloud(std::string name, pcl::PointCloud<pcl::PointXYZ>::Ptr cloud, ColorManager color) {
     if (m_heightTool) m_heightTool->stop();
+    if (m_weldParallelTool) m_weldParallelTool->stop();
     cleanGeodesicVisualization();
     cleanArcMeasurement();
     cleanWeldPrepVisuals();
@@ -3887,6 +3950,7 @@ void CloudForgeAnalyzer::AddPointCloud(std::string name, pcl::PointCloud<pcl::Po
 
 void CloudForgeAnalyzer::ClearAllPointCloudRGB() {
     if (m_heightTool) m_heightTool->stop();
+    if (m_weldParallelTool) m_weldParallelTool->stop();
     if (m_clipTool) m_clipTool->stop();
     if (m_pointPicker) m_pointPicker->clear();
     for (auto& pair : RGBCloudMap) {
@@ -3901,6 +3965,7 @@ void CloudForgeAnalyzer::ClearAllPointCloudRGB() {
 
 void CloudForgeAnalyzer::ClearAllPointCloud() {
     if (m_heightTool) m_heightTool->stop();
+    if (m_weldParallelTool) m_weldParallelTool->stop();
     cleanGeodesicVisualization();
     cleanArcMeasurement();
     cleanWeldPrepVisuals();
@@ -3922,6 +3987,7 @@ void CloudForgeAnalyzer::ClearAllPointCloud() {
 
 void CloudForgeAnalyzer::DelePointCloud(std::string name) {
     if (m_heightTool) m_heightTool->stop();
+    if (m_weldParallelTool) m_weldParallelTool->stop();
     cleanGeodesicVisualization();
     cleanArcMeasurement();
     cleanWeldPrepVisuals();
@@ -3964,6 +4030,7 @@ void CloudForgeAnalyzer::endUndoBatch() {
 
 void CloudForgeAnalyzer::rebuildCloudVisualization() {
     if (m_heightTool) m_heightTool->stop();
+    if (m_weldParallelTool) m_weldParallelTool->stop();
     cleanGeodesicVisualization();
     cleanArcMeasurement();
     cleanWeldPrepVisuals();
@@ -4082,6 +4149,7 @@ void CloudForgeAnalyzer::ResetProgressBar() {
 void CloudForgeAnalyzer::BeginAsyncTask(const QString& title)
 {
     if (m_heightTool && !m_heightTool->isBusy()) m_heightTool->stop();
+    if (m_weldParallelTool && !m_weldParallelTool->isBusy()) m_weldParallelTool->stop();
     if (m_clipTool && !m_clipTool->isBusy()) m_clipTool->stop();
     if (m_pointPicker) m_pointPicker->stop();
     m_asyncState = std::make_shared<AsyncTaskState>();
@@ -4146,6 +4214,7 @@ void CloudForgeAnalyzer::PollAsyncProgress()
 void CloudForgeAnalyzer::CancelCurrentTask()
 {
     if (m_heightTool) m_heightTool->setCancelling();
+    if (m_weldParallelTool) m_weldParallelTool->setCancelling();
     if (m_asyncState) {
         m_asyncState->cancelRequested.store(true);
         TeEDebug(">>: 已请求取消当前计算（将在下一个检查点中止）...");
@@ -4535,6 +4604,7 @@ void CloudForgeAnalyzer::visualizeFittedPlane(pcl::PointCloud<pcl::PointXYZ>::Pt
 
 void CloudForgeAnalyzer::clearAllActors() {
     if (m_heightTool) m_heightTool->stop();
+    if (m_weldParallelTool) m_weldParallelTool->stop();
     if (m_resultOverlay) m_resultOverlay->removeSection("cylinder_arc");
     cleanWeldPrepVisuals();
     if (ActorMap.empty()) {
