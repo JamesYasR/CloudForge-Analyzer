@@ -3,12 +3,12 @@
 #include "Basic/PolygonClipTool.h"
 #include "Basic/WeldPreparationOverlay.h"
 #include "Basic/ViewportResultOverlay.h"
+#include "Basic/HeightMeasureTool.h"
 #include "Dialog/ParamDialogMeasureWeldHeight.h"
 #include <thread>
 #include <omp.h> // OpenMP 并行: MSVC(/openmp) 与 GCC(-fopenmp) 双平台兼容
 #include <random> // 线程私有随机数 (std::mt19937)
 #include <QElapsedTimer>
-#include <QShortcut>
 #include <vtkPoints.h>
 #include <vtkCellArray.h>
 #include <vtkPolyData.h>
@@ -47,6 +47,7 @@ CloudForgeAnalyzer::~CloudForgeAnalyzer()
         m_asyncFuture.waitForFinished();
     }
     m_weldPrepOverlay.reset();
+    m_heightTool.reset();
     m_resultOverlay.reset();
     m_clipTool.reset();
     m_pointPicker.reset();
@@ -100,6 +101,15 @@ void CloudForgeAnalyzer::InitalizeRenderer() {
     m_resultOverlay = std::make_unique<ViewportResultOverlay>(ui->winOfAnalyzer);
     m_resultOverlay->avoidWidget(ui->winOfAnalyzer->findChild<QWidget*>("distanceMeasureHint"));
     m_weldPrepOverlay = std::make_unique<WeldPreparationOverlay>(ui->winOfAnalyzer, renderer, m_resultOverlay.get());
+    m_heightTool = std::make_unique<HeightMeasureTool>(ui->winOfAnalyzer, renderer, m_resultOverlay.get());
+    ui->measure_height->setCheckable(true);
+    connect(m_heightTool.get(), &HeightMeasureTool::activeChanged, ui->measure_height, &QAction::setChecked);
+    connect(m_heightTool.get(), &HeightMeasureTool::measureRequested, this, &CloudForgeAnalyzer::StartHeightMeasurement);
+    connect(m_heightTool.get(), &HeightMeasureTool::cancelRequested, this, &CloudForgeAnalyzer::CancelCurrentTask);
+    connect(m_heightTool.get(), &HeightMeasureTool::resultMessage, this, [this](const QString& text) {
+        Update_CFmes(text.toStdString());
+        TeEDebug(text.toStdString());
+    });
 }
 
 void CloudForgeAnalyzer::InitalizeQWidgets() {
@@ -111,6 +121,10 @@ void CloudForgeAnalyzer::InitalizeConnects() {
         connect(action, &QAction::triggered, this, [this]() {
             ++m_pointSelectionRevision;
         });
+        if (action != ui->measure_height && action != ui->action_cancel_task
+            && action != ui->action_ed_clean2DActor && action != ui->action_ed_cleangeodetic) {
+            connect(action, &QAction::triggered, this, [this]() { if (m_heightTool) m_heightTool->stop(); });
+        }
         if (action != ui->action_Clip && action != ui->action_cancel_task) {
             connect(action, &QAction::triggered, this, [this]() {
                 if (m_clipTool) m_clipTool->stop();
@@ -2096,92 +2110,61 @@ void CloudForgeAnalyzer::VisualizeWeldPreparation(const MeasureWeldPreparation::
     m_weldPrepOverlay->setAnnotations(std::move(annotations));
 }
 
-void CloudForgeAnalyzer::Tool_MeasureHeight() {
-    if (IsTaskRunning()) {
-        TeEDebug(">>: 已有计算任务进行中，请等待完成或点击工具栏“取消计算”。");
-        return;
+void CloudForgeAnalyzer::Tool_MeasureHeight()
+{
+    if (m_heightTool->isActive()) { m_heightTool->stop(); return; }
+    if (IsTaskRunning()) { ui->measure_height->setChecked(false); return; }
+    std::vector<HeightMeasureTool::Target> targets;
+    const auto actors = viewer->getCloudActorMap();
+    for (const auto& entry : CloudMap) {
+        const auto actor = actors->find(entry.first);
+        if (actor != actors->end()) targets.push_back({entry.first, entry.second, actor->second.actor});
     }
-    ChoseCloudDialog dialogMeasure(CloudMap, ColorMap,"选择-测量对象");
-    if (dialogMeasure.exec() != QDialog::Accepted) {
-        TeEDebug(">>:操作取消");
-        return;
+    if (!m_heightTool->start(targets)) {
+        ui->measure_height->setChecked(false);
+        TeEDebug("不可测: 当前没有可用的点云");
     }
-    if (dialogMeasure.getSelectedList().empty()) {
-        TeEDebug("测量已取消：未选择被测量点云");
-        return;
-    }
-    pcl::PointCloud<pcl::PointXYZ>::Ptr measureCloud = CloudMap[dialogMeasure.getSelectedList()[0]];
-    if (!measureCloud || measureCloud->empty()) {
-        TeEDebug("被测量点云为空或无效");
-        return;
-    }
+}
 
-    // 选择用于拟合参考平面的点云
-    ChoseCloudDialog dialogRef(CloudMap, ColorMap,"选择-参考面");
-    if (dialogRef.exec() != QDialog::Accepted) {
-        TeEDebug(">>:操作取消");
-        return;
-    }
-    if (dialogRef.getSelectedList().empty()) {
-        TeEDebug("测量已取消：未选择参考平面点云");
-        return;
-    }
-    pcl::PointCloud<pcl::PointXYZ>::Ptr refCloud = CloudMap[dialogRef.getSelectedList()[0]];
-    if (!refCloud || refCloud->empty()) {
-        TeEDebug("参考点云为空或无效");
-        return;
-    }
-    // 弹出参数设置对话框
-    ParamDialogMeasureHeight paramDialog;
-    if (paramDialog.exec() != QDialog::Accepted) {
-        TeEDebug(">>:操作取消");
-        return;
-    }
-    bool ok1 = false, ok2 = false;
-    int HEIGHT_NEIGHBOR_COUNT = paramDialog.getParams()[0].toInt(&ok1);
-    int HEIGHT_ITERATIONS     = paramDialog.getParams()[1].toInt(&ok2);
-    if (!ok1 || !ok2 || HEIGHT_NEIGHBOR_COUNT < 1 || HEIGHT_ITERATIONS < 1) {
-        TeEDebug("测高参数无效");
-        return;
-    }
-
-    // 后台执行迭代测量(界面保持响应; 可在工具栏“取消计算”中止)
-    auto measurerHolder = std::make_shared<std::shared_ptr<MeasureHeight>>();
-    auto avgDistances = std::make_shared<std::vector<double>>();
-    auto measureOk = std::make_shared<bool>(false);
-
+void CloudForgeAnalyzer::StartHeightMeasurement()
+{
+    if (IsTaskRunning() || !m_heightTool->isActive() || m_heightTool->isBusy()) return;
+    const auto request = m_heightTool->beginMeasurement();
+    auto result = std::make_shared<HeightMeasureTool::Result>();
     RunAsyncVoid("高度测量",
-        [this, measurerHolder, avgDistances, measureOk, measureCloud, refCloud,
-         HEIGHT_NEIGHBOR_COUNT, HEIGHT_ITERATIONS]() {
-            PostProgress(0, 0, "高度测量: 拟合参考平面与迭代测量...");
-            // 计算类在工作线程中构造并执行(构造函数不弹框)
-            *measurerHolder = std::make_shared<MeasureHeight>(measureCloud, refCloud);
-            *measureOk = (*measurerHolder)->measureIterative(
-                *avgDistances, HEIGHT_NEIGHBOR_COUNT, HEIGHT_ITERATIONS);
-            if (!*measureOk) {
-                PostLog(">>: 测高失败：无法拟合参考平面或点云无效");
+        [this, request, result]() {
+            auto finite = [](const auto& cloud) {
+                return std::all_of(cloud->begin(), cloud->end(), [](const auto& p) {
+                    return std::isfinite(p.x) && std::isfinite(p.y) && std::isfinite(p.z);
+                });
+            };
+            if (!finite(request.measured.cloud) || !finite(request.reference.cloud)) {
+                result->message = "不可测: 点云包含无效坐标";
+                return;
             }
+            result->measurement = std::make_shared<MeasureHeight>(request.measured.cloud, request.reference.cloud);
+            result->measurement->setProgressCallback(WorkerProgressCallback());
+            result->success = result->measurement->measureIterative(result->averages, request.neighbors, request.iterations);
+            if (!result->success) { result->message = "不可测: 未能建立参考平面或获得有效高度"; return; }
+            if (!PostProgress(98, 100, "准备显示")) return;
+            result->colors = result->measurement->coloredCloud();
+            PostProgress(100, 100, "测量完成");
         },
-        [this, measurerHolder, avgDistances, measureOk, measureCloud, refCloud,
-         HEIGHT_ITERATIONS]() {
-    if (!*measureOk) {
-        TeEDebug("测高失败：无法拟合参考平面或点云无效");
-        return;
-    }
-
-    // 依次输出每次迭代结果
-    for (size_t i = 0; i < avgDistances->size(); ++i) {
-        char buf[128];
-        snprintf(buf, sizeof(buf), "测高[%zu/%d]: 平均距离 = %.4f",
-            i + 1, HEIGHT_ITERATIONS, (*avgDistances)[i]);
-        TeEDebug(buf);
-        Update_CFmes(buf);
-    }
-
-    // 可视化(在 GUI 线程执行, VTK 不能在工作线程调用)
-    visualizeMeasurementResults(**measurerHolder, measureCloud, refCloud);
+        [this, request, result]() {
+            const bool cancelled = m_asyncState && m_asyncState->cancelRequested.load();
+            if (!m_heightTool->finish(result, request.ticket, cancelled)) return;
+            const auto& measurement = *result->measurement;
+            QString report = QString("高度测量\n最大高度: %1 mm\n最小高度: %2 mm\n平均高度: %3 mm")
+                .arg(measurement.GetMaxDistance(), 0, 'f', 3).arg(measurement.GetMinDistance(), 0, 'f', 3)
+                .arg(measurement.GetMeanDistance(), 0, 'f', 3);
+            for (size_t i = 0; i < result->averages.size(); ++i)
+                report += QString("\n第 %1 次平均高度: %2 mm").arg(i+1).arg(result->averages[i], 0, 'f', 4);
+            report += "\n显示说明: 绿色低、红色高；黄色线表示最大高度";
+            Update_CFmes(report.toStdString());
+            TeEDebug(report.toStdString());
         });
 }
+
 void CloudForgeAnalyzer::Tool_MeasureAngleP2P() {
     ChosePlaneDialog dialog(planeResultsMap);
     if (dialog.getSelectedList().empty()) {
@@ -3518,6 +3501,7 @@ void CloudForgeAnalyzer::Slot_ed_cleangeo_Triggered() {
         TeEDebug(">>: 计算进行中，为保证数据安全，暂不能执行该操作。");
         return;
     }
+    if (m_heightTool) m_heightTool->stop();
     cleanGeodesicVisualization();
     cleanArcMeasurement();
     cleanWeldPrepVisuals();
@@ -3883,6 +3867,7 @@ void CloudForgeAnalyzer::Update_CFmes(std::string cfmes) {
 }
 
 void CloudForgeAnalyzer::AddPointCloud(std::string name, pcl::PointCloud<pcl::PointXYZ>::Ptr cloud, ColorManager color) {
+    if (m_heightTool) m_heightTool->stop();
     cleanGeodesicVisualization();
     cleanArcMeasurement();
     cleanWeldPrepVisuals();
@@ -3902,6 +3887,7 @@ void CloudForgeAnalyzer::AddPointCloud(std::string name, pcl::PointCloud<pcl::Po
 }
 
 void CloudForgeAnalyzer::ClearAllPointCloudRGB() {
+    if (m_heightTool) m_heightTool->stop();
     if (m_clipTool) m_clipTool->stop();
     if (m_pointPicker) m_pointPicker->clear();
     for (auto& pair : RGBCloudMap) {
@@ -3915,6 +3901,7 @@ void CloudForgeAnalyzer::ClearAllPointCloudRGB() {
 
 
 void CloudForgeAnalyzer::ClearAllPointCloud() {
+    if (m_heightTool) m_heightTool->stop();
     cleanGeodesicVisualization();
     cleanArcMeasurement();
     cleanWeldPrepVisuals();
@@ -3935,6 +3922,7 @@ void CloudForgeAnalyzer::ClearAllPointCloud() {
 }
 
 void CloudForgeAnalyzer::DelePointCloud(std::string name) {
+    if (m_heightTool) m_heightTool->stop();
     cleanGeodesicVisualization();
     cleanArcMeasurement();
     cleanWeldPrepVisuals();
@@ -3976,6 +3964,7 @@ void CloudForgeAnalyzer::endUndoBatch() {
 }
 
 void CloudForgeAnalyzer::rebuildCloudVisualization() {
+    if (m_heightTool) m_heightTool->stop();
     cleanGeodesicVisualization();
     cleanArcMeasurement();
     cleanWeldPrepVisuals();
@@ -4093,6 +4082,7 @@ void CloudForgeAnalyzer::ResetProgressBar() {
 // ============================================================
 void CloudForgeAnalyzer::BeginAsyncTask(const QString& title)
 {
+    if (m_heightTool && !m_heightTool->isBusy()) m_heightTool->stop();
     if (m_clipTool && !m_clipTool->isBusy()) m_clipTool->stop();
     if (m_pointPicker) m_pointPicker->stop();
     m_asyncState = std::make_shared<AsyncTaskState>();
@@ -4156,6 +4146,7 @@ void CloudForgeAnalyzer::PollAsyncProgress()
 
 void CloudForgeAnalyzer::CancelCurrentTask()
 {
+    if (m_heightTool) m_heightTool->setCancelling();
     if (m_asyncState) {
         m_asyncState->cancelRequested.store(true);
         TeEDebug(">>: 已请求取消当前计算（将在下一个检查点中止）...");
@@ -4252,167 +4243,6 @@ void CloudForgeAnalyzer::ClearAllLines() {
         viewer->removeShape(pair.first);
     }
     LineMap.clear();
-}
-
-void CloudForgeAnalyzer::visualizeMeasurementResults(MeasureHeight& measurer,
-    pcl::PointCloud<pcl::PointXYZ>::Ptr measureCloud,
-    pcl::PointCloud<pcl::PointXYZ>::Ptr refCloud) {
-    auto window = new QMainWindow();
-    window->setAttribute(Qt::WA_DeleteOnClose);
-    window->setWindowTitle("高度测量可视化");
-    window->resize(1000, 760);
-    auto closeShortcut = new QShortcut(QKeySequence(Qt::Key_Q), window);
-    QObject::connect(closeShortcut, &QShortcut::activated, window, &QWidget::close);
-    auto view = new QVTKOpenGLNativeWidget(window);
-    window->setCentralWidget(view);
-    auto renderer = vtkSmartPointer<vtkRenderer>::New();
-    auto renderWindow = vtkSmartPointer<vtkGenericOpenGLRenderWindow>::New();
-    renderWindow->AddRenderer(renderer);
-    pcl::visualization::PCLVisualizer::Ptr viewer(new pcl::visualization::PCLVisualizer(
-        renderer, renderWindow, "height", false));
-    view->setRenderWindow(renderWindow);
-    viewer->setupInteractor(view->interactor(), renderWindow);
-    QObject::connect(window, &QObject::destroyed, [viewer]() {});
-    viewer->setBackgroundColor(0.05, 0.05, 0.05); // 深灰色背景
-
-    // 获取平面系数
-    pcl::ModelCoefficients::Ptr plane_coeffs = measurer.GetPlaneCoefficients();
-
-    // 1. 添加参考点云（用蓝色显示）[6](@ref)
-    pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZ> ref_color(refCloud, 0, 0, 255);
-    viewer->addPointCloud<pcl::PointXYZ>(refCloud, ref_color, "reference_cloud");
-    viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 2, "reference_cloud");
-
-    // 2. 添加测量点云（用绿色到红色的渐变色显示高度）[6](@ref)
-    pcl::PointCloud<pcl::PointXYZRGB>::Ptr colored_measure_cloud(new pcl::PointCloud<pcl::PointXYZRGB>);
-    colorPointCloudByHeight(measureCloud, plane_coeffs, colored_measure_cloud);
-    viewer->addPointCloud<pcl::PointXYZRGB>(colored_measure_cloud, "measure_cloud");
-    viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 3, "measure_cloud");
-
-
-    // 3. 添加拟合的平面（半透明）[1,4](@ref)
-    if (plane_coeffs->values.size() >= 4) {
-        // 计算平面显示的大小基于测量点云的边界[1](@ref)
-        Eigen::Vector4f centroid;
-        pcl::compute3DCentroid(*measureCloud, centroid);
-
-        // 创建有限大小的平面[1](@ref)
-        double plane_size = calculatePlaneSize(measureCloud);
-        viewer->addPlane(*plane_coeffs, centroid[0], centroid[1], centroid[2], "fitted_plane");
-        viewer->setShapeRenderingProperties(pcl::visualization::PCL_VISUALIZER_COLOR, 0.8, 0.8, 0.8, "fitted_plane");
-        viewer->setShapeRenderingProperties(pcl::visualization::PCL_VISUALIZER_OPACITY, 0.3, "fitted_plane");
-    }
-
-    // 4. 添加连接线显示高度（可选）[6](@ref)
-    addHeightLines(viewer, measureCloud, plane_coeffs);
-
-    // 5. 添加坐标系和文本信息[6](@ref)
-    viewer->addCoordinateSystem(1.0, "coord_system");
-
-    auto results = new ViewportResultOverlay(view);
-    results->setSection("height", {"高度测量", {
-        {"最大高度", QString::number(measurer.GetMaxDistance(), 'f', 3) + " mm", {}},
-        {"最小高度", QString::number(measurer.GetMinDistance(), 'f', 3) + " mm", {}},
-        {"平均高度", QString::number(measurer.GetMeanDistance(), 'f', 3) + " mm", {}}
-    }});
-    viewer->initCameraParameters();
-    viewer->resetCamera();
-    window->show();
-    view->renderWindow()->Render();
-
-}
-
-void CloudForgeAnalyzer::colorPointCloudByHeight(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud,
-    pcl::ModelCoefficients::Ptr plane_coeffs,
-    pcl::PointCloud<pcl::PointXYZRGB>::Ptr colored_cloud) {
-    colored_cloud->points.resize(cloud->points.size());
-
-    double a = plane_coeffs->values[0];
-    double b = plane_coeffs->values[1];
-    double c = plane_coeffs->values[2];
-    double d = plane_coeffs->values[3];
-    double denom = std::sqrt(a * a + b * b + c * c);
-    if (denom == 0.0) denom = 1.0;
-
-    // 计算高度范围用于颜色映射
-    double min_height = std::numeric_limits<double>::max();
-    double max_height = std::numeric_limits<double>::lowest();
-
-    std::vector<double> heights;
-    for (size_t i = 0; i < cloud->points.size(); ++i) {
-        const auto& p = cloud->points[i];
-        double height = std::abs(a * p.x + b * p.y + c * p.z + d) / denom;
-        heights.push_back(height);
-        if (height < min_height) min_height = height;
-        if (height > max_height) max_height = height;
-    }
-
-    double height_range = max_height - min_height;
-    if (height_range == 0) height_range = 1.0;
-
-    // 为每个点分配颜色（从绿色到红色）
-    for (size_t i = 0; i < cloud->points.size(); ++i) {
-        colored_cloud->points[i].x = cloud->points[i].x;
-        colored_cloud->points[i].y = cloud->points[i].y;
-        colored_cloud->points[i].z = cloud->points[i].z;
-
-        double normalized_height = (heights[i] - min_height) / height_range;
-
-        // 绿色(low) -> 黄色(middle) -> 红色(high)
-        if (normalized_height < 0.5) {
-            colored_cloud->points[i].r = static_cast<uint8_t>(255 * (normalized_height * 2));
-            colored_cloud->points[i].g = 255;
-            colored_cloud->points[i].b = 0;
-        }
-        else {
-            colored_cloud->points[i].r = 255;
-            colored_cloud->points[i].g = static_cast<uint8_t>(255 * (2 - normalized_height * 2));
-            colored_cloud->points[i].b = 0;
-        }
-    }
-    colored_cloud->width = cloud->width;
-    colored_cloud->height = cloud->height;
-}
-
-double CloudForgeAnalyzer::calculatePlaneSize(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud) {
-    // 计算点云边界框大小[1](@ref)
-    pcl::PointXYZ min_pt, max_pt;
-    pcl::getMinMax3D(*cloud, min_pt, max_pt);
-
-    double dx = max_pt.x - min_pt.x;
-    double dy = max_pt.y - min_pt.y;
-
-    // 返回较大的边界尺寸，并增加20%的边距
-    return std::max(dx, dy) * 1.2;
-}
-
-void CloudForgeAnalyzer::addHeightLines(pcl::visualization::PCLVisualizer::Ptr viewer,
-    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud,
-    pcl::ModelCoefficients::Ptr plane_coeffs) {
-    // 只为一小部分点添加高度线以避免过于拥挤
-    int step = std::max(1, static_cast<int>(cloud->points.size() / 50));
-
-    double a = plane_coeffs->values[0];
-    double b = plane_coeffs->values[1];
-    double c = plane_coeffs->values[2];
-    double d = plane_coeffs->values[3];
-    double denom = a * a + b * b + c * c;
-    if (denom == 0.0) return;
-
-    for (size_t i = 0; i < cloud->points.size(); i += step) {
-        const auto& p = cloud->points[i];
-
-        // 计算点到平面的投影点[5](@ref)
-        double t = -(a * p.x + b * p.y + c * p.z + d) / denom;
-        pcl::PointXYZ proj_pt;
-        proj_pt.x = p.x + a * t;
-        proj_pt.y = p.y + b * t;
-        proj_pt.z = p.z + c * t;
-
-        std::string line_id = "height_line_" + std::to_string(i);
-        viewer->addLine<pcl::PointXYZ>(p, proj_pt, 0.5, 0.5, 1.0, line_id);
-        viewer->setShapeRenderingProperties(pcl::visualization::PCL_VISUALIZER_OPACITY, 0.3, line_id);
-    }
 }
 
 void CloudForgeAnalyzer::addCylinderResult(const std::string& name,pcl::ModelCoefficients::Ptr coeff){
@@ -4705,6 +4535,7 @@ void CloudForgeAnalyzer::visualizeFittedPlane(pcl::PointCloud<pcl::PointXYZ>::Pt
 }
 
 void CloudForgeAnalyzer::clearAllActors() {
+    if (m_heightTool) m_heightTool->stop();
     if (m_resultOverlay) m_resultOverlay->removeSection("cylinder_arc");
     cleanWeldPrepVisuals();
     if (ActorMap.empty()) {

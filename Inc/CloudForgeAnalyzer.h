@@ -30,6 +30,7 @@ class ViewportPointPicker;
 class PolygonClipTool;
 class WeldPreparationOverlay;
 class ViewportResultOverlay;
+class HeightMeasureTool;
 
 class CloudForgeAnalyzer : public QMainWindow
 {
@@ -96,6 +97,7 @@ private:
     std::size_t m_pointSelectionRevision = 0;
     void PreviewPolygonClip();
     void ApplyPolygonClip();
+    void StartHeightMeasurement();
     // 焊前装配阶差/间隙的共同流程(§7): 选两件 → 定接缝区域 → 看 Z 均值 → 设 R 与方向 → 后台计算
     // 口径(2026-09 统一): 阶差 = 径向(e_P - e_Q, 近件在外为正); 间隙 = 沿跨缝方向(环缝=轴向)
     // 两个量由同一次配对同时得到，共用一个入口。
@@ -227,6 +229,7 @@ private:
     pcl::visualization::PCLVisualizer::Ptr viewer;
     std::unique_ptr<ViewportPointPicker> m_pointPicker;
     std::unique_ptr<PolygonClipTool> m_clipTool;
+    std::unique_ptr<HeightMeasureTool> m_heightTool;
     pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZ>::Ptr renderer_custom;
     UndoRedoManager m_undoRedoManager;
     int m_undoBatchLevel = 0; // >0 时 AddPointCloud 等不单独记录 undo
@@ -254,18 +257,6 @@ private:
 
     void DeleteLine(const std::string& name);
     void ClearAllLines();
-    static void visualizeMeasurementResults(MeasureHeight& measurer,
-        pcl::PointCloud<pcl::PointXYZ>::Ptr measureCloud,
-        pcl::PointCloud<pcl::PointXYZ>::Ptr refCloud);
-    static void colorPointCloudByHeight(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud,
-        pcl::ModelCoefficients::Ptr plane_coeffs,
-        pcl::PointCloud<pcl::PointXYZRGB>::Ptr colored_cloud);
-
-    static double calculatePlaneSize(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud);
-
-    static void addHeightLines(pcl::visualization::PCLVisualizer::Ptr viewer,
-        pcl::PointCloud<pcl::PointXYZ>::Ptr cloud,
-        pcl::ModelCoefficients::Ptr plane_coeffs);
 
     void visualizeCylindricityHeatMap(
         pcl::PointCloud<pcl::PointXYZRGB>::Ptr heatmap_cloud,

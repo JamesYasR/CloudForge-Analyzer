@@ -18,6 +18,7 @@ bool MeasureHeight::measure() {
     if (!measure_cloud_ || measure_cloud_->empty()) return false;
     if (!reference_cloud_ || reference_cloud_->empty()) return false;
 
+    if (progress_ && !progress_(0, 100, "拟合参考面")) return false;
     if (!fitPlane()) return false;
 
     computeDistances();
@@ -109,11 +110,15 @@ bool MeasureHeight::measureIterative(std::vector<double>& avgDistances,
     avgDistances.clear();
     if (!measure_cloud_ || measure_cloud_->empty()) return false;
     if (!reference_cloud_ || reference_cloud_->empty()) return false;
+    if (numNeighbors < 1 || iterations < 1) return false;
 
+    if (progress_ && !progress_(0, 100, "拟合参考面")) return false;
     if (!fitPlane()) return false;
 
+    if (progress_ && !progress_(25, 100, "计算高度")) return false;
     computeDistances();
 
+    if (progress_ && !progress_(45, 100, "定位测量区域")) return false;
     // 构建 3D KD-tree 用于空间最近邻搜索
     pcl::KdTreeFLANN<pcl::PointXYZ> kdtree;
     kdtree.setInputCloud(measure_cloud_);
@@ -121,6 +126,10 @@ bool MeasureHeight::measureIterative(std::vector<double>& avgDistances,
     std::vector<bool> used(measure_cloud_->points.size(), false);
 
     for (int iter = 0; iter < iterations; ++iter) {
+        if (progress_ && !progress_(50 + static_cast<int>(45.0 * iter / iterations), 100, "测量高度")) {
+            avgDistances.clear();
+            return false;
+        }
         // 在未使用的点中找距平面最远的点（最高点）
         int max_idx = -1;
         double max_dist = -1.0;
@@ -155,4 +164,27 @@ bool MeasureHeight::measureIterative(std::vector<double>& avgDistances,
 
     measured_ = true;
     return true;
+}
+
+pcl::PointCloud<pcl::PointXYZRGB>::Ptr MeasureHeight::coloredCloud() const
+{
+    auto colored = pcl::make_shared<pcl::PointCloud<pcl::PointXYZRGB>>();
+    if (!measured_ || distances_.size() != measure_cloud_->size()) return colored;
+    const double range = max_dist_ == min_dist_ ? 1.0 : max_dist_ - min_dist_;
+    colored->resize(measure_cloud_->size());
+    for (size_t i = 0; i < measure_cloud_->size(); ++i) {
+        const auto& source = (*measure_cloud_)[i];
+        auto& point = (*colored)[i];
+        point.x = source.x; point.y = source.y; point.z = source.z;
+        const double normalized = (distances_[i] - min_dist_) / range;
+        if (normalized < .5) {
+            point.r = static_cast<std::uint8_t>(255 * (normalized * 2)); point.g = 255; point.b = 0;
+        }
+        else {
+            point.r = 255; point.g = static_cast<std::uint8_t>(255 * (2 - normalized * 2)); point.b = 0;
+        }
+    }
+    colored->width = measure_cloud_->width;
+    colored->height = measure_cloud_->height;
+    return colored;
 }

@@ -1,3 +1,4 @@
+#pragma once
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
 #include <pcl/ModelCoefficients.h>
@@ -5,9 +6,14 @@
 #include <pcl/kdtree/kdtree_flann.h>
 #include <memory>
 #include <vector>
+#include <functional>
+#include <string>
 
 class MeasureHeight {
 public:
+    using ProgressCallback = std::function<bool(int, int, const std::string&)>;
+    void setProgressCallback(ProgressCallback callback) { progress_ = std::move(callback); }
+    pcl::PointCloud<pcl::PointXYZRGB>::Ptr coloredCloud() const;
     // 构造：第一个为被测量点云，第二个为用于拟合参考平面的点云
     MeasureHeight(pcl::PointCloud<pcl::PointXYZ>::Ptr measure_cloud,
         pcl::PointCloud<pcl::PointXYZ>::Ptr reference_cloud);
@@ -47,4 +53,5 @@ private:
 
     // 内部存储的每点绝对距离（可选）
     std::vector<double> distances_;
+    ProgressCallback progress_;
 };

@@ -18,7 +18,6 @@
 #include "ChosePlaneDialog.h"
 #include "ParamDialogMeausreCy.h"
 #include "ParamDialogWeld.h"
-#include "ParamDialogMeasureHeight.h"
 #include "ChoseCyDialog.h"
 #include "ParamDialogMeasureWeldHeight.h"
 #include "ParamDialog_Pothole.h"

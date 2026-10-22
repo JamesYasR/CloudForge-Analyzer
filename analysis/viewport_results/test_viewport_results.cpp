@@ -188,34 +188,6 @@ int main(int argc, char** argv)
     check(results->isHidden() && main.ActorMap.empty() && main.m_geodesicVisualizationActors.empty(),
           "clear all action leaves no Qt result or VTK measurement geometry");
 
-    auto heights = pcl::make_shared<pcl::PointCloud<pcl::PointXYZ>>();
-    for (int x = -10; x <= 10; ++x) for (int y = -8; y <= 8; ++y)
-        heights->emplace_back(x, y, 2 + .1f * x);
-    MeasureHeight height(heights, plane);
-    check(height.measure(), "height input produces valid measurement");
-    main.visualizeMeasurementResults(height, heights, plane);
-    settle();
-    QMainWindow* heightWindow = nullptr;
-    for (auto widget : QApplication::topLevelWidgets())
-        if (widget->windowTitle() == "高度测量可视化") heightWindow = qobject_cast<QMainWindow*>(widget);
-    check(heightWindow != nullptr, "height retains its independent Qt visualization window");
-    if (heightWindow) {
-        auto panel = heightWindow->findChild<ViewportResultOverlay*>("viewportResultOverlay");
-        check(panel && panel->sections_.size() == 1 && panel->sections_[0].section.rows.size() == 3
-              && panel->sections_[0].section.rows[0].value == QString::number(height.GetMaxDistance(), 'f', 3) + " mm"
-              && panel->sections_[0].section.rows[2].value == QString::number(height.GetMeanDistance(), 'f', 3) + " mm",
-              "height shows unchanged maximum minimum mean in common result style");
-        capture(heightWindow, "height_results");
-        QPointer<QWidget> guard(heightWindow);
-        heightWindow->activateWindow();
-        heightWindow->centralWidget()->setFocus();
-        settle();
-        QKeyEvent quit(QEvent::KeyPress, Qt::Key_Q, Qt::NoModifier, "q");
-        QApplication::sendEvent(heightWindow->centralWidget(), &quit);
-        QApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
-        check(guard.isNull(), "height Q shortcut closes window and releases viewer and UI");
-        if (guard) guard->close();
-    }
     int renders = 0;
     auto observer = vtkSmartPointer<vtkCallbackCommand>::New();
     observer->SetClientData(&renders);
