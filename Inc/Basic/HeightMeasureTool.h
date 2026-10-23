@@ -55,6 +55,7 @@ signals:
     void measureRequested();
     void cancelRequested();
     void resultMessage(const QString& text);
+    void heatmapScaleChanged(double minimum, double maximum, bool visible);
 
 protected:
     bool eventFilter(QObject* watched, QEvent* event) override;
@@ -86,6 +87,7 @@ private:
     std::vector<std::pair<vtkSmartPointer<vtkActor>, int>> hidden_;
     std::vector<vtkSmartPointer<vtkActor>> actors_;
     vtkSmartPointer<vtkActor> heatmapActor_, referenceActor_, planeActor_, linesActor_;
+    double minimum_ = 0, maximum_ = 0;
     unsigned long ticket_ = 0;
     bool active_ = false;
     bool busy_ = false;

@@ -23,3 +23,20 @@ Analytic B spline: 120.018925 mm; planar geodesic: 40.000 mm
 Projected bright-curve pixels, shared picker, floating panel, cancellation and cleanup verified
 Shared foreground change: pothole desktop and 2x each pass=21 fail=0
 Other feature regressions: not run
+
+Task 4 / 2026-10-23
+Build: pass, max 2 jobs, MemoryMax=8 GiB, guarded tasks run serially
+Final desktop and desktop 2x, each:
+  Weld height: pass=20 fail=0
+  Pothole: pass=22 fail=0
+  Cylinder and geodesic arc: pass=37 fail=0
+  Heatmap color scales: pass=26 fail=0
+  Variable annotation capacity: pass=19 fail=0
+Total: 124 checks per scale, 248 across both scales, zero failures
+Capacity cases: 1, 2, 5, 11, 29, 53 results and 17 clustered results
+Every pit keeps its number and result entry; crowded views provide mouse selection and readable details
+No fixed maximum pit count; four-pit data is a numerical baseline only
+Plane: 0 to 2 mm; height: 1.6 to 2.4 mm; numerical algorithms unchanged
+Planarity report low-end color description corrected from blue to actual green
+CMake and exact dependency versions unchanged
+Other feature algorithm regressions: not run

@@ -228,6 +228,7 @@ void HeightMeasureTool::clearResult()
     for (auto& actor : actors_) renderer_->RemoveActor(actor);
     actors_.clear();
     heatmapActor_ = referenceActor_ = planeActor_ = linesActor_ = nullptr;
+    emit heatmapScaleChanged(0,0,false);
     for (auto& hidden : hidden_) hidden.first->SetVisibility(hidden.second);
     hidden_.clear();
     results_->removeSection("height");
@@ -237,6 +238,7 @@ void HeightMeasureTool::clearResult()
 
 void HeightMeasureTool::visualize(const Result& result)
 {
+    minimum_=result.measurement->GetMinDistance();maximum_=result.measurement->GetMaxDistance();
     const auto& source = targets_.at(measured_->currentIndex());
     const auto& reference = targets_.at(reference_->currentIndex());
     for (auto actor : {source.actor, reference.actor}) {
@@ -311,6 +313,7 @@ void HeightMeasureTool::updateVisibility()
         && targets_.at(measured_->currentIndex()).actor != targets_.at(reference_->currentIndex()).actor);
     if (planeActor_) planeActor_->SetVisibility(plane_->isChecked());
     if (linesActor_) linesActor_->SetVisibility(lines_->isChecked());
+    emit heatmapScaleChanged(minimum_,maximum_,heatmapActor_ && colors_->isChecked());
     render();
 }
 

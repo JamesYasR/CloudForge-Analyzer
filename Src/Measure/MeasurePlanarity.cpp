@@ -261,7 +261,7 @@ MeasurePlanarity::AssessmentResult MeasurePlanarity::evaluatePlanarity()
         message << "RMS距离: " << std::setprecision(4) << last_assessment_result_.rms_distance << " mm\n";
         message << "距离标准差: " << std::setprecision(4) << last_assessment_result_.std_distance << " mm\n\n";
 
-        message << "热力图颜色范围: " << min_distance_ << " mm (蓝) 到 "
+        message << "热力图颜色范围: " << min_distance_ << " mm (绿) 到 "
             << max_distance_ << " mm (红)";
 
         result = last_assessment_result_;

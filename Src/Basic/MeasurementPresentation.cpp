@@ -89,6 +89,7 @@ void MeasurementPresentation::appendResult(const QString& group,const QString& t
 }
 void MeasurementPresentation::setLegend(const QString& group,ViewportColorLegend::Entry entry)
 {
+    groups_[group].hasColorScale=true;
     auto& ids=groups_[group].legends;
     if (std::find(ids.begin(),ids.end(),entry.id)==ids.end()) ids.push_back(entry.id);
     legend_->setEntry(std::move(entry));
@@ -151,6 +152,6 @@ void MeasurementPresentation::clearGeometry()
 }
 void MeasurementPresentation::clearHeatmaps()
 {
-    std::vector<QString> ids;for (const auto& group:groups_) if (!group.second.heatmaps.empty()) ids.push_back(group.first);
+    std::vector<QString> ids;for (const auto& group:groups_) if (!group.second.heatmaps.empty() || group.second.hasColorScale) ids.push_back(group.first);
     for (const auto& id:ids) clear(id);
 }

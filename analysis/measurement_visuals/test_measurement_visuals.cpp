@@ -1,9 +1,12 @@
 #include "CloudForgeAnalyzer.h"
 #include "Basic/MeasurementPresentation.h"
 #include "Basic/ArcMeasurementTool.h"
+#include "Basic/HeightMeasureTool.h"
+#include <QSpinBox>
 #include "Basic/ViewportPointPicker.h"
 #include <QDockWidget>
 #include <QMouseEvent>
+#include <QAbstractItemView>
 #include <QKeyEvent>
 #include "Basic/ViewportResultOverlay.h"
 #include "Basic/WeldPreparationOverlay.h"
@@ -120,6 +123,7 @@ static void pitsTest()
     auto camera=renderer->GetActiveCamera();camera->SetPosition(eye.data());camera->SetFocalPoint(center.data());camera->SetViewUp(u.data());camera->ParallelProjectionOn();camera->SetParallelScale(175);renderer->ResetCameraClippingRange();view->renderWindow()->Render();
     double pose[3];camera->GetPosition(pose);auto style=view->interactor()->GetInteractorStyle();main.VisualizePothole(measure,result,"specimen");pump();
     auto display=main.m_presentation.get();auto& group=display->groups_.at("pothole");
+    check(display->legend_->entries_.size()==1 && display->legend_->entries_[0].minimum==-.7 && display->legend_->entries_[0].maximum==.7 && display->legend_->entries_[0].colors==ViewportColorLegend::signedSurface(),"pothole scale matches actual signed local height coloring and saturation range");
     check(group.annotations.size()==5 && group.foreground.size()==8,"four pit callouts and global maximum pair with haloed ellipse outlines");
     check(group.heatmaps.size()==1 && !main.viewer->getCloudActorMap()->at("specimen").actor->GetVisibility(),"pothole heatmap replaces coincident raw display");
     check(main.CloudMap.count(main.m_potholeOutputName) && !main.viewer->getCloudActorMap()->at(main.m_potholeOutputName).actor->GetVisibility(),"extracted pit cloud remains available without covering heatmap");
@@ -218,8 +222,88 @@ static void arcsTest()
     main.close();pump();
 }
 
+static void legendsTest()
+{
+    QWidget sample;sample.resize(360,400);sample.show();ViewportColorLegend legend(&sample);
+    legend.setEntry({"signed","高度偏差",-2,2,ViewportColorLegend::signedHeight()});pump();
+    auto pixels=legend.grab().toImage();double dpr=pixels.devicePixelRatio();
+    auto top=pixels.pixelColor(qRound(25*dpr),qRound(78*dpr)),bottom=pixels.pixelColor(qRound(25*dpr),qRound((legend.height()-28)*dpr));
+    check(top.red()>220 && bottom.blue()>220,"shared color scale renders correct signed endpoints");capture(sample,"colorbar_style");
+    legend.setEntry({"signed","固定高度",2,2,ViewportColorLegend::sequential()});pump();pixels=legend.grab().toImage();
+    auto mid=pixels.pixelColor(qRound(25*dpr),qRound((74+(legend.height()-98)/2.0)*dpr));
+    check(legend.entries_.size()==1 && mid.green()>240 && mid.red()<10,"constant range uses one truthful value and flat color");
+    legend.setEntry({"bad","无效",2,1,ViewportColorLegend::sequential()});check(legend.entries_.size()==1,"invalid ranges do not introduce a misleading scale");
+    legend.setEntry({"signed","高度偏差",-2,2,ViewportColorLegend::signedHeight()});sample.resize(240,180);pump();
+    check(legend.isVisible() && sample.rect().contains(legend.geometry()),"colorbar remains within a short viewport");
+    pixels=legend.grab().toImage();int bands=0,last=-99;
+    for(int y=64;y<legend.height()-3;++y) { bool ink=false;for(int x=48;x<legend.width()-8;++x) { auto c=pixels.pixelColor(qRound(x*dpr),qRound(y*dpr));ink |= c.red()>170 && c.green()>180 && c.blue()>180; }if(ink) { if(y-last>4) ++bands;last=y; } }
+    check(bands==2,"small viewport reduces ticks to two separated readable labels");capture(sample,"colorbar_compact");legend.clear();check(legend.isHidden(),"empty colorbar releases viewport space");sample.close();
+
+    auto cloud=pcl::make_shared<pcl::PointCloud<pcl::PointXYZ>>();for(int x=-20;x<=20;++x) for(int y=-10;y<=10;++y) cloud->emplace_back(x,y,(x+20)*.05);
+    auto plane=pcl::make_shared<pcl::ModelCoefficients>();plane->values={0,0,1,0};MeasurePlanarity planarity;planarity.setInputCloud(cloud);planarity.setPlaneParameters(plane);auto planeResult=planarity.evaluatePlanarity();
+    double low,high;planarity.getDistanceRange(low,high);auto heatmap=planarity.getHeatMapCloud();const auto original=*heatmap;
+    check(std::abs(low)<1e-6 && std::abs(high-2)<1e-6,"plane heatmap retains known 0 to 2 mm distances");
+    CloudForgeAnalyzer main;main.resize(1500,950);main.show();pump();main.ClearAllPointCloud();main.AddPointCloud("specimen",cloud,ColorManager(210,220,230));
+    main.visualizePlanarityHeatMap(heatmap,low,high,"P001");pump();auto planeRenderer=main.ui->winOfAnalyzer->renderWindow()->GetRenderers()->GetFirstRenderer();auto planeCamera=planeRenderer->GetActiveCamera();planeCamera->SetPosition(0,-50,65);planeCamera->SetFocalPoint(0,0,1);planeCamera->SetViewUp(0,0,1);planeRenderer->ResetCamera();planeRenderer->ResetCameraClippingRange();main.ui->winOfAnalyzer->renderWindow()->Render();auto display=main.m_presentation.get();auto scale=display->legend_.get();
+    check(scale->entries_.size()==1 && scale->entries_[0].minimum==low && scale->entries_[0].maximum==high && scale->entries_[0].colors==ViewportColorLegend::sequential(),"plane heatmap uses shared style with exact original range and colors");
+    auto radial=pcl::make_shared<pcl::PointCloud<pcl::PointXYZ>>();for(int z=-2;z<=2;++z) for(int i=0;i<=80;++i) { double angle=i*.01,r=100+.02*i;radial->emplace_back(r*std::cos(angle),r*std::sin(angle),z); }
+    MeasureCylindricity cylindricity;cylindricity.setInputCloud(radial);cylindricity.setDesignRadius(100);cylindricity.setVerbose(false);auto cylinderResult=cylindricity.evaluateGivenLine(Eigen::Vector3f::Zero(),Eigen::Vector3f::UnitZ());
+    double cmin,cmax;cylindricity.getDistanceRange(cmin,cmax);auto cylColors=cylindricity.getHeatMapCloud();const auto cylOriginal=*cylColors;
+    main.visualizeCylindricityHeatMap(cylColors,cmin,cmax);pump();
+    check(scale->entries_.size()==2 && scale->selector_->isVisible() && scale->entries_[1].minimum==cmin && scale->entries_[1].maximum==cmax,"plane and cylinder scales retain independent named ranges");
+    check(scale->entries_[1].colors==ViewportColorLegend::sequential(),"cylinder legend matches actual green yellow red point colors");
+    const auto count=main.viewer->getCloudActorMap()->size();main.visualizeCylindricityHeatMap(cylColors,cmin,cmax);pump();check(scale->entries_.size()==2 && main.viewer->getCloudActorMap()->size()==count,"repeated heatmaps replace their scale and cloud without accumulating");
+    auto renderer=main.ui->winOfAnalyzer->renderWindow()->GetRenderers()->GetFirstRenderer();bool noLegacy=true;auto props=renderer->GetViewProps();props->InitTraversal();while(auto prop=props->GetNextProp()) noLegacy &= vtkScalarBarActor::SafeDownCast(prop)==nullptr;
+    check(noLegacy,"heatmaps no longer add legacy VTK scalar bars");scale->selector_->setCurrentIndex(0);pump();capture(main,"colorbar_planarity");scale->selector_->setCurrentIndex(1);pump();capture(main,"colorbar_cylindricity");
+    main.ui->action_ed_clean2DActor->trigger();pump();check(scale->isHidden() && main.RGBCloudMap.size()==2,"2D cleanup removes shared scales while retaining heatmap clouds");
+    main.visualizePlanarityHeatMap(heatmap,low,high,"P001");main.ui->action_ed_cleanRGB->trigger();pump();check(scale->isHidden() && display->groups_.empty() && main.RGBCloudMap.empty(),"RGB cleanup removes native heatmaps and all owned scales");
+    bool same=heatmap->size()==original.size() && cylColors->size()==cylOriginal.size();for(size_t i=0;i<heatmap->size();++i) same &= (*heatmap)[i].rgba==original[i].rgba && (*heatmap)[i].z==original[i].z;for(size_t i=0;i<cylColors->size();++i) same &= (*cylColors)[i].rgba==cylOriginal[i].rgba && (*cylColors)[i].x==cylOriginal[i].x;
+    check(same,"colorbar redesign preserves all plane and cylinder heatmap coordinates and RGB bitwise");
+    main.ClearAllPointCloud();auto reference=pcl::make_shared<pcl::PointCloud<pcl::PointXYZ>>();auto measured=pcl::make_shared<pcl::PointCloud<pcl::PointXYZ>>();
+    for(int x=-20;x<=20;++x) for(int y=-10;y<=10;++y) { reference->emplace_back(x,y,0);measured->emplace_back(x,y,2+.02*x); }
+    main.AddPointCloud("measured",measured,ColorManager(230,230,230));main.AddPointCloud("base_surface",reference,ColorManager(180,190,200));
+    main.ui->measure_height->trigger();pump();auto height=main.m_heightTool.get();height->measured_->setCurrentText("measured");height->reference_->setCurrentText("base_surface");
+    check(height->neighbors_->isVisible() && height->iterations_->isVisible(),"height measurement retains all existing visible parameters");height->measure_->click();waitTask(main);renderer->ResetCamera();renderer->ResetCameraClippingRange();main.ui->winOfAnalyzer->renderWindow()->Render();
+    check(scale->entries_.size()==1 && scale->entries_[0].id=="height_scale" && std::abs(scale->entries_[0].minimum-1.6)<1e-5 && std::abs(scale->entries_[0].maximum-2.4)<1e-5,"height measurement colorbar uses measured absolute distance range");
+    height->colors_->setChecked(false);pump();bool summary=false;for(const auto& section:main.m_resultOverlay->sections_) summary |= section.id=="height";
+    check(scale->isHidden() && summary,"hiding height colors hides its scale while retaining measurement summary");height->colors_->setChecked(true);pump();check(scale->isVisible(),"restoring height colors restores matching scale");capture(main,"colorbar_height");
+    height->clear_->click();pump();check(scale->isHidden() && display->groups_.empty(),"height result clear removes its colorbar");main.close();pump();
+}
+
+
+static void annotationCapacityTest()
+{
+    CloudForgeAnalyzer main;main.resize(1500,950);main.show();pump();main.ClearAllPointCloud();
+    auto cloud=pcl::make_shared<pcl::PointCloud<pcl::PointXYZ>>();for(int x=-50;x<=50;x+=2) for(int y=-40;y<=40;y+=2) cloud->emplace_back(x,y,0);
+    main.AddPointCloud("layout_specimen",cloud,ColorManager(200,210,220));auto view=main.ui->winOfAnalyzer;auto renderer=view->renderWindow()->GetRenderers()->GetFirstRenderer();
+    auto camera=renderer->GetActiveCamera();camera->SetPosition(0,0,200);camera->SetFocalPoint(0,0,0);camera->SetViewUp(0,1,0);camera->ParallelProjectionOn();camera->SetParallelScale(std::max(55.0,60.0*view->height()/std::max(1,view->width())));renderer->ResetCameraClippingRange();
+    auto display=main.m_presentation.get();auto overlay=display->annotations_.get();
+    main.m_resultOverlay->setSection("layout_summary",{"凹坑测量",{{"到理想柱面最大距离","3.144 mm",{}}}});
+    display->setLegend("layout_samples",{"layout_scale","局部高度偏差",-.7,.7,ViewportColorLegend::signedSurface()});
+    for(int count:{1,2,5,11,29,53}) {
+        std::vector<MeasurementPresentation::Annotation> annotations={{{-45,35,0},{},"最大距离 3.144 mm","到理想柱面",QColor("#68dfff"),{},true}};
+        const int cols=static_cast<int>(std::ceil(std::sqrt(count))),rows=(count+cols-1)/cols;
+        for(int i=0;i<count;++i) { double x=cols>1 ? -38+76.0*(i%cols)/(cols-1):0,y=rows>1 ? -28+56.0*(i/cols)/(rows-1):0;annotations.push_back({{x,y,0},{},QString("凹坑 %1 · %2 mm").arg(i+1).arg(.2+.03*i,0,'f',3),"长轴 25.00 · 短轴 12.00 mm",QColor("#ffd166"),QString::number(i+1)}); }
+        display->setAnnotations("layout_samples",annotations);view->renderWindow()->Render();pump(150);
+        check(overlay->annotations_.size()==static_cast<size_t>(count+1) && overlay->selector_->count()==count+1,"variable pit count retains every marker and result entry");
+        bool disjoint=true;int shown=0;for(size_t i=0;i<overlay->cards_.size();++i) if(!overlay->cards_[i].isEmpty()) { ++shown;disjoint &= !overlay->cards_[i].intersects(display->legend_->geometry()) && !overlay->cards_[i].intersects(main.m_resultOverlay->occupiedRect());for(size_t j=0;j<i;++j) if(!overlay->cards_[j].isEmpty()) disjoint &= !overlay->cards_[i].intersects(overlay->cards_[j]); }
+        check(disjoint && (shown>0 || (overlay->selective_ && overlay->selectedDetails_->isVisible() && !overlay->selectedDetails_->text().isEmpty())),"visible callouts remain disjoint and selected results stay readable");
+        if(count==53) {
+            check(overlay->selective_ && overlay->selectorBar_->isVisible(),"crowded scene automatically provides clickable annotation selector");
+            auto combo=overlay->selector_;combo->showPopup();pump();auto list=combo->view();const auto index=combo->model()->index(count,0);list->scrollTo(index);pump();const auto pos=list->visualRect(index).center();
+            QMouseEvent down(QEvent::MouseButtonPress,pos,list->viewport()->mapToGlobal(pos),Qt::LeftButton,Qt::LeftButton,Qt::NoModifier),up(QEvent::MouseButtonRelease,pos,list->viewport()->mapToGlobal(pos),Qt::LeftButton,Qt::NoButton,Qt::NoModifier);
+            QApplication::sendEvent(list->viewport(),&down);QApplication::sendEvent(list->viewport(),&up);pump();
+            check(combo->currentIndex()==count && overlay->selectedDetails_->isVisible() && overlay->selectedDetails_->text().contains(annotations.back().title) && overlay->selectedDetails_->height()>=2*overlay->selectedDetails_->fontMetrics().lineSpacing(),"desktop selector can reveal the last of arbitrary many pit results");capture(main,"pothole_many_annotations");
+        }
+    }
+    std::vector<MeasurementPresentation::Annotation> clustered;for(int i=0;i<17;++i) clustered.push_back({{.1*i,.05*i,0},{},QString("凹坑 %1 · 0.700 mm").arg(i+1),"长轴 20.00 · 短轴 10.00 mm",QColor("#ffd166"),QString::number(i+1)});
+    display->setAnnotations("layout_samples",clustered);view->renderWindow()->Render();pump();bool clusterDisjoint=overlay->annotations_.size()==17;for(size_t i=0;i<overlay->cards_.size();++i) if(!overlay->cards_[i].isEmpty()) for(size_t j=0;j<i;++j) if(!overlay->cards_[j].isEmpty()) clusterDisjoint &= !overlay->cards_[i].intersects(overlay->cards_[j]);check(clusterDisjoint && (!overlay->selective_ || overlay->selectorBar_->isVisible()),"clustered pits use available space without a fixed count cutoff");overlay->selector_->setCurrentIndex(16);pump();check(!overlay->cards_[16].isEmpty() || (overlay->selectedDetails_->isVisible() && overlay->selectedDetails_->text().contains("凹坑 17")),"crowded clustered scene retains access to every numbered pit");
+    display->setAnnotations("layout_samples",{{{0,0,0},{},"凹坑 1 · 0.700 mm","长轴 20.00 · 短轴 10.00 mm",QColor("#ffd166"),"1"}});view->renderWindow()->Render();pump();check(!overlay->selective_ && overlay->selectorBar_->isHidden(),"small result set returns to direct annotation automatically");
+    main.ui->action_ed_clean2DActor->trigger();pump();check(overlay->isHidden() && overlay->selectorBar_->isHidden() && overlay->annotations_.empty(),"2D cleanup also removes adaptive annotation controls");main.close();pump();
+}
+
 int main(int argc,char** argv)
 {
     QSurfaceFormat::setDefaultFormat(QVTKOpenGLNativeWidget::defaultFormat());QApplication app(argc,argv);app.setQuitOnLastWindowClosed(false);
-    if (argc>1 && std::string(argv[1])=="--pits") pitsTest();else if(argc>1 && std::string(argv[1])=="--arcs") arcsTest();else weldTest();std::cout<<"pass="<<passed<<" fail="<<failed<<std::endl;return failed ? 1:0;
+    if (argc>1 && std::string(argv[1])=="--pits") pitsTest();else if(argc>1 && std::string(argv[1])=="--arcs") arcsTest();else if(argc>1 && std::string(argv[1])=="--legends") legendsTest();else if(argc>1 && std::string(argv[1])=="--capacity") annotationCapacityTest();else weldTest();std::cout<<"pass="<<passed<<" fail="<<failed<<std::endl;return failed ? 1:0;
 }

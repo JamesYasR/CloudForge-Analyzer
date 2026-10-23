@@ -36,6 +36,7 @@ private:
         std::vector<Annotation> annotations;
         std::vector<QString> legends;
         ViewportResultOverlay::Section result;
+        bool hasColorScale=false;
     };
     struct Source { vtkSmartPointer<vtkActor> actor;int visibility=1;std::set<QString> owners; };
     struct Surface { vtkSmartPointer<vtkActor> actor;vtkSmartPointer<vtkProperty> property;std::set<QString> owners; };

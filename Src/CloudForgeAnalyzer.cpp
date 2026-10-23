@@ -50,10 +50,10 @@ CloudForgeAnalyzer::~CloudForgeAnalyzer()
         m_asyncFuture.waitForFinished();
     }
     m_arcTool.reset();
+    m_heightTool.reset();
     m_presentation.reset();
     m_weldPrepOverlay.reset();
     m_weldParallelTool.reset();
-    m_heightTool.reset();
     m_resultOverlay.reset();
     m_clipTool.reset();
     m_pointPicker.reset();
@@ -109,6 +109,11 @@ void CloudForgeAnalyzer::InitalizeRenderer() {
     m_weldPrepOverlay = std::make_unique<WeldPreparationOverlay>(ui->winOfAnalyzer, renderer, m_resultOverlay.get());
     m_presentation=std::make_unique<MeasurementPresentation>(ui->winOfAnalyzer,renderer,m_resultOverlay.get());
     m_heightTool = std::make_unique<HeightMeasureTool>(ui->winOfAnalyzer, renderer, m_resultOverlay.get());
+    connect(m_heightTool.get(),&HeightMeasureTool::heatmapScaleChanged,this,[this](double minimum,double maximum,bool visible) {
+        if (!m_presentation) return;
+        if (visible) m_presentation->setLegend("height_scale",{"height_scale","高度",minimum,maximum,ViewportColorLegend::sequential()});
+        else m_presentation->clear("height_scale");
+    });
     ui->measure_height->setCheckable(true);
     connect(m_heightTool.get(), &HeightMeasureTool::activeChanged, ui->measure_height, &QAction::setChecked);
     connect(m_heightTool.get(), &HeightMeasureTool::measureRequested, this, &CloudForgeAnalyzer::StartHeightMeasurement);
@@ -417,96 +422,19 @@ void CloudForgeAnalyzer::Tool_MeasurePlanarity() {
 
 void CloudForgeAnalyzer::visualizePlanarityHeatMap(
     pcl::PointCloud<pcl::PointXYZRGB>::Ptr heatmap_cloud,
-    double min_distance, double max_distance,
-    const std::string& plane_name)
+    double min_distance, double max_distance, const std::string& plane_name)
 {
-    TeEDebug("开始可视化平面度热力图...");
-    if (!heatmap_cloud || heatmap_cloud->empty()) {
-        TeEDebug("热力图点云为空，无法可视化");
-        return;
-    }
-
-    std::string heatmap_id = "planarity_heatmap_" + plane_name;
-    std::string colorbar_id = "planarity_colorbar_" + plane_name;
-
-    // 先清除可能存在的旧热力图及标注
-    viewer->removePointCloud(heatmap_id);
-    viewer->removeShape(colorbar_id);
-    viewer->removeText3D(heatmap_id + "_title");
-
-    // 添加热力图点云
-    pcl::visualization::PointCloudColorHandlerRGBField<pcl::PointXYZRGB> rgb(heatmap_cloud);
-    viewer->addPointCloud<pcl::PointXYZRGB>(heatmap_cloud, rgb, heatmap_id);
-    viewer->setPointCloudRenderingProperties(
-        pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 3, heatmap_id);
-
-    // 添加到统一管理变量（参照visualizeCylindricityHeatMap）
-    RGBCloudMap.emplace(heatmap_id, heatmap_cloud);
-
-    // === 创建并添加固定颜色条 (Colorbar) ===
-    // 1. 获取当前渲染器
-    vtkRenderer* renderer = viewer->getRendererCollection()->GetFirstRenderer();
-    if (!renderer) {
-        TeEDebug("错误：无法获取渲染器，颜色条创建失败。");
-    }
-    else {
-        // 2. 创建颜色查找表 (Lookup Table)，映射从绿到红
-        vtkNew<vtkLookupTable> hueLut;
-        hueLut->SetTableRange(min_distance, max_distance); // 标量值范围对应距离范围
-        hueLut->SetHueRange(0.33, 0.0);      // 从绿色 (0.33) 到红色 (0.0)
-        hueLut->SetSaturationRange(1, 1);
-        hueLut->SetValueRange(1, 1);
-        hueLut->SetNanColor(1, 1, 1, 1);    // 无效值显示为白色
-        hueLut->SetNumberOfTableValues(256); // 颜色精度
-        hueLut->Build();
-
-        // 3. 创建颜色条 Actor
-        vtkNew<vtkScalarBarActor> scalarBar;
-        scalarBar->SetLookupTable(hueLut);
-        scalarBar->SetTitle("mm");
-        scalarBar->SetNumberOfLabels(5); // 主标签数量
-        scalarBar->SetMaximumNumberOfColors(256);
-
-        const int titleFontSize = 12;        // 颜色条标题文字大小
-        const int labelFontSize = 15;        // 颜色条标签文字大小
-        const double colorbarWidth = 0.05;   // 颜色条宽度 (占窗口宽度的比例)
-        const double colorbarHeight = 0.6;   // 颜色条高度 (占窗口高度的比例)
-        const double colorbarPosX = 0.92;    // 颜色条右侧位置
-        const double colorbarPosY = 0.2;     // 颜色条底部位置
-
-        // 设置颜色条文本属性
-        vtkNew<vtkTextProperty> titleProperty;
-        titleProperty->SetFontSize(titleFontSize);
-        titleProperty->BoldOn();
-        titleProperty->SetColor(1, 1, 1); // 白色
-        scalarBar->SetTitleTextProperty(titleProperty);
-        scalarBar->SetTitleRatio(0.6);
-
-        vtkNew<vtkTextProperty> labelProperty;
-        labelProperty->SetFontSize(labelFontSize);
-        labelProperty->SetColor(0.9, 0.9, 0.9); // 浅灰色
-        scalarBar->SetLabelTextProperty(labelProperty);
-
-        // 应用位置和大小
-        scalarBar->SetPosition(colorbarPosX - colorbarWidth, colorbarPosY);
-        scalarBar->SetWidth(colorbarWidth);
-        scalarBar->SetHeight(colorbarHeight);
-        scalarBar->SetPickable(0); // 禁止拾取，避免与点云交互冲突
-
-        // 4. 将颜色条添加到渲染器
-        renderer->AddActor2D(scalarBar);
-
-    }
-    // === 颜色条添加结束 ===
-
-    TeEDebug("平面度热力图与颜色条可视化完成");
-    TeEDebug("距离范围: " + std::to_string(min_distance) + " - " + std::to_string(max_distance) + " mm");
-
-    // 刷新渲染窗口
-    ui->winOfAnalyzer->renderWindow()->Render();
-    ui->winOfAnalyzer->update();
+    if (!heatmap_cloud || heatmap_cloud->empty() || !std::isfinite(min_distance) || !std::isfinite(max_distance) || max_distance<min_distance) return;
+    const std::string id="planarity_heatmap_"+plane_name;
+    viewer->removePointCloud(id);
+    pcl::visualization::PointCloudColorHandlerRGBField<pcl::PointXYZRGB> colors(heatmap_cloud);
+    viewer->addPointCloud<pcl::PointXYZRGB>(heatmap_cloud,colors,id);
+    viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_POINT_SIZE,3,id);
+    RGBCloudMap[id]=heatmap_cloud;
+    const QString group=QString::fromStdString(id);
+    m_presentation->setLegend(group,{group,"平面度 · "+QString::fromStdString(plane_name),min_distance,max_distance,ViewportColorLegend::sequential()});
+    ui->winOfAnalyzer->renderWindow()->Render();ui->winOfAnalyzer->update();
 }
-
 
 void CloudForgeAnalyzer::Slot_fit_cy2_Triggered() {
     if (IsTaskRunning()) {
@@ -1048,90 +976,15 @@ void CloudForgeAnalyzer::visualizeCylindricityHeatMap(
     pcl::PointCloud<pcl::PointXYZRGB>::Ptr heatmap_cloud,
     double min_distance, double max_distance)
 {
-	TeEDebug("开始可视化圆柱度热力图...");
-    if (!heatmap_cloud || heatmap_cloud->empty()) {
-        TeEDebug("热力图点云为空，无法可视化");
-        return;
-    }
-
-    // 先清除可能存在的旧热力图及标注
-    viewer->removePointCloud("cylindricity_heatmap");
-    viewer->removeShape("heatmap_colorbar"); // 清除旧的颜色条（如果存在）
-    viewer->removeText3D("heatmap_title");
-
-    // 添加热力图点云
-    viewer->addPointCloud<pcl::PointXYZRGB>(heatmap_cloud, "cylindricity_heatmap");
-    viewer->setPointCloudRenderingProperties(
-        pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 3, "cylindricity_heatmap");
-    // === 新增：创建并添加固定颜色条 (Colorbar) ===
-    // 1. 获取当前渲染器
-    RGBCloudMap.emplace("cylindricity_heatmap",heatmap_cloud);
-    vtkRenderer* renderer = viewer->getRendererCollection()->GetFirstRenderer();
-    if (!renderer) {
-        TeEDebug("错误：无法获取渲染器，颜色条创建失败。");
-    }
-    else {
-        // 2. 创建颜色查找表 (Lookup Table)，映射从绿到红
-        vtkNew<vtkLookupTable> hueLut;
-        hueLut->SetTableRange(min_distance, max_distance); // 标量值范围对应误差范围
-        hueLut->SetHueRange(0.33, 0.0);      // 从绿色 (0.33) 到红色 (0.0)
-        hueLut->SetSaturationRange(1, 1);
-        hueLut->SetValueRange(1, 1);
-        hueLut->SetNanColor(1, 1, 1, 1);    // 无效值显示为白色
-        hueLut->SetNumberOfTableValues(256); // 颜色精度
-        hueLut->Build();
-
-        // 3. 创建颜色条 Actor
-        vtkNew<vtkScalarBarActor> scalarBar;
-        scalarBar->SetLookupTable(hueLut);
-        scalarBar->SetTitle("mm");
-        scalarBar->SetNumberOfLabels(5); // 主标签数量
-        scalarBar->SetMaximumNumberOfColors(256);
-
-
-        const int titleFontSize = 8;        // 颜色条标题文字大小
-        const int labelFontSize = 10;        // 颜色条标签文字大小
-        const double colorbarWidth = 0.05;   // 颜色条宽度 (占窗口宽度的比例，建议0.03-0.07)
-        const double colorbarHeight = 0.6;   // 颜色条高度 (占窗口高度的比例，建议0.4-0.7)
-        const double colorbarPosX = 0.92;    // 颜色条右侧位置 (范围0~1, 1为右边缘)
-        const double colorbarPosY = 0.2;     // 颜色条底部位置 (范围0~1, 1为上边缘)
-
-        // 设置颜色条文本属性（字号、颜色）
-        vtkNew<vtkTextProperty> titleProperty;
-        titleProperty->SetFontSize(titleFontSize);
-        titleProperty->BoldOn();
-        titleProperty->SetColor(1, 1, 1); // 白色
-        scalarBar->SetTitleTextProperty(titleProperty);
-
-        scalarBar->SetTitleRatio(0.6); // 增加标题区域所占的比例，例如从0.5调到0.6
-
-        vtkNew<vtkTextProperty> labelProperty;
-        labelProperty->SetFontSize(labelFontSize);
-        labelProperty->SetColor(0.9, 0.9, 0.9); // 浅灰色
-        scalarBar->SetLabelTextProperty(labelProperty);
-        // === 变量定义结束 ===
-
-        // 应用调整后的位置和大小
-        scalarBar->SetPosition(colorbarPosX - colorbarWidth, colorbarPosY);
-        scalarBar->SetWidth(colorbarWidth);
-        scalarBar->SetHeight(colorbarHeight);
-
-
-        scalarBar->SetPickable(0); // 禁止拾取，避免与点云交互冲突
-
-        // 4. 将颜色条添加到渲染器，并赋予唯一名称以便管理
-        renderer->AddActor2D(scalarBar);
-        // 为了方便后续管理（如清除），可以将其存储在某个容器，但此处为最小修改，仅作添加。
-        // 注意：PCLVisualizer 的 removeShape 可能无法管理此Actor，需单独处理。
-    }
-    // === 颜色条添加结束 ===
-
-    TeEDebug("热力图与颜色条可视化完成");
-    TeEDebug("误差范围: " + std::to_string(min_distance) + " - " + std::to_string(max_distance) + " mm");
-
-    // 刷新渲染窗口
-    ui->winOfAnalyzer->renderWindow()->Render();
-    ui->winOfAnalyzer->update();
+    if (!heatmap_cloud || heatmap_cloud->empty() || !std::isfinite(min_distance) || !std::isfinite(max_distance) || max_distance<min_distance) return;
+    const std::string id="cylindricity_heatmap";
+    viewer->removePointCloud(id);
+    pcl::visualization::PointCloudColorHandlerRGBField<pcl::PointXYZRGB> colors(heatmap_cloud);
+    viewer->addPointCloud<pcl::PointXYZRGB>(heatmap_cloud,colors,id);
+    viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_POINT_SIZE,3,id);
+    RGBCloudMap[id]=heatmap_cloud;
+    m_presentation->setLegend("cylindricity_scale",{"cylindricity_scale","圆柱度偏差",min_distance,max_distance,ViewportColorLegend::sequential()});
+    ui->winOfAnalyzer->renderWindow()->Render();ui->winOfAnalyzer->update();
 }
 
 void CloudForgeAnalyzer::Tool_MeasureCylindricity()
@@ -1503,13 +1356,18 @@ void CloudForgeAnalyzer::VisualizePothole(MeasurePothole& measurement,const Meas
     auto heatmap=measurement.getHeatMapCloud();
     const auto actors=viewer->getCloudActorMap();const auto original=actors->find(source);
     m_presentation->addHeatmap(group,heatmap,original==actors->end() ? nullptr:original->second.actor.GetPointer());
-    if (heatmap && !heatmap->empty()) RGBCloudMap["pothole_heatmap"]=heatmap;
+    if (heatmap && !heatmap->empty()) {
+        RGBCloudMap["pothole_heatmap"]=heatmap;
+        const bool local=measurement.getHeatMapFieldUsed()==0;
+        const double limit=local ? std::max(2*result.local_threshold,.5):std::max(3*result.robust_sigma,.5);
+        m_presentation->setLegend(group,{"pothole_scale",local ? "局部高度偏差":"到理想柱面距离",-limit,limit,ViewportColorLegend::signedSurface()});
+    }
     const auto derived=actors->find(m_potholeOutputName);
     if (derived!=actors->end()) m_presentation->hideSource(group,derived->second.actor);
     std::vector<MeasurementPresentation::Annotation> annotations;
     if (result.fit_ok) {
         const auto& point=result.deepest_point;
-        annotations.push_back({{point.x,point.y,point.z},{},QString("最大距离 %1 mm").arg(result.max_depth,0,'f',3),"到理想柱面",QColor("#68dfff")});
+        annotations.push_back({{point.x,point.y,point.z},{},QString("最大距离 %1 mm").arg(result.max_depth,0,'f',3),"到理想柱面",QColor("#68dfff"),{},true});
         m_presentation->appendResult(group,"凹坑测量",{"到理想柱面最大距离",QString::number(result.max_depth,'f',3)+" mm",{}});
         m_presentation->appendResult(group,"凹坑测量",{"检出凹坑",QString::number(result.pit_count)+" 个",{}});
     }
@@ -1520,7 +1378,7 @@ void CloudForgeAnalyzer::VisualizePothole(MeasurePothole& measurement,const Meas
         const QColor color=!pit.valid ? QColor("#c7d3db"):pit.is_main ? QColor("#ff73d3"):QColor("#ffd166");
         const QString title=QString("凹坑 %1%2 · %3 mm").arg(pit.index).arg(pit.is_main ? "（主坑）":"").arg(depth,0,'f',3);
         const QString detail=pit.valid ? QString("长轴 %1 · 短轴 %2 mm").arg(pit.major_axis,0,'f',2).arg(pit.minor_axis,0,'f',2):QString("未通过");
-        annotations.push_back({{point.x,point.y,point.z},{},title,detail,color});
+        annotations.push_back({{point.x,point.y,point.z},{},title,detail,color,QString::number(pit.index)});
         if (!pit.valid || pit.ellipse_points.size()<2) continue;
         auto points=vtkSmartPointer<vtkPoints>::New();auto cells=vtkSmartPointer<vtkCellArray>::New();
         for (const auto& p:pit.ellipse_points) points->InsertNextPoint(p.x(),p.y(),p.z());
@@ -3281,21 +3139,7 @@ void CloudForgeAnalyzer::Slot_ed_cleanall_Triggered() {
     cleanGeodesicVisualization();
     viewer->removeAllShapes();
     ClearAllPointCloud();
-    vtkRenderer* renderer = viewer->getRendererCollection()->GetFirstRenderer();
-    if (renderer) {
-        vtkPropCollection* props = renderer->GetViewProps();
-        props->InitTraversal();
-        vtkProp* prop;
-        std::vector<vtkProp*> propsToRemove;
-        while ((prop = props->GetNextProp()) != nullptr) {
-            if (vtkScalarBarActor::SafeDownCast(prop)) {
-                propsToRemove.push_back(prop);
-            }
-        }
-        for (auto p : propsToRemove) {
-            renderer->RemoveActor2D(static_cast<vtkActor2D*>(p));
-        }
-    }
+
     clearAllArcSplineActors();
     clearAllActors();
     ui->winOfAnalyzer->renderWindow()->Render();
@@ -3329,21 +3173,7 @@ void CloudForgeAnalyzer::Slot_ed_clean2DActor_Triggered() {
     if (m_weldParallelTool) m_weldParallelTool->clearAnnotations();
     if (m_resultOverlay) m_resultOverlay->clear();
     if (m_weldPrepOverlay) m_weldPrepOverlay->clear();
-    vtkRenderer* renderer = viewer->getRendererCollection()->GetFirstRenderer();
-    if (renderer) {
-        vtkPropCollection* props = renderer->GetViewProps();
-        props->InitTraversal();
-        vtkProp* prop;
-        std::vector<vtkProp*> propsToRemove;
-        while ((prop = props->GetNextProp()) != nullptr) {
-            if (vtkScalarBarActor::SafeDownCast(prop)) {
-                propsToRemove.push_back(prop);
-            }
-        }
-        for (auto p : propsToRemove) {
-            renderer->RemoveActor2D(static_cast<vtkActor2D*>(p));
-        }
-    }
+
     ui->winOfAnalyzer->renderWindow()->Render();
     ui->winOfAnalyzer->update();
     TeEDebug("已清除二维演示");
@@ -3746,22 +3576,7 @@ void CloudForgeAnalyzer::cleanWeldMeasureVisuals()
     }
     m_weldMeasureShapeIds.clear();
 
-    // 清理 vtkActor2D 颜色条（不受 PCL 管理）
-    vtkRenderer* renderer = viewer->getRendererCollection()->GetFirstRenderer();
-    if (renderer) {
-        vtkPropCollection* props = renderer->GetViewProps();
-        props->InitTraversal();
-        std::vector<vtkProp*> barsToRemove;
-        vtkProp* prop;
-        while ((prop = props->GetNextProp()) != nullptr) {
-            if (vtkScalarBarActor::SafeDownCast(prop)) {
-                barsToRemove.push_back(prop);
-            }
-        }
-        for (auto p : barsToRemove) {
-            renderer->RemoveActor2D(static_cast<vtkActor2D*>(p));
-        }
-    }
+
 }
 
 void CloudForgeAnalyzer::Slot_ed_undo_Triggered() {
