@@ -8,6 +8,7 @@
 #include <QTimer>
 #include <vtkSmartPointer.h>
 #include <memory>
+#include <optional>
 
 class QWidget;
 class QFrame;
@@ -46,6 +47,7 @@ public:
     const Target& target() const;
     KeepMode keepMode() const;
     std::shared_ptr<CloudClipper::Result> result() const { return result_; }
+    std::optional<bool> sourceVisibility(vtkActor* actor) const;
 
 signals:
     void activeChanged(bool active);

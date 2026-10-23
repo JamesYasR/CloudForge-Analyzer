@@ -1,0 +1,31 @@
+{
+  "date": "2026-10-23",
+  "branch": "architecture-clip-pilot",
+  "base_commit": "db65280c3d606299f3a2bd66e017e19b738f5c4f",
+  "preexisting_changes": [
+    {
+      "path": "Icons/icon_WeldGap.png",
+      "status": "deleted",
+      "owned_by_pilot": false
+    }
+  ],
+  "build_type": "Debug",
+  "dependencies": {
+    "Qt": "6.7.3",
+    "PCL": "1.14.0",
+    "VTK": "9.3.0"
+  },
+  "sha256": {
+    "Src/Basic/CloudClipper.cpp": "79ec6bad7f2e0432cd8a61662417fb480a0806688daafa64ee1b344ba04a7bd3",
+    "Inc/Basic/CloudClipper.h": "15847684c145aa9fc2f9c19a3edb5bdee832c9bcc1c1cc120fd1be7de8f50473",
+    "PCDfiles/rabbit.pcd": "f94d5bd55feb1d48496ee5cf34817810a5a15e5f6ab0cc0ed52bb59097d3cd97",
+    "CMakeLists.txt": "ccb085d7d277980115cafb2e3f79a90e808fea40ada22a01a58ae767d0e214c8",
+    "CMakePresets.json": "5031aed6afeaab0f1cff36eb97ce5737ea84b1b559372cf343e7aa34789eecf2"
+  },
+  "baseline_gui": {
+    "passed": 65,
+    "failed": 0,
+    "log": "build/clip_pilot_baseline.log"
+  },
+  "regression_scope": "polygon clipping only; no other feature regressions"
+}

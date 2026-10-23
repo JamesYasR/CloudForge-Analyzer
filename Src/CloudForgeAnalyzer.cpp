@@ -1,6 +1,8 @@
 #include "CloudForgeAnalyzer.h"
 #include "Basic/ViewportPointPicker.h"
 #include "Basic/PolygonClipTool.h"
+#include "Controllers/ClipController.h"
+#include "Application/TaskRunner.h"
 #include "Basic/WeldPreparationOverlay.h"
 #include "Basic/ViewportResultOverlay.h"
 #include "Basic/HeightMeasureTool.h"
@@ -49,6 +51,9 @@ CloudForgeAnalyzer::~CloudForgeAnalyzer()
     if (m_asyncFuture.isRunning()) {
         m_asyncFuture.waitForFinished();
     }
+    if (m_clipTasks) m_clipTasks->shutdown();
+    m_clipController.reset();
+    m_clipTasks.reset();
     m_arcTool.reset();
     m_heightTool.reset();
     m_presentation.reset();
@@ -100,6 +105,45 @@ void CloudForgeAnalyzer::InitalizeRenderer() {
         TeEDebug(text.toStdString());
     });
     m_clipTool = std::make_unique<PolygonClipTool>(ui->winOfAnalyzer, renderer, renderWindow);
+    m_clipTasks = std::make_unique<TaskRunner>();
+    ClipController::Host clipHost;
+    clipHost.busy = [this]() { return IsTaskRunning(); };
+    clipHost.prepareInteraction = [this]() {
+        if (m_arcTool) m_arcTool->stop();
+        if (m_heightTool) m_heightTool->stop();
+        if (m_weldParallelTool) m_weldParallelTool->stop();
+        if (m_pointPicker) m_pointPicker->clear();
+    };
+    clipHost.targets = [this]() {
+        std::vector<PolygonClipTool::Target> targets;
+        const auto actors = viewer->getCloudActorMap();
+        for (const auto& entry : CloudMap) {
+            const auto actor = actors->find(entry.first);
+            if (actor != actors->end()) targets.push_back({entry.first, entry.second, actor->second.actor});
+        }
+        return targets;
+    };
+    clipHost.read = [this]() { return captureCloudScene(); };
+    clipHost.commit = [this](const CloudScene::Edit& edit) { return commitCloudEdit(edit); };
+    clipHost.allocateId = [this]() { return m_nextCloudId++; };
+    clipHost.run = [this](TaskRunner::Work work, TaskRunner::Finish finish) {
+        BeginAsyncTask("裁切预览");
+        // 上下文已创建；worker 只捕获此共享状态，不访问窗口成员。
+        if (!m_clipTasks->start(m_asyncState, std::move(work), [this, finish](TaskRunner::Status status) {
+            EndAsyncTask(status == TaskRunner::Status::Cancelled);
+            if (!m_shuttingDown.load()) finish(status);
+        })) {
+            EndAsyncTask(false);
+            finish(TaskRunner::Status::Failed);
+        }
+    };
+    clipHost.message = [this](const QString& message) {
+        ui->action_Clip->setChecked(m_clipTool->isActive());
+        Update_CFmes(message.toStdString());
+        TeEDebug(message.toStdString());
+    };
+    m_clipController = std::make_unique<ClipController>(*m_clipTool, std::move(clipHost));
+
     connect(m_clipTool.get(), &PolygonClipTool::activeChanged, ui->action_Clip, &QAction::setChecked);
     connect(m_clipTool.get(), &PolygonClipTool::previewRequested, this, &CloudForgeAnalyzer::PreviewPolygonClip);
     connect(m_clipTool.get(), &PolygonClipTool::applyRequested, this, &CloudForgeAnalyzer::ApplyPolygonClip);
@@ -1927,84 +1971,9 @@ void CloudForgeAnalyzer::Tool_MeasureDistance()
     }
 }
 
-void CloudForgeAnalyzer::Tool_Clip()
-{
-    if (!m_clipTool) return;
-    if (m_clipTool->isActive()) { m_clipTool->stop(); return; }
-    if (IsTaskRunning()) {
-        ui->action_Clip->setChecked(false);
-        TeEDebug("计算进行中，请稍后裁切。");
-        return;
-    }
-    std::vector<PolygonClipTool::Target> targets;
-    const auto actors = viewer->getCloudActorMap();
-    for (const auto& entry : CloudMap) {
-        auto actor = actors->find(entry.first);
-        if (actor != actors->end()) targets.push_back({entry.first, entry.second, actor->second.actor});
-    }
-    if (!m_clipTool->start(targets)) {
-        ui->action_Clip->setChecked(false);
-        TeEDebug("不可裁切: 当前没有可选取的点云");
-    }
-}
-
-void CloudForgeAnalyzer::PreviewPolygonClip()
-{
-    if (IsTaskRunning() || !m_clipTool->isActive()) return;
-    const auto request = m_clipTool->request();
-    const auto ticket = m_clipTool->ticket();
-    auto result = std::make_shared<CloudClipper::Result>();
-    RunAsyncVoid("裁切预览",
-        [this, request, result]() {
-            try {
-                *result = CloudClipper::compute(request, WorkerProgressCallback());
-            }
-            catch (const std::exception&) {
-                result->error = "预览失败，请重试";
-            }
-        },
-        [this, result, ticket]() { m_clipTool->finishPreview(result, ticket); });
-}
-
-void CloudForgeAnalyzer::ApplyPolygonClip()
-{
-    if (IsTaskRunning() || !m_clipTool->canApply()) return;
-    const auto source = m_clipTool->target();
-    const auto result = m_clipTool->result();
-    const auto mode = m_clipTool->keepMode();
-    const auto found = CloudMap.find(source.name);
-    if (found == CloudMap.end() || found->second != source.cloud) {
-        m_clipTool->stop();
-        return;
-    }
-    const auto color = ColorMap.at(source.name);
-    auto transform = vtkSmartPointer<vtkMatrix4x4>::New();
-    transform->DeepCopy(source.actor->GetMatrix());
-    auto addResult = [this, transform, source](const std::string& name, const CloudClipper::Cloud::Ptr& cloud, const ColorManager& color) {
-        AddPointCloud(name, cloud, color);
-        auto actor = viewer->getCloudActorMap()->at(name).actor;
-        actor->SetUserMatrix(transform);
-        actor->GetProperty()->SetPointSize(source.actor->GetProperty()->GetPointSize());
-        actor->GetProperty()->SetOpacity(source.actor->GetProperty()->GetOpacity());
-    };
-    m_clipTool->stop();
-    beginUndoBatch("多边形裁切");
-    DelePointCloud(source.name);
-    if (mode != PolygonClipTool::KeepMode::Outside) {
-        addResult(GenerateRandomName(source.name + "_inside"), result->inside, color);
-    }
-    if (mode != PolygonClipTool::KeepMode::Inside) {
-        addResult(GenerateRandomName(source.name + "_outside"), result->outside,
-                      mode == PolygonClipTool::KeepMode::Both ? ColorManager(255, 170, 70) : color);
-    }
-    endUndoBatch();
-    ui->winOfAnalyzer->renderWindow()->Render();
-    const size_t kept = mode == PolygonClipTool::KeepMode::Inside ? result->inside->size()
-        : mode == PolygonClipTool::KeepMode::Outside ? result->outside->size() : result->inside->size() + result->outside->size();
-    const auto text = QString("裁切完成: 保留 %1 点").arg(kept);
-    Update_CFmes(text.toStdString());
-    TeEDebug(text.toStdString());
-}
+void CloudForgeAnalyzer::Tool_Clip() { m_clipController->toggle(); }
+void CloudForgeAnalyzer::PreviewPolygonClip() { m_clipController->preview(); }
+void CloudForgeAnalyzer::ApplyPolygonClip() { m_clipController->apply(); }
 
 void CloudForgeAnalyzer::Slot_ph_ProtruSeg_Triggered() {
     if (IsTaskRunning()) {
@@ -3445,6 +3414,8 @@ void CloudForgeAnalyzer::AddPointCloud(std::string name, pcl::PointCloud<pcl::Po
     if (m_undoBatchLevel == 0) {
         saveUndoState("添加点云: " + name);
     }
+    ++m_sceneGeneration;
+    m_cloudIdentities.erase(name);
     CloudMap.emplace(name, cloud);
     ColorMap.emplace(name,color);
     qDebug() << color.r << color.g <<color.b;
@@ -3488,6 +3459,8 @@ void CloudForgeAnalyzer::ClearAllPointCloud() {
     for (auto& pair : CloudMap) {
         pair.second.reset(); // 智能指针置空，释放点云
     }
+    ++m_sceneGeneration;
+    m_cloudIdentities.clear();
     CloudMap.clear();
     ColorMap.clear();
     viewer->removeAllPointClouds();
@@ -3509,6 +3482,8 @@ void CloudForgeAnalyzer::DelePointCloud(std::string name) {
     if (m_undoBatchLevel == 0) {
         saveUndoState("删除点云: " + name);
     }
+    ++m_sceneGeneration;
+    m_cloudIdentities.erase(name);
     auto it = CloudMap.find(name);
     if (it != CloudMap.end()) {
         it->second.reset(); // 智能指针置空，释放点云
@@ -3525,7 +3500,7 @@ void CloudForgeAnalyzer::DelePointCloud(std::string name) {
 // ========== 撤销/重做实现 ==========
 
 void CloudForgeAnalyzer::saveUndoState(const std::string& description) {
-    m_undoRedoManager.pushState(description, CloudMap, ColorMap);
+    m_undoRedoManager.pushState(description, captureCloudScene());
 }
 
 void CloudForgeAnalyzer::beginUndoBatch(const std::string& description) {
@@ -3541,7 +3516,7 @@ void CloudForgeAnalyzer::endUndoBatch() {
     }
 }
 
-void CloudForgeAnalyzer::rebuildCloudVisualization() {
+void CloudForgeAnalyzer::rebuildCloudVisualization(bool preserveCamera) {
     if (m_arcTool) m_arcTool->stop();
     if (m_presentation) m_presentation->clear();
     if (m_heightTool) m_heightTool->stop();
@@ -3561,7 +3536,7 @@ void CloudForgeAnalyzer::rebuildCloudVisualization() {
     }
     ui->winOfAnalyzer->renderWindow()->Render();
     ui->winOfAnalyzer->update();
-    UpdateCamera(0, 0, 1);
+    if (!preserveCamera) UpdateCamera(0, 0, 1);
 }
 
 void CloudForgeAnalyzer::cleanWeldMeasureVisuals()
@@ -3588,11 +3563,16 @@ void CloudForgeAnalyzer::Slot_ed_undo_Triggered() {
         TeEDebug("撤销: 没有更多历史记录");
         return;
     }
-    std::string desc = m_undoRedoManager.undo(CloudMap, ColorMap);
+    // 这两个旧工具自己保存临时可见性；先归还显示状态再捕获 redo 快照。
+    if (m_heightTool) m_heightTool->stop();
+    if (m_weldParallelTool) m_weldParallelTool->stop();
+    auto prepared = prepareCloudScene(m_undoRedoManager.nextUndo()->scene);
+    auto restored = m_undoRedoManager.undo(captureCloudScene());
+    if (!restored) return;
     cleanWeldMeasureVisuals();
-    rebuildCloudVisualization();
-    TeEDebug("已撤销: " + desc);
-    Update_CFmes("已撤销: " + desc);
+    installCloudScene(std::move(prepared), restored->preserveCamera);
+    TeEDebug("已撤销: " + restored->description);
+    Update_CFmes("已撤销: " + restored->description);
 }
 
 void CloudForgeAnalyzer::Slot_ed_redo_Triggered() {
@@ -3604,11 +3584,15 @@ void CloudForgeAnalyzer::Slot_ed_redo_Triggered() {
         TeEDebug("重做: 没有更多历史记录");
         return;
     }
-    std::string desc = m_undoRedoManager.redo(CloudMap, ColorMap);
+    if (m_heightTool) m_heightTool->stop();
+    if (m_weldParallelTool) m_weldParallelTool->stop();
+    auto prepared = prepareCloudScene(m_undoRedoManager.nextRedo()->scene);
+    auto restored = m_undoRedoManager.redo(captureCloudScene());
+    if (!restored) return;
     cleanWeldMeasureVisuals();
-    rebuildCloudVisualization();
-    TeEDebug("已重做: " + desc);
-    Update_CFmes("已重做: " + desc);
+    installCloudScene(std::move(prepared), restored->preserveCamera);
+    TeEDebug("已重做: " + restored->description);
+    Update_CFmes("已重做: " + restored->description);
 }
 
 void CloudForgeAnalyzer::InitializeProgressBar() {

@@ -50,7 +50,7 @@ private:
 }
 
 PolygonClipTool::PolygonClipTool(QWidget* view, vtkRenderer* renderer, vtkRenderWindow* window)
-    : view_(view), renderer_(renderer), window_(window)
+    : QObject(view), view_(view), renderer_(renderer), window_(window)
 {
     canvas_ = new ContourCanvas(view, [this](QPainter& painter) { paintContour(painter); });
     canvas_->hide();
@@ -247,6 +247,7 @@ void PolygonClipTool::stop()
     ++ticket_;
     viewTimer_.stop();
     clearPreview();
+    targets_.clear();
     dock_->hide();
     canvas_->hide();
     if (view_) { view_->setCursor(originalCursor_); view_->setMouseTracking(mouseTracking_); }
@@ -256,6 +257,12 @@ void PolygonClipTool::stop()
 
 const PolygonClipTool::Target& PolygonClipTool::target() const { return targets_[std::max(source_->currentIndex(), 0)]; }
 PolygonClipTool::KeepMode PolygonClipTool::keepMode() const { return static_cast<KeepMode>(mode_->currentIndex()); }
+
+std::optional<bool> PolygonClipTool::sourceVisibility(vtkActor* actor) const
+{
+    if (previewSource_ == actor) return originalVisibility_ != 0;
+    return std::nullopt;
+}
 
 CloudClipper::Projection PolygonClipTool::projection() const
 {
@@ -269,7 +276,11 @@ CloudClipper::Projection PolygonClipTool::projection() const
     return output;
 }
 
-CloudClipper::Request PolygonClipTool::request() const { return {target().cloud, polygon_, pendingProjection_}; }
+CloudClipper::Request PolygonClipTool::request() const
+{
+    if (!active_ || targets_.empty()) return {};
+    return {target().cloud, polygon_, pendingProjection_};
+}
 
 void PolygonClipTool::preview()
 {
@@ -520,6 +531,7 @@ bool PolygonClipTool::eventFilter(QObject* watched, QEvent* event)
         }
     }
     if (watched != view_) return false;
+    if (event->type() == QEvent::Hide) { stop(); return false; }
     if (event->type() == QEvent::Resize) {
         canvas_->setGeometry(view_->rect());
         invalidatePreview();

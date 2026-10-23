@@ -1,5 +1,6 @@
 #include "CloudForgeAnalyzer.h"
 #include "Basic/PolygonClipTool.h"
+#include "Controllers/ClipController.h"
 #include "ui_CloudForgeAnalyzer.h"
 #include <QCheckBox>
 #include <QComboBox>
@@ -18,6 +19,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
+#include <cstring>
 #include <iostream>
 
 static int passed = 0, failed = 0;
@@ -156,6 +158,12 @@ static void algorithmTests()
         ++index;
     }
     check(same && index == reference.inside->size(), "legacy ray-crossing baseline: identical coordinates and order away from boundaries");
+    index=0;same=reference.success;
+    for(const auto& p:*random) if(!legacyContains(concave,.5+.5*p.x,.5-.5*p.y)) {
+        if(index>=reference.outside->size() || (*reference.outside)[index].getVector3fMap()!=p.getVector3fMap()) same=false;
+        ++index;
+    }
+    check(same && index==reference.outside->size(),"outside output also preserves legacy coordinates and order");
     auto large = pcl::make_shared<C::Cloud>();
     large->reserve(2000000);
     for (int y = 0; y < 1000; ++y) for (int x = 0; x < 2000; ++x)
@@ -296,6 +304,67 @@ static void toolTests()
     view.close();
 }
 
+static void controllerTests()
+{
+    QVTKOpenGLNativeWidget view;view.resize(1200,800);
+    auto renderer=vtkSmartPointer<vtkRenderer>::New();
+    auto window=vtkSmartPointer<vtkGenericOpenGLRenderWindow>::New();window->AddRenderer(renderer);
+    auto viewer=pcl::make_shared<pcl::visualization::PCLVisualizer>(renderer,window,"controller-test",false);
+    view.setRenderWindow(window);viewer->setupInteractor(view.interactor(),window);
+    auto cloud=pcl::make_shared<CloudScene::Cloud>();
+    for(int y=-10;y<=10;++y) for(int x=-10;x<=10;++x) cloud->push_back({float(x),float(y),0});
+    viewer->addPointCloud<pcl::PointXYZ>(cloud,"grid");renderer->ResetCamera();
+    auto actor=viewer->getCloudActorMap()->at("grid").actor;
+    PolygonClipTool tool(&view,renderer,window);
+    CloudScene::Record source;source.id=1;source.name="grid";source.cloud=cloud;
+    CloudScene::Snapshot scene;scene.records.emplace("grid",source);
+    bool busy=false;int commits=0;CloudScene::Id nextId=2;QString message;
+    TaskRunner::Work pendingWork;TaskRunner::Finish pendingFinish;
+    ClipController::Host host;
+    host.busy=[&]{return busy;};host.prepareInteraction=[]{};
+    host.targets=[&]{return std::vector<PolygonClipTool::Target>{{"grid",cloud,actor}};};
+    host.read=[&]{return scene;};host.allocateId=[&]{return nextId++;};
+    host.commit=[&](const auto&){++commits;return false;};
+    host.message=[&](const auto& text){message=text;};
+    host.run=[&](auto work,auto finish){busy=true;pendingWork=std::move(work);pendingFinish=std::move(finish);};
+    ClipController controller(tool,std::move(host));
+    QObject::connect(&tool,&PolygonClipTool::previewRequested,&controller,&ClipController::preview);
+    QObject::connect(&tool,&PolygonClipTool::applyRequested,&controller,&ClipController::apply);
+    auto begin=[&] {
+        if(tool.isActive()) tool.stop();
+        scene.records={{"grid",source}};++scene.generation;
+        controller.toggle();pump();quad(&view);button(&view,"polygonPreview")->click();
+    };
+    auto complete=[&](TaskRunner::Status status) {
+        if(status==TaskRunner::Status::Success) pendingWork(std::make_shared<TaskContext>());
+        busy=false;auto finish=std::move(pendingFinish);pendingWork={};finish(status);pump();
+    };
+    view.show();pump(150);
+    begin();++scene.generation;complete(TaskRunner::Status::Success);
+    check(!tool.result() && actor->GetVisibility() && commits==0,"changed scene generation discards preview without editing or hiding source");
+    begin();scene.records.at("grid").id=100;complete(TaskRunner::Status::Success);
+    check(!tool.result() && commits==0,"same name with new identity cannot accept old preview");
+    begin();scene.records.at("grid").cloud=pcl::make_shared<CloudScene::Cloud>(*cloud);complete(TaskRunner::Status::Success);
+    check(!tool.result() && commits==0,"replaced point buffer cannot accept old preview");
+    begin();complete(TaskRunner::Status::Failed);
+    check(!tool.isBusy() && !tool.result() && actor->GetVisibility() && message.isEmpty(),"failed preview releases busy state without source mutation");
+    begin();complete(TaskRunner::Status::Cancelled);
+    check(!tool.isBusy() && !tool.result() && commits==0,"cancelled task cannot become applicable preview");
+    begin();tool.stop();complete(TaskRunner::Status::Success);
+    check(!tool.isActive() && !tool.result() && actor->GetVisibility(),"closed session discards late worker completion");
+    begin();view.hide();pump();complete(TaskRunner::Status::Success);
+    check(!tool.isActive() && !tool.result() && actor->GetVisibility() && !tool.request().cloud,"hidden view cancels session releases targets and rejects late result");
+    view.show();pump();
+    begin();complete(TaskRunner::Status::Success);
+    scene.records.at("grid").appearance.opacity=.25;
+    controller.apply();
+    check(!tool.isActive() && actor->GetVisibility() && commits==0,"changed display attributes reject apply and restore preview source");
+    begin();complete(TaskRunner::Status::Success);
+    controller.apply();
+    check(commits==1 && scene.records.size()==1 && scene.records.at("grid").cloud==cloud && actor->GetVisibility(),"rejected atomic commit preserves source and leaves no preview actors");
+    view.close();pump();
+}
+
 static void mainTests()
 {
     CloudForgeAnalyzer main;
@@ -304,6 +373,24 @@ static void mainTests()
     auto view = main.ui->winOfAnalyzer;
     auto renderer = view->renderWindow()->GetRenderers()->GetFirstRenderer();
     auto style = view->interactor()->GetInteractorStyle();
+    // 设置非默认属性，验证真正的场景恢复，而不只比较点数。
+    const auto sourcePointCount=main.sceneSnapshot().records.begin()->second.cloud->size();
+    vtkLODActor* sourceActor=nullptr;
+    auto props=renderer->GetViewProps();props->InitTraversal();
+    while(auto prop=props->GetNextProp()) if(auto actor=vtkLODActor::SafeDownCast(prop)) {
+        // PCL 的坐标轴也使用 LOD actor，不能选择渲染器中的第一个对象。
+        if(actor->GetMapper() && actor->GetMapper()->GetInputAsDataSet()
+            && static_cast<std::size_t>(actor->GetMapper()->GetInputAsDataSet()->GetNumberOfPoints())==sourcePointCount) { sourceActor=actor;break; }
+    }
+    if (!sourceActor) { check(false,"source actor available"); return; }
+    auto transform=vtkSmartPointer<vtkMatrix4x4>::New();transform->Identity();
+    transform->SetElement(0,0,std::cos(.1));transform->SetElement(0,1,-std::sin(.1));
+    transform->SetElement(1,0,std::sin(.1));transform->SetElement(1,1,std::cos(.1));
+    transform->SetElement(0,3,.005);
+    sourceActor->SetUserMatrix(transform);sourceActor->GetProperty()->SetOpacity(.6);
+    sourceActor->GetProperty()->SetPointSize(5);sourceActor->PickableOff();
+    const auto initial=main.sceneSnapshot();
+    const auto initialRecord=initial.records.begin()->second;
     const size_t original = registeredPoints(renderer);
     auto entry = main.ui->mainToolBar->widgetForAction(main.ui->action_Clip);
     click(entry,entry->rect().center());
@@ -330,17 +417,49 @@ static void mainTests()
     button(view,"polygonClose")->click();
     button(view,"polygonPreview")->click();
     check(waitFor([&]() { return button(view,"polygonApply")->isEnabled(); }), "background preview completes in main window");
+    const auto tool=main.findChild<PolygonClipTool*>();
+    if (!tool) {check(false,"public clipping tool request available");return;}
+    const auto numericalBaseline=CloudClipper::compute(tool->request());
+    const auto visibleSnapshot=main.sceneSnapshot();
+    if(!visibleSnapshot.records.begin()->second.appearance.visible || sourceActor->GetVisibility())
+        std::cout<<"[VISIBILITY] snapshot="<<visibleSnapshot.records.begin()->second.appearance.visible
+                 <<" actor="<<sourceActor->GetVisibility()<<" override="<<tool->sourceVisibility(sourceActor).value_or(false)
+                 <<" target_match="<<(sourceActor==tool->target().actor.GetPointer())<<" active="<<tool->isActive()<<std::endl;
+    check(visibleSnapshot.records.begin()->second.appearance.visible && !sourceActor->GetVisibility(),
+          "preview visibility override is excluded from persistent scene snapshot");
     check(registeredPoints(renderer) == original, "preview does not modify cloud registry");
     main.grab().save(capture("main_preview"));
     double camera[3]; renderer->GetActiveCamera()->GetPosition(camera);
     button(view,"polygonApply")->click(); pump();
     const size_t inside = registeredPoints(renderer);
+    const auto appliedScene=main.sceneSnapshot();
+    const auto appliedRecord=appliedScene.records.begin()->second;
+    check(appliedScene.records.size()==1 && appliedRecord.id!=initialRecord.id && appliedRecord.appearance==initialRecord.appearance,
+          "applied output has new identity and preserves matrix opacity point size visibility and pickability");
+    bool exact=appliedRecord.cloud->size()==numericalBaseline.inside->size();
+    for(size_t i=0;exact && i<appliedRecord.cloud->size();++i) {
+        const auto& a=appliedRecord.cloud->at(i);const auto& b=numericalBaseline.inside->at(i);
+        exact=std::memcmp(&a.x,&b.x,sizeof(float))==0 && std::memcmp(&a.y,&b.y,sizeof(float))==0 && std::memcmp(&a.z,&b.z,sizeof(float))==0;
+    }
+    if(!exact) std::cout<<"[COMPARE] expected="<<numericalBaseline.inside->size()<<" actual="<<appliedRecord.cloud->size()<<" view="<<view->width()<<"x"<<view->height()<<std::endl;
+    check(exact,"controller output coordinates and point order bitwise match unchanged clipping algorithm");
     check(inside > 0 && inside < original && !main.ui->action_Clip->isChecked(), "apply retains inside without crash");
     check(view->interactor()->GetInteractorStyle() == style && std::equal(camera,camera+3,renderer->GetActiveCamera()->GetPosition()), "application preserves original camera and interactor");
     main.grab().save(capture("main_applied"));
     main.ui->action_ed_undo->trigger(); pump();
+    const auto undoneScene=main.sceneSnapshot();
+    check(undoneScene.records.begin()->second.id==initialRecord.id
+          && undoneScene.records.begin()->second.cloud==initialRecord.cloud
+          && undoneScene.records.begin()->second.appearance==initialRecord.appearance,
+          "undo restores original identity shared input and all display properties");
+    check(undoneScene.generation>appliedScene.generation,"undo advances generation rather than reviving an old task generation");
+    check(std::equal(camera,camera+3,renderer->GetActiveCamera()->GetPosition()),"clipping undo preserves camera");
     check(registeredPoints(renderer) == original, "single undo restores full original cloud");
     main.ui->action_ed_redo->trigger(); pump();
+    const auto redoneScene=main.sceneSnapshot();
+    check(redoneScene.records.begin()->second.id==appliedRecord.id
+          && redoneScene.records.begin()->second.cloud==appliedRecord.cloud
+          && redoneScene.records.begin()->second.appearance==appliedRecord.appearance,"redo restores output identity data and display properties");
     check(registeredPoints(renderer) == inside, "single redo restores applied cut");
     main.ui->action_ed_undo->trigger(); pump();
     bool cycles = true;
@@ -362,6 +481,15 @@ static void mainTests()
         button(view,"polygonApply")->click(); pump();
         const auto applied = registeredPoints(renderer);
         if (i%3 == 2 && applied != original) cycles = false;
+        const auto split=main.sceneSnapshot();
+        if(i%3==2) {
+            check(split.records.size()==2,"split commits exactly two scene records");
+            for(const auto& item:split.records) {
+                auto expected=initialRecord.appearance;
+                if(item.first.find("_outside")!=std::string::npos) expected.color={255,170,70};
+                check(item.second.appearance==expected,"both split outputs preserve transform and display attributes");
+            }
+        }
         main.ui->action_ed_undo->trigger(); pump();
         if (registeredPoints(renderer) != original || view->interactor()->GetInteractorStyle() != style) cycles = false;
         std::cout << "[CYCLE] " << i << " applied=" << applied << " restored=" << registeredPoints(renderer)
@@ -377,7 +505,13 @@ static void mainTests()
     click(entry,entry->rect().center());
     main.ui->action_ed_cleangeo->trigger();
     check(!main.ui->action_Clip->isChecked() && !dock->isVisible(), "cleanup exits clipping without stale dock");
-    main.close(); pump();
+    const auto beforeClose=main.sceneSnapshot();
+    click(entry,entry->rect().center());quad(view);button(view,"polygonPreview")->click();
+    main.close();pump();waitFor([&]{return !main.ui->action_cancel_task->isEnabled();});
+    const auto afterClose=main.sceneSnapshot();
+    check(!main.ui->action_Clip->isChecked() && !dock->isVisible() && afterClose.generation==beforeClose.generation
+          && afterClose.records.begin()->second.cloud==beforeClose.records.begin()->second.cloud,
+          "closing main window during preview restores source and never commits a late result");
 }
 
 int main(int argc, char** argv)
@@ -388,6 +522,7 @@ int main(int argc, char** argv)
         QApplication app(argc,argv);
         app.setQuitOnLastWindowClosed(false);
         toolTests();
+        controllerTests();
         mainTests();
     }
     std::cout << "[RESULT] pass=" << passed << " fail=" << failed << std::endl;

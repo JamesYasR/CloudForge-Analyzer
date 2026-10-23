@@ -1,79 +1,39 @@
 #include "UndoRedoManager.h"
+#include <set>
 
-void UndoRedoManager::pushState(
-    const std::string& description,
-    const std::map<std::string, pcl::PointCloud<pcl::PointXYZ>::Ptr>& cloudMap,
-    const std::map<std::string, ColorManager>& colorMap)
+void UndoRedoManager::pushState(const std::string& description, CloudScene::Snapshot scene, bool preserveCamera)
 {
-    // 新操作意味着重做栈失效
+    undoStack_.push_back({description, std::move(scene), preserveCamera});
     redoStack_.clear();
-
-    Entry entry;
-    entry.description = description;
-    entry.cloudMap = cloudMap;
-    entry.colorMap = colorMap;
-
-    undoStack_.push_back(std::move(entry));
-
-    // 超过上限则淘汰最旧记录
-    while (static_cast<int>(undoStack_.size()) > MAX_HISTORY) {
-        undoStack_.pop_front();
-    }
+    while (undoStack_.size() > MAX_HISTORY) undoStack_.pop_front();
 }
 
-bool UndoRedoManager::canUndo() const {
-    return !undoStack_.empty();
-}
-
-bool UndoRedoManager::canRedo() const {
-    return !redoStack_.empty();
-}
-
-std::string UndoRedoManager::undo(
-    std::map<std::string, pcl::PointCloud<pcl::PointXYZ>::Ptr>& cloudMap,
-    std::map<std::string, ColorManager>& colorMap)
+std::optional<UndoRedoManager::Entry> UndoRedoManager::undo(CloudScene::Snapshot current)
 {
-    if (undoStack_.empty()) return {};
-
-    // 保存当前状态到重做栈
-    Entry redoEntry;
-    redoEntry.description = undoStack_.back().description;
-    redoEntry.cloudMap = cloudMap;
-    redoEntry.colorMap = colorMap;
-    redoStack_.push_back(std::move(redoEntry));
-
-    // 从撤销栈恢复
-    Entry entry = std::move(undoStack_.back());
+    if (undoStack_.empty()) return std::nullopt;
+    redoStack_.push_back({undoStack_.back().description, std::move(current), undoStack_.back().preserveCamera});
+    auto result = std::move(undoStack_.back());
     undoStack_.pop_back();
-
-    cloudMap = entry.cloudMap;
-    colorMap = entry.colorMap;
-    return entry.description;
+    return result;
 }
 
-std::string UndoRedoManager::redo(
-    std::map<std::string, pcl::PointCloud<pcl::PointXYZ>::Ptr>& cloudMap,
-    std::map<std::string, ColorManager>& colorMap)
+std::optional<UndoRedoManager::Entry> UndoRedoManager::redo(CloudScene::Snapshot current)
 {
-    if (redoStack_.empty()) return {};
-
-    // 保存当前状态到撤销栈
-    Entry undoEntry;
-    undoEntry.description = redoStack_.back().description;
-    undoEntry.cloudMap = cloudMap;
-    undoEntry.colorMap = colorMap;
-    undoStack_.push_back(std::move(undoEntry));
-
-    // 从重做栈恢复
-    Entry entry = std::move(redoStack_.back());
+    if (redoStack_.empty()) return std::nullopt;
+    undoStack_.push_back({redoStack_.back().description, std::move(current), redoStack_.back().preserveCamera});
+    auto result = std::move(redoStack_.back());
     redoStack_.pop_back();
-
-    cloudMap = entry.cloudMap;
-    colorMap = entry.colorMap;
-    return entry.description;
+    return result;
 }
 
-void UndoRedoManager::clear() {
-    undoStack_.clear();
-    redoStack_.clear();
+void UndoRedoManager::clear() { undoStack_.clear(); redoStack_.clear(); }
+
+std::size_t UndoRedoManager::retainedBytes() const
+{
+    std::set<const CloudScene::Cloud*> counted;
+    std::size_t bytes = 0;
+    for (const auto* stack : {&undoStack_, &redoStack_}) for (const auto& entry : *stack)
+        for (const auto& item : entry.scene.records) if (item.second.cloud && counted.insert(item.second.cloud.get()).second)
+            bytes += item.second.cloud->points.capacity() * sizeof(pcl::PointXYZ);
+    return bytes;
 }

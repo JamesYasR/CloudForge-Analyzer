@@ -45,6 +45,12 @@ void MeasurementPresentation::hideSource(const QString& group,vtkActor* source)
         found->second.owners.insert(group);source->VisibilityOff();
     }
 }
+std::optional<bool> MeasurementPresentation::sourceVisibility(vtkActor* actor) const
+{
+    const auto found = sources_.find(actor);
+    if (found != sources_.end()) return found->second.visibility != 0;
+    return std::nullopt;
+}
 void MeasurementPresentation::addCurve(const QString& group,vtkSmartPointer<vtkActor> actor,bool outline)
 {
     if (!actor || !renderer_->GetRenderWindow()) return;

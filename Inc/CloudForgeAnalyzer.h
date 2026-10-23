@@ -7,6 +7,7 @@
 #include "Measure/Measure.h"
 #include "Basic/Basic.h"
 #include "UndoRedoManager.h"
+#include "Application/TaskContext.h"
 
 
 #include <string>
@@ -34,6 +35,8 @@ class HeightMeasureTool;
 class WeldParallelismTool;
 class MeasurementPresentation;
 class ArcMeasurementTool;
+class ClipController;
+class TaskRunner;
 
 class CloudForgeAnalyzer : public QMainWindow
 {
@@ -44,6 +47,8 @@ public:
     ~CloudForgeAnalyzer();
     Ui::CloudForgeAnalyzerClass* ui;
     pcl::PointCloud<pcl::PointXYZ>::Ptr cloud;
+    // 只读场景投影，供功能入口及验证使用；修改仍走事务/兼容入口。
+    CloudScene::Snapshot sceneSnapshot() { return captureCloudScene(); }
 
 private slots:
     //void Slot_CurveFittingPC();
@@ -146,7 +151,18 @@ private:
 
     // 撤销/重做相关
     void saveUndoState(const std::string& description);
-    void rebuildCloudVisualization();
+    void rebuildCloudVisualization(bool preserveCamera = false);
+    CloudScene::Snapshot captureCloudScene();
+    bool commitCloudEdit(const CloudScene::Edit& edit);
+    struct PreparedCloudScene {
+        CloudScene::Snapshot scene;
+        std::map<std::string, CloudScene::Cloud::Ptr> clouds;
+        std::map<std::string, ColorManager> colors;
+        std::map<std::string, std::pair<CloudScene::Id, CloudScene::Cloud::ConstPtr>> identities;
+    };
+    PreparedCloudScene prepareCloudScene(const CloudScene::Snapshot& scene);
+    void installCloudScene(PreparedCloudScene prepared, bool preserveCamera);
+    void applyCloudAppearance(const std::string& name, const CloudScene::Appearance& appearance);
     void beginUndoBatch(const std::string& description);
     void endUndoBatch();
 
@@ -165,14 +181,7 @@ private:
     // ============ 后台计算任务(避免界面无响应) ============
     // 计算在工作线程执行; 进度经原子共享状态传回, GUI 线程用定时器读取并刷新
     // 进度条/调试文本框; VTK 可视化仍只在 GUI 线程执行。
-    struct AsyncTaskState {
-        std::atomic<bool> cancelRequested{ false };
-        std::atomic<int> current{ 0 };
-        std::atomic<int> total{ 0 };
-        std::mutex mtx;
-        std::string stage;
-        std::vector<std::string> pendingLog;
-    };
+    using AsyncTaskState = TaskContext;
 
     void BeginAsyncTask(const QString& title);
     void EndAsyncTask(bool cancelled);
@@ -237,6 +246,8 @@ private:
     pcl::visualization::PCLVisualizer::Ptr viewer;
     std::unique_ptr<ViewportPointPicker> m_pointPicker;
     std::unique_ptr<PolygonClipTool> m_clipTool;
+    std::unique_ptr<ClipController> m_clipController;
+    std::unique_ptr<TaskRunner> m_clipTasks;
     std::unique_ptr<HeightMeasureTool> m_heightTool;
     std::unique_ptr<WeldParallelismTool> m_weldParallelTool;
     std::unique_ptr<MeasurementPresentation> m_presentation;
@@ -248,6 +259,9 @@ private:
     std::map<std::string, pcl::PointCloud<pcl::PointXYZ>::Ptr> CloudMap;
     std::map<std::string, pcl::PointCloud<pcl::PointXYZRGB>::Ptr> RGBCloudMap;
     std::map<std::string, ColorManager> ColorMap;
+    std::map<std::string, std::pair<CloudScene::Id, CloudScene::Cloud::ConstPtr>> m_cloudIdentities;
+    std::uint64_t m_sceneGeneration = 0;
+    CloudScene::Id m_nextCloudId = 1;
     std::map<std::string, Line> LineMap;
     std::vector<vtkSmartPointer<vtkProp>> m_geodesicVisualizationActors;
     std::map<std::string, vtkSmartPointer<vtkActor>> m_arcSplineMap;

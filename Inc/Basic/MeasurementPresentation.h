@@ -7,6 +7,7 @@
 #include <map>
 #include <memory>
 #include <set>
+#include <optional>
 
 class vtkActor;
 class vtkProperty;
@@ -19,6 +20,7 @@ public:
     ~MeasurementPresentation();
     void addHeatmap(const QString& group,pcl::PointCloud<pcl::PointXYZRGB>::ConstPtr cloud,vtkActor* source=nullptr);
     void hideSource(const QString& group,vtkActor* source);
+    std::optional<bool> sourceVisibility(vtkActor* actor) const;
     void addCurve(const QString& group,vtkSmartPointer<vtkActor> actor,bool outline=false);
     void addGeometry(const QString& group,vtkSmartPointer<vtkActor> actor);
     void setAnnotations(const QString& group,std::vector<Annotation> annotations,bool append=false);
