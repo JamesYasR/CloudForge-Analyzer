@@ -60,7 +60,7 @@
        <enum>QTabWidget::TabPosition::East</enum>
       </property>
       <property name="currentIndex">
-       <number>1</number>
+       <number>0</number>
       </property>
       <property name="elideMode">
        <enum>Qt::TextElideMode::ElideLeft</enum>
@@ -71,30 +71,6 @@
       <property name="movable">
        <bool>false</bool>
       </property>
-      <widget class="QWidget" name="tab">
-       <property name="sizePolicy">
-        <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
-         <horstretch>8</horstretch>
-         <verstretch>5</verstretch>
-        </sizepolicy>
-       </property>
-       <attribute name="title">
-        <string>扫描</string>
-       </attribute>
-       <widget class="QLabel" name="label">
-        <property name="geometry">
-         <rect>
-          <x>10</x>
-          <y>0</y>
-          <width>141</width>
-          <height>31</height>
-         </rect>
-        </property>
-        <property name="text">
-         <string>Scanner</string>
-        </property>
-       </widget>
-      </widget>
       <widget class="QWidget" name="tab_2">
        <property name="sizePolicy">
         <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
@@ -615,35 +591,6 @@ QMenu::item:selected {
     <addaction name="action_fi_saveas"/>
     <addaction name="action_fi_openSTL"/>
    </widget>
-   <widget class="QMenu" name="menu_hardware">
-    <property name="styleSheet">
-     <string notr="true">QMenu {
-  background:#f3f3f3; /* 深色背景，类似VS的暗色主题 */
-  border: 1px solid #3c3c3c; /* 深色边框，与背景协调 */
-  border-radius: 4px; /* 边角稍微圆润，符合VS的简洁风格 */
-}
-
-QMenu::item {
-  padding: 8px 16px; /* 适当调整内边距，使菜单项看起来更紧凑 */
-  color: #000000; /* 浅色文字，与深色背景对比明显 */
-  font-size: 10px; /* 字体稍大一些，便于阅读 */
-  font-family: &quot;Consolas&quot;, &quot;Courier New&quot;, monospace; /* 使用类似VS的等宽字体 */
-}
-
-QMenu::item:hover {
-  background-color: #404040; /* 悬停时的深色背景，有轻微的高亮效果 */
-}
-
-QMenu::item:selected {
-  background-color: #404040; /* 选中时的背景色与悬停时一致 */
-}</string>
-    </property>
-    <property name="title">
-     <string>硬件</string>
-    </property>
-    <addaction name="action_5"/>
-    <addaction name="action_6"/>
-   </widget>
    <widget class="QMenu" name="menu_prehandle">
     <property name="styleSheet">
      <string notr="true">QMenu {
@@ -750,12 +697,23 @@ QMenu::item:selected {
     <addaction name="action_ed_undo"/>
     <addaction name="action_ed_redo"/>
    </widget>
+   <widget class="QMenu" name="menu_help">
+    <property name="title">
+     <string>帮助</string>
+    </property>
+    <addaction name="action_about"/>
+   </widget>
    <addaction name="menu_file"/>
    <addaction name="menu_edit"/>
-   <addaction name="menu_hardware"/>
    <addaction name="menu_prehandle"/>
    <addaction name="menu_fit"/>
+   <addaction name="menu_help"/>
   </widget>
+  <action name="action_about">
+   <property name="text">
+    <string>关于 CloudForge Analyzer…</string>
+   </property>
+  </action>
   <action name="action1">
    <property name="text">
     <string>1</string>
@@ -800,16 +758,6 @@ QMenu::item:selected {
   <action name="action_ph_1">
    <property name="text">
     <string>聚类</string>
-   </property>
-  </action>
-  <action name="action_5">
-   <property name="text">
-    <string>连接相机</string>
-   </property>
-  </action>
-  <action name="action_6">
-   <property name="text">
-    <string>连接投影</string>
    </property>
   </action>
   <action name="action_fl_1">

@@ -1,11 +1,18 @@
 {
   "cmake.buildDirectory": "${workspaceFolder}/build",
   "cmake.configureOnOpen": false,
-  "cmake.parallelJobs": 0,
+  "cmake.parallelJobs": 2,
+  "cmake.generator": "Ninja",
   "cmake.useCMakePresets": "never",
   "cmake.configureArgs": [
     "-DCMAKE_BUILD_TYPE=Debug",
-    "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON"
+    "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
+    "-DCMAKE_TOOLCHAIN_FILE=${workspaceFolder}/../vcpkg/scripts/buildsystems/vcpkg.cmake",
+    "-DVCPKG_TARGET_TRIPLET=x64-linux",
+    "-DVCPKG_INSTALLED_DIR=${workspaceFolder}/build/vcpkg_installed",
+    "-DVCPKG_OVERLAY_PORTS=${workspaceFolder}/vcpkg-ports",
+    "-DVCPKG_OVERLAY_TRIPLETS=${workspaceFolder}/vcpkg-triplets",
+    "-DVCPKG_MANIFEST_INSTALL=OFF"
   ],
   "files.associations": {
     "*.nsi": "nsis"
