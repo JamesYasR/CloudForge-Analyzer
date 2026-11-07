@@ -1,5 +1,6 @@
 <RCC>
     <qresource prefix="/CloudForgeAnalyzer">
+        <file alias="project-metadata.json">vcpkg.json</file>
         <file>Icons/cloud_clusters.png</file>
         <file>Icons/icon_MainWindow.png</file>
         <file>Icons/icons_ruler.png</file>

@@ -10,6 +10,7 @@
 #include "Basic/MeasurementPresentation.h"
 #include "Basic/ArcMeasurementTool.h"
 #include "Dialog/ParamDialogMeasureWeldHeight.h"
+#include "Dialog/AboutDialog.h"
 #include <thread>
 #include <omp.h> // OpenMP 并行: MSVC(/openmp) 与 GCC(-fopenmp) 双平台兼容
 #include <random> // 线程私有随机数 (std::mt19937)
@@ -199,6 +200,8 @@ void CloudForgeAnalyzer::InitalizeQWidgets() {
 
 void CloudForgeAnalyzer::InitalizeConnects() {
     for (auto action : findChildren<QAction*>()) {
+        // Informational actions must preserve the current measurement selection.
+        if (action == ui->action_about) continue;
         if (action!=ui->measure_cylinder && action!=ui->measure_geodisic && action!=ui->action_cancel_task
             && action!=ui->action_ed_clean2DActor && action!=ui->action_ed_cleangeodetic) {
             connect(action,&QAction::triggered,this,[this]() { if (m_arcTool) m_arcTool->stop(); });
@@ -263,6 +266,10 @@ void CloudForgeAnalyzer::InitalizeConnects() {
     connect(ui->action_cancel_task, &QAction::triggered, this, &CloudForgeAnalyzer::CancelCurrentTask);
     ui->action_cancel_task->setEnabled(false);   // 无任务时不可用
     connect(ui->action_Clip, &QAction::triggered, this, &CloudForgeAnalyzer::Tool_Clip);
+    connect(ui->action_about, &QAction::triggered, this, [this] {
+        AboutDialog dialog(this);
+        dialog.exec();
+    });
 }
 
 void CloudForgeAnalyzer::mainLoop_Init() {
