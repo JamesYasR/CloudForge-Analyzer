@@ -13,6 +13,8 @@
 #include <omp.h> // OpenMP 并行: MSVC(/openmp) 与 GCC(-fopenmp) 双平台兼容
 #include <random> // 线程私有随机数 (std::mt19937)
 #include <QElapsedTimer>
+#include <QCloseEvent>
+#include <QToolBar>
 #include <vtkPoints.h>
 #include <vtkCellArray.h>
 #include <vtkPolyData.h>
@@ -60,6 +62,27 @@ CloudForgeAnalyzer::~CloudForgeAnalyzer()
     m_pointPicker.reset();
     viewer.reset();
     delete ui;
+}
+
+void CloudForgeAnalyzer::closeEvent(QCloseEvent* event)
+{
+    // 关闭请求先取消任务。保留窗口和事件循环，直到 worker 真正退出；
+    // 不能先隐藏窗口再在析构中阻塞，也不能强杀正在使用 PCL/VTK 的线程。
+    const bool alreadyClosing = m_shuttingDown.exchange(true);
+    if (m_asyncState) m_asyncState->cancelRequested.store(true);
+    if (m_asyncRunning) {
+        event->ignore();
+        if (!alreadyClosing) {
+            CancelCurrentTask();
+            centralWidget()->setEnabled(false);
+            menuBar()->setEnabled(false);
+            for (auto* toolbar : findChildren<QToolBar*>()) toolbar->setEnabled(false);
+            setWindowTitle(QStringLiteral("正在停止计算"));
+            SetProgressBarValue(0, QStringLiteral("正在停止计算"));
+        }
+        return;
+    }
+    QMainWindow::closeEvent(event);
 }
 
 
@@ -2464,16 +2487,13 @@ void CloudForgeAnalyzer::Slot_fi_openSTL_Triggered() {
         return;
     }
     QString runPath = QDir::currentPath() + "/PCDfiles";//获取项目的根路径
-    QString file_name = QFileDialog::getOpenFileName(this, QStringLiteral("选择文件"), runPath, "*.STL", nullptr, QFileDialog::DontResolveSymlinks);
+    QString file_name = QFileDialog::getOpenFileName(this, QStringLiteral("选择文件"), runPath, "STL (*.stl *.STL)", nullptr, QFileDialog::DontResolveSymlinks);
     if (file_name.isEmpty()) {
         return;
     }
-#ifdef _WIN32
-    QByteArray stlLocalPath = file_name.toLocal8Bit();
-    std::string stlPath = stlLocalPath.constData();
-#else
-    std::string stlPath = file_name.toStdString();
-#endif
+    // VTK 9.3 的 vtksys 文件接口接收 UTF-8，在 Windows 内部转为宽字符路径。
+    // 不可沿用 PCL 窄字符文件接口的本地编码转换。
+    const std::string stlPath = file_name.toUtf8().toStdString();
     TeEDebug("开始处理STL文件: " + stlPath);
 
     // 1. 后台读取STL文件信息，计算推荐参数(界面保持响应)
@@ -2483,14 +2503,16 @@ void CloudForgeAnalyzer::Slot_fi_openSTL_Triggered() {
 
     RunAsyncVoid("读取STL文件信息",
         [this, info, stlPath]() {
-            PostProgress(0, 0, "读取STL文件信息...");
+            if (!PostProgress(0, 0, "读取STL文件信息")) return;
             try {
                 vtkSmartPointer<vtkSTLReader> reader = vtkSmartPointer<vtkSTLReader>::New();
                 reader->SetFileName(stlPath.c_str());
                 reader->Update();
+                if (!PostProgress(0, 0, "读取STL文件信息")) return;
 
                 vtkPolyData* polyData = reader->GetOutput();
-                if (!polyData) {
+                if (reader->GetErrorCode() != 0 || !polyData ||
+                    polyData->GetNumberOfPoints() == 0 || polyData->GetNumberOfCells() == 0) {
                     info->error = "无法读取STL文件";
                     PostLog(">>: 无法读取STL文件");
                     return;
@@ -2541,11 +2563,13 @@ void CloudForgeAnalyzer::Slot_fi_openSTL_Triggered() {
 
             }
             catch (const std::exception& e) {
+                info->error = "无法读取STL文件";
                 PostLog("读取STL文件信息失败: " + std::string(e.what()));
             }
         },
         [this, info, stlPath]() {
             // 读取完成, 回到界面线程弹出参数对话框并启动转换
+            if (m_asyncState && m_asyncState->cancelRequested.load()) return;
             ContinueStlImportAfterInfo(info, stlPath);
         });
 }
@@ -2638,24 +2662,24 @@ void CloudForgeAnalyzer::ContinueStlImportAfterInfo(const std::shared_ptr<StlImp
     pcl::PointCloud<pcl::PointXYZ>::Ptr Cloud_Convert(new pcl::PointCloud<pcl::PointXYZ>);
 
     try {
+        const auto task = m_asyncState;
         // 4.1 读取STL文件
         PostLog("开始读取STL文件...");
-        PostProgress(10, 100, "读取STL文件...");
+        if (!PostProgress(10, 100, "读取STL文件")) return;
 
         vtkSmartPointer<vtkSTLReader> reader = vtkSmartPointer<vtkSTLReader>::New();
         reader->SetFileName(stlPath.c_str());
         reader->Update();
+        if (!PostProgress(20, 100, "转换网格数据")) return;
 
         vtkPolyData* polyData = reader->GetOutput();
-        if (!polyData || polyData->GetNumberOfPoints() == 0) {
+        if (reader->GetErrorCode() != 0 || !polyData || polyData->GetNumberOfPoints() == 0) {
             throw std::runtime_error("STL文件为空");
         }
 
         PostLog("STL文件读取成功");
         PostLog("顶点数量: " + std::to_string(polyData->GetNumberOfPoints()));
         PostLog("三角形数量: " + std::to_string(polyData->GetNumberOfCells()));
-
-        PostProgress(20, 100, "转换网格数据...");
 
         // 4.2 转换为PCL网格
         pcl::PolygonMesh mesh;
@@ -2665,34 +2689,26 @@ void CloudForgeAnalyzer::ContinueStlImportAfterInfo(const std::shared_ptr<StlImp
         pcl::PointCloud<pcl::PointXYZ>::Ptr vertices(new pcl::PointCloud<pcl::PointXYZ>);
         pcl::fromPCLPointCloud2(mesh.cloud, *vertices);
 
-        PostProgress(30, 100, "获取顶点数据...");
+        if (!PostProgress(30, 100, "获取顶点数据")) return;
 
         if (surfaceOnly) {
             // 4.4a 表面采样
             PostLog("开始表面采样...");
-            PostProgress(40, 100, "表面采样...");
+            if (!PostProgress(40, 100, "表面采样")) return;
 
             pcl::PointCloud<pcl::PointXYZ>::Ptr sampledCloud(new pcl::PointCloud<pcl::PointXYZ>);
 
             int totalTriangles = mesh.polygons.size();
-            int processedTriangles = 0;
-
             int batchSize = 1000;
             int numBatches = (totalTriangles + batchSize - 1) / batchSize;
-            bool cancelFlag = false;
-
             sampledCloud->reserve(totalTriangles * 50);
 
-            for (int batch = 0; batch < numBatches && !cancelFlag; ++batch) {
+            for (int batch = 0; batch < numBatches; ++batch) {
                 // 更新进度并检查是否取消(返回 false 表示用户点击了“取消计算”)
                 int batchEndPreview = std::min((batch + 1) * batchSize, totalTriangles);
                 int progressPreview = std::min(80, 40 + static_cast<int>(40.0f * batchEndPreview / totalTriangles));
                 if (!PostProgress(progressPreview, 100,
-                        "表面采样: " + std::to_string(batchEndPreview) + "/" + std::to_string(totalTriangles) + " 三角形")) {
-                    cancelFlag = true;
-                    PostLog("用户取消转换");
-                    break;
-                }
+                        "表面采样")) return;
 
                 int batchStart = batch * batchSize;
                 int batchEnd = std::min((batch + 1) * batchSize, totalTriangles);
@@ -2707,6 +2723,7 @@ void CloudForgeAnalyzer::ContinueStlImportAfterInfo(const std::shared_ptr<StlImp
 
 #pragma omp for nowait
                     for (int i = batchStart; i < batchEnd; ++i) {
+                        if (task->cancelRequested.load()) continue;
                         if (mesh.polygons[i].vertices.size() == 3) {
                             pcl::PointXYZ A = vertices->points[mesh.polygons[i].vertices[0]];
                             pcl::PointXYZ B = vertices->points[mesh.polygons[i].vertices[1]];
@@ -2777,8 +2794,7 @@ void CloudForgeAnalyzer::ContinueStlImportAfterInfo(const std::shared_ptr<StlImp
                 int progress = 40 + static_cast<int>(40.0f * processedTriangles / totalTriangles);
                 progress = std::min(progress, 80);
 
-                PostProgress(progress, 100,
-                    "表面采样: " + std::to_string(processedTriangles) + "/" + std::to_string(totalTriangles) + " 三角形");
+                if (!PostProgress(progress, 100, "表面采样")) return;
 
                 PostLog("采样进度: " + std::to_string(progress) + "% ("
                     + std::to_string(processedTriangles) + "/" + std::to_string(totalTriangles) + " 三角形)");
@@ -2797,7 +2813,7 @@ void CloudForgeAnalyzer::ContinueStlImportAfterInfo(const std::shared_ptr<StlImp
         // 4.5 下采样
         if (leafSize > 0 && Cloud_Convert->size() > 0) {
             PostLog("开始下采样...");
-            PostProgress(85, 100, "下采样...");
+            if (!PostProgress(85, 100, "下采样")) return;
 
             pcl::VoxelGrid<pcl::PointXYZ> voxelGrid;
             voxelGrid.setInputCloud(Cloud_Convert);
@@ -2811,7 +2827,7 @@ void CloudForgeAnalyzer::ContinueStlImportAfterInfo(const std::shared_ptr<StlImp
             PostLog("下采样完成，点数: " + std::to_string(Cloud_Convert->size()));
         }
 
-        PostProgress(100, 100, "转换完成！");
+        if (!PostProgress(100, 100, "转换完成")) return;
 
     }
     catch (const std::exception& e) {
@@ -2825,6 +2841,7 @@ void CloudForgeAnalyzer::ContinueStlImportAfterInfo(const std::shared_ptr<StlImp
     convertResult->ok = true;
         },
         [this, convertResult, info, leafSize, surfaceOnly]() {
+            if (m_asyncState && m_asyncState->cancelRequested.load()) return;
             FinishStlImport(info, convertResult, leafSize, surfaceOnly);
         });
 }
@@ -3679,10 +3696,15 @@ void CloudForgeAnalyzer::EndAsyncTask(bool cancelled)
     if (m_asyncTimer) {
         m_asyncTimer->stop();
     }
-    // 收尾: 落最后的日志并把进度条置满
-    PollAsyncProgress();
     m_asyncRunning = false;
     ui->action_cancel_task->setEnabled(false);
+    if (m_shuttingDown.load()) {
+        // finished 信号在 GUI 线程收尾后再关闭，取消期间禁止结果发布和流程续跑。
+        QTimer::singleShot(0, this, [this]() { close(); });
+        return;
+    }
+    // 收尾: 落最后的日志并把进度条置满
+    PollAsyncProgress();
     if (cancelled) {
         SetProgressBarValue(0, "已取消");
         TeEDebug(">>: 计算已取消。");
@@ -3694,7 +3716,7 @@ void CloudForgeAnalyzer::EndAsyncTask(bool cancelled)
 
 void CloudForgeAnalyzer::PollAsyncProgress()
 {
-    if (!m_asyncState) {
+    if (m_shuttingDown.load() || !m_asyncState) {
         return;
     }
     const int current = m_asyncState->current.load();
@@ -3731,6 +3753,7 @@ void CloudForgeAnalyzer::CancelCurrentTask()
 
 bool CloudForgeAnalyzer::PostProgress(int current, int total, const std::string& stage)
 {
+    if (m_shuttingDown.load()) return false;
     if (!m_asyncState) {
         return true;
     }
@@ -3745,7 +3768,7 @@ bool CloudForgeAnalyzer::PostProgress(int current, int total, const std::string&
 
 void CloudForgeAnalyzer::PostLog(const std::string& line)
 {
-    if (!m_asyncState) {
+    if (m_shuttingDown.load() || !m_asyncState) {
         return;
     }
     std::lock_guard<std::mutex> lk(m_asyncState->mtx);
@@ -3756,19 +3779,32 @@ void CloudForgeAnalyzer::RunAsyncVoid(const QString& title,
                                       const std::function<void()>& work,
                                       const std::function<void()>& onFinished)
 {
+    if (IsTaskRunning() || !work) return;
     BeginAsyncTask(title);
+    const auto state = m_asyncState;
+    auto failed = std::make_shared<bool>(false);
     auto* watcher = new QFutureWatcher<void>(this);
     connect(watcher, &QFutureWatcher<void>::finished, this,
-        [this, watcher, onFinished]() {
-            const bool cancelled = m_asyncState && m_asyncState->cancelRequested.load();
+        [this, watcher, state, failed, onFinished]() {
+            const bool cancelled = state->cancelRequested.load();
             watcher->deleteLater();
             EndAsyncTask(cancelled);
-            if (onFinished && !m_shuttingDown.load()) {
+            if (*failed && !cancelled && !m_shuttingDown.load()) {
+                QMessageBox::warning(this, QStringLiteral("错误"), QStringLiteral("计算失败"));
+            }
+            if (onFinished && !*failed && !m_shuttingDown.load()) {
                 onFinished();   // 在 GUI 线程执行后续可视化/收尾
             }
         });
-    watcher->setFuture(QtConcurrent::run(work));
-    m_asyncFuture = watcher->future();
+    m_asyncFuture = QtConcurrent::run([this, work, state, failed]() {
+        try {
+            if (!m_shuttingDown.load() && !state->cancelRequested.load()) work();
+        } catch (...) {
+            // 异常不能逃逸到 waitForFinished / GUI finished 回调中。
+            *failed = true;
+        }
+    });
+    watcher->setFuture(m_asyncFuture);
 }
 
 // 后台任务使用的进度回调: 只写共享状态(线程安全), 不触碰 Qt 对象

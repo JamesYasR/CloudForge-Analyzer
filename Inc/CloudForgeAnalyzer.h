@@ -45,6 +45,9 @@ public:
     Ui::CloudForgeAnalyzerClass* ui;
     pcl::PointCloud<pcl::PointXYZ>::Ptr cloud;
 
+protected:
+    void closeEvent(QCloseEvent* event) override;
+
 private slots:
     //void Slot_CurveFittingPC();
     void Slot_ChangeVA_x();
@@ -178,7 +181,7 @@ private:
     void EndAsyncTask(bool cancelled);
     void PollAsyncProgress();
     void CancelCurrentTask();
-    bool IsTaskRunning() const { return m_asyncRunning; }
+    bool IsTaskRunning() const { return m_asyncRunning || m_shuttingDown.load(); }
 
     // 以下两个可从工作线程调用(只写共享状态, 不触碰 Qt 对象)
     bool PostProgress(int current, int total, const std::string& stage);
