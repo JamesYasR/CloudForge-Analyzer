@@ -1,4 +1,7 @@
 #include "Dialog/SelectionDialog.h"
+#include "Basic/ViewportCloudSelector.h"
+#include <QEventLoop>
+#include <QSignalBlocker>
 
 CloudSelectionDialog::CloudSelectionDialog(std::map<std::string, pcl::PointCloud<pcl::PointXYZ>::Ptr> cloudmap, std::map<std::string, ColorManager> colormap, QWidget* parent)
     : QDialog(parent)
@@ -11,11 +14,81 @@ CloudSelectionDialog::CloudSelectionDialog(std::map<std::string, pcl::PointCloud
     InitializeScrollArea();
     InitializeButtonAndConnect();
 
+    if (parent) viewportSelector_ = parent->window()->findChild<ViewportCloudSelector*>();
+    viewportButton_ = new QPushButton(QStringLiteral("视图点选"), this);
+    viewportButton_->setObjectName(QStringLiteral("viewportCloudSelectButton"));
+    viewportButton_->setCheckable(true);
+    viewportButton_->setToolTip(QStringLiteral("点击点云切换选中状态；拖动旋转，滚轮缩放；Esc 结束点选"));
+    viewportButton_->setEnabled(!viewportSelector_.isNull() && !checkBoxes.isEmpty());
+    auto* corner = new QHBoxLayout;
+    corner->addStretch();
+    corner->addWidget(viewportButton_);
+    mainLayout->insertLayout(0, corner);
+    if (viewportSelector_) {
+        connect(viewportButton_, &QPushButton::toggled, this, [this](bool enabled) {
+            viewportSelector_->setPicking(enabled);
+            viewportButton_->setText(enabled ? QStringLiteral("结束点选") : QStringLiteral("视图点选"));
+        });
+        connect(viewportSelector_, &ViewportCloudSelector::pickingChanged, this, [this](bool enabled) {
+            QSignalBlocker block(viewportButton_);
+            viewportButton_->setChecked(enabled);
+            viewportButton_->setText(enabled ? QStringLiteral("结束点选") : QStringLiteral("视图点选"));
+        });
+        connect(viewportSelector_, &ViewportCloudSelector::cloudClicked, this, [this](const QString& id) {
+            const int index = cloudIds.indexOf(id);
+            if (selectionLoop_ && index >= 0) checkBoxes[index]->toggle();
+        });
+        for (auto* box : checkBoxes) connect(box, &QCheckBox::toggled, this, [this]() { syncViewportSelection(); });
+    }
+
     setLayout(mainLayout);
     resize(400, 300);
 
 }
 
+CloudSelectionDialog::~CloudSelectionDialog()
+{
+    if (viewportSelector_) viewportSelector_->end(this);
+    if (selectionLoop_) selectionLoop_->quit();
+}
+
+int CloudSelectionDialog::exec()
+{
+    if (selectionLoop_) return QDialog::Rejected;
+    std::set<std::string> eligible;
+    for (const auto& id : cloudIds) eligible.insert(id.toStdString());
+    if (!viewportSelector_ || !viewportSelector_->begin(this, eligible)) return QDialog::exec();
+    // Qt 的模态窗口会屏蔽主视图。用局部事件循环保持旧调用方的同步返回约定，
+    // 由视图服务限定可交互范围，选择窗口与场景之间不发生数据修改竞争。
+    setWindowModality(Qt::NonModal);
+    setResult(QDialog::Rejected);
+    QEventLoop loop;
+    selectionLoop_ = &loop;
+    syncViewportSelection();
+    const auto quitConnection = connect(qApp, &QCoreApplication::aboutToQuit, this, &QDialog::reject);
+    show();
+    loop.exec(QEventLoop::DialogExec);
+    disconnect(quitConnection);
+    selectionLoop_ = nullptr;
+    if (viewportSelector_) viewportSelector_->end(this);
+    return result();
+}
+
+void CloudSelectionDialog::hideEvent(QHideEvent* event)
+{
+    QDialog::hideEvent(event);
+    // 窗口系统的临时取消映射/最小化也会发送 Hide，但并未真正隐藏 QWidget。
+    // 只有显式隐藏/关闭才结束同步流程，避免连续开窗时提前返回。
+    if (selectionLoop_ && !isVisible()) selectionLoop_->quit();
+}
+
+void CloudSelectionDialog::syncViewportSelection()
+{
+    if (!viewportSelector_ || !selectionLoop_) return;
+    std::set<std::string> selected;
+    for (int i = 0; i < checkBoxes.size(); ++i) if (checkBoxes[i]->isChecked()) selected.insert(cloudIds[i].toStdString());
+    viewportSelector_->setSelected(selected);
+}
 
 
 
@@ -33,11 +106,7 @@ void CloudSelectionDialog::InitializeScrollArea() {
         QHBoxLayout* rowLayout = new QHBoxLayout;
         double r = 0.8, g = 0.8, b = 0.8;
         auto it = colorMap.find(cloudId);
-        qDebug() << cloudId;
-        if (it == colorMap.end()) {
-            break;
-        }
-        ColorManager cm = it->second;
+        ColorManager cm = it != colorMap.end() ? it->second : ColorManager(204, 204, 204);
         r = cm.r;
         g = cm.g;
         b = cm.b;
@@ -65,6 +134,7 @@ void CloudSelectionDialog::InitializeScrollArea() {
     }
 
     scrollArea->setWidget(contentWidget);
+    scrollArea->setWidgetResizable(true);
     mainLayout->addWidget(scrollArea);
 }
 

@@ -1,5 +1,6 @@
 #include "CloudForgeAnalyzer.h"
 #include "Basic/ViewportPointPicker.h"
+#include "Basic/ViewportCloudSelector.h"
 #include "Basic/PolygonClipTool.h"
 #include "Basic/WeldPreparationOverlay.h"
 #include "Basic/ViewportResultOverlay.h"
@@ -52,6 +53,7 @@ CloudForgeAnalyzer::~CloudForgeAnalyzer()
     if (m_asyncFuture.isRunning()) {
         m_asyncFuture.waitForFinished();
     }
+    m_cloudSelector.reset();
     m_arcTool.reset();
     m_heightTool.reset();
     m_presentation.reset();
@@ -112,6 +114,22 @@ void CloudForgeAnalyzer::InitalizeRenderer() {
 
     viewer->setBackgroundColor(0, 0.3, 0.4);
     viewer->addCoordinateSystem(4.0);
+    m_cloudSelector = std::make_unique<ViewportCloudSelector>(ui->winOfAnalyzer, renderer, renderWindow, [this]() {
+        ViewportCloudSelector::Actors actors;
+        const auto visible = viewer->getCloudActorMap();
+        for (const auto& cloud : CloudMap) {
+            const auto found = visible->find(cloud.first);
+            if (found != visible->end()) actors.emplace(cloud.first, found->second.actor);
+        }
+        return actors;
+    }, this);
+    connect(m_cloudSelector.get(), &ViewportCloudSelector::selectionStarted, this, [this]() {
+        if (m_arcTool) m_arcTool->stop();
+        if (m_heightTool) m_heightTool->stop();
+        if (m_weldParallelTool) m_weldParallelTool->stop();
+        if (m_clipTool) m_clipTool->stop();
+        if (m_pointPicker) m_pointPicker->stop();
+    });
     m_pointPicker = std::make_unique<ViewportPointPicker>(ui->winOfAnalyzer, renderer, renderWindow);
     connect(m_pointPicker.get(), &ViewportPointPicker::activeChanged, this, [this](bool active) {
         ui->measure_line->setChecked(active && !m_pointPicker->isSelecting());
@@ -271,7 +289,7 @@ void CloudForgeAnalyzer::Slot_fit_plane_Triggered() {
         TeEDebug(">>: 已有计算任务进行中，请等待完成或点击工具栏“取消计算”。");
         return;
     }
-    ChoseCloudDialog dialog(CloudMap, ColorMap, "选择点云进行平面拟合");
+    ChoseCloudDialog dialog(CloudMap, ColorMap, "选择点云进行平面拟合", this);
     if (dialog.exec() != QDialog::Accepted) {
         TeEDebug(">>: 操作取消");
         return;
@@ -367,7 +385,7 @@ void CloudForgeAnalyzer::Tool_MeasurePlanarity() {
         return;
     }
     // 1. 选择待评估的点云
-    ChoseCloudDialog dialog(CloudMap, ColorMap, "选择待评估平面度的点云");
+    ChoseCloudDialog dialog(CloudMap, ColorMap, "选择待评估平面度的点云", this);
     if (dialog.exec() != QDialog::Accepted) {
         TeEDebug(">>: 操作取消");
         return;
@@ -472,7 +490,7 @@ void CloudForgeAnalyzer::Slot_fit_cy2_Triggered() {
         return;
     }
     // 1. 选择点云
-    ChoseCloudDialog dialog(CloudMap, ColorMap, "选择点云进行圆柱拟合与优化");
+    ChoseCloudDialog dialog(CloudMap, ColorMap, "选择点云进行圆柱拟合与优化", this);
     if (dialog.exec() != QDialog::Accepted) {
         TeEDebug(">>: 操作取消");
         return;
@@ -656,7 +674,7 @@ void CloudForgeAnalyzer::Slot_fit_cy3_Triggered() {
         return;
     }
     // 1. 选择点云（含焊缝的原始壁面点云）
-    ChoseCloudDialog dialog(CloudMap, ColorMap, "选择点云进行圆柱拟合与焊缝约束优化");
+    ChoseCloudDialog dialog(CloudMap, ColorMap, "选择点云进行圆柱拟合与焊缝约束优化", this);
     if (dialog.exec() != QDialog::Accepted) {
         TeEDebug(">>: 操作取消");
         return;
@@ -1024,7 +1042,7 @@ void CloudForgeAnalyzer::Tool_MeasureCylindricity()
         return;
     }
     // 1. 选择待评估的点云
-    ChoseCloudDialog dialog(CloudMap, ColorMap, "选择待评估圆柱度的点云");
+    ChoseCloudDialog dialog(CloudMap, ColorMap, "选择待评估圆柱度的点云", this);
     if (dialog.exec() != QDialog::Accepted) {
         TeEDebug(">>: 操作取消");
         return;
@@ -1125,7 +1143,7 @@ void CloudForgeAnalyzer::Tool_MeasureWeldHeight()
         return;
     }
     // === 1. 选择焊缝点云（支持勾选多个）===
-    ChoseCloudDialog dialogWeld(CloudMap, ColorMap, "选择焊缝点云（可勾选多个）");
+    ChoseCloudDialog dialogWeld(CloudMap, ColorMap, "选择焊缝点云（可勾选多个）", this);
     if (dialogWeld.exec() != QDialog::Accepted) {
         TeEDebug(">>: 操作取消");
         return;
@@ -1137,7 +1155,7 @@ void CloudForgeAnalyzer::Tool_MeasureWeldHeight()
     }
 
     // === 2. 选择壁面点云（单选）===
-    ChoseCloudDialog dialogBase(CloudMap, ColorMap, "选择圆柱壁面点云");
+    ChoseCloudDialog dialogBase(CloudMap, ColorMap, "选择圆柱壁面点云", this);
     if (dialogBase.exec() != QDialog::Accepted) {
         TeEDebug(">>: 操作取消");
         return;
@@ -1270,7 +1288,7 @@ void CloudForgeAnalyzer::Tool_MeasurePothole()
         return;
     }
     // 1. 选择待测点云（含凹塘/凹坑的多片拼接区域）
-    ChoseCloudDialog dialog(CloudMap, ColorMap, "选择待测量凹塘的点云（建议为多片拼接区域）");
+    ChoseCloudDialog dialog(CloudMap, ColorMap, "选择待测量凹塘的点云（建议为多片拼接区域）", this);
     if (dialog.exec() != QDialog::Accepted) {
         TeEDebug(">>: 操作取消");
         return;
@@ -1479,7 +1497,7 @@ void CloudForgeAnalyzer::Tool_MeasureWeldPreparation()
     axisDir.normalize();
 
     // ---- 2. 选择远件试样 ----
-    ChoseCloudDialog dFar(CloudMap, ColorMap, "焊前装配测量: 选择【远件】试样点云");
+    ChoseCloudDialog dFar(CloudMap, ColorMap, "焊前装配测量: 选择【远件】试样点云", this);
     if (dFar.exec() != QDialog::Accepted) { TeEDebug(">>: 操作取消"); return; }
     if (dFar.getSelectedList().empty()) { TeEDebug(">>: 未选择远件点云"); return; }
     const std::string farName = dFar.getSelectedList()[0];
@@ -1487,7 +1505,7 @@ void CloudForgeAnalyzer::Tool_MeasureWeldPreparation()
     if (!farCloud || farCloud->empty()) { TeEDebug(">>: 远件点云为空"); return; }
 
     // ---- 3. 选择近件试样 ----
-    ChoseCloudDialog dNear(CloudMap, ColorMap, "焊前装配测量: 选择【近件】试样点云");
+    ChoseCloudDialog dNear(CloudMap, ColorMap, "焊前装配测量: 选择【近件】试样点云", this);
     if (dNear.exec() != QDialog::Accepted) { TeEDebug(">>: 操作取消"); return; }
     if (dNear.getSelectedList().empty()) { TeEDebug(">>: 未选择近件点云"); return; }
     const std::string nearName = dNear.getSelectedList()[0];
@@ -2041,7 +2059,7 @@ void CloudForgeAnalyzer::Slot_ph_ProtruSeg_Triggered() {
         TeEDebug(">>: 已有计算任务进行中，请等待完成或点击工具栏“取消计算”。");
         return;
     }
-    ChoseCloudDialog dialog(CloudMap, ColorMap);
+    ChoseCloudDialog dialog(CloudMap, ColorMap, "选择点云", this);
     if (dialog.exec() != QDialog::Accepted) {
         TeEDebug(">>:操作取消");
         return;
@@ -2107,7 +2125,7 @@ void CloudForgeAnalyzer::Slot_ph_CurvSeg_Triggered() {
         TeEDebug(">>: 已有计算任务进行中，请等待完成或点击工具栏“取消计算”。");
         return;
     }
-	ChoseCloudDialog dialog(CloudMap, ColorMap);
+	ChoseCloudDialog dialog(CloudMap, ColorMap, "选择点云", this);
     if (dialog.exec() != QDialog::Accepted) {
         TeEDebug(">>:操作取消");
         return;
@@ -2244,7 +2262,7 @@ void CloudForgeAnalyzer::Slot_fit_line_Triggered() {
         TeEDebug(">>: 已有计算任务进行中，请等待完成或点击工具栏“取消计算”。");
         return;
     }
-    ChoseCloudDialog dialog(CloudMap, ColorMap);
+    ChoseCloudDialog dialog(CloudMap, ColorMap, "选择点云", this);
     if (dialog.exec() != QDialog::Accepted) {
         TeEDebug(">>:操作取消");
         return;
@@ -2334,7 +2352,7 @@ void CloudForgeAnalyzer::Slot_fit_cy_Triggered() {
         TeEDebug(">>: 已有计算任务进行中，请等待完成或点击工具栏“取消计算”。");
         return;
     }
-    ChoseCloudDialog dialog(CloudMap, ColorMap);
+    ChoseCloudDialog dialog(CloudMap, ColorMap, "选择点云", this);
     if (dialog.exec() != QDialog::Accepted) {
         TeEDebug(">>:操作取消");
         return;
@@ -2984,7 +3002,8 @@ void CloudForgeAnalyzer::Slot_fi_saveas_Triggered() {
         return;
     }
     // SaveCloudDialog 的构造函数内部会 exec() 弹框, 必须在界面线程创建
-    SaveCloudDialog dialog(CloudMap, ColorMap);
+    SaveCloudDialog dialog(CloudMap, ColorMap, this);
+    if (m_shuttingDown.load()) return;
     auto SaveList = dialog.getSelectedList();
     if (SaveList.empty()) return;
 
@@ -3097,7 +3116,7 @@ void CloudForgeAnalyzer::Slot_ed_dork_Triggered() {
         TeEDebug(">>: 计算进行中，为保证数据安全，暂不能执行该操作。");
         return;
     }
-    RmCloudDialog dcc(CloudMap,ColorMap);
+    RmCloudDialog dcc(CloudMap,ColorMap, this);
     std::vector<std::string> todelete = dcc.Get_toDelete();
     if (!todelete.empty()) {
         beginUndoBatch("批量删除点云");
@@ -3208,7 +3227,7 @@ void CloudForgeAnalyzer::Slot_fl_2_Triggered() {
         TeEDebug(">>: 已有计算任务进行中，请等待完成或点击工具栏“取消计算”。");
         return;
     }
-    ChoseCloudDialog dialog(CloudMap, ColorMap);
+    ChoseCloudDialog dialog(CloudMap, ColorMap, "选择点云", this);
     if (dialog.exec() != QDialog::Accepted) {
         TeEDebug(">>:操作取消");
         return;
@@ -3270,7 +3289,7 @@ void CloudForgeAnalyzer::Slot_fl_1_Triggered() {
         TeEDebug(">>: 已有计算任务进行中，请等待完成或点击工具栏“取消计算”。");
         return;
     }
-    ChoseCloudDialog dialog(CloudMap, ColorMap);
+    ChoseCloudDialog dialog(CloudMap, ColorMap, "选择点云", this);
     if (dialog.exec() != QDialog::Accepted) {
         TeEDebug(">>:操作取消");
         return;
@@ -3331,7 +3350,7 @@ void CloudForgeAnalyzer::Slot_ph_1_Triggered() {
         TeEDebug(">>: 已有计算任务进行中，请等待完成或点击工具栏“取消计算”。");
         return;
     }
-    ChoseCloudDialog dialog(CloudMap, ColorMap);
+    ChoseCloudDialog dialog(CloudMap, ColorMap, "选择点云", this);
     if (dialog.exec() != QDialog::Accepted) {
         TeEDebug(">>:操作取消");
         return;

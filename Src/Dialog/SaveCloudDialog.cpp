@@ -5,7 +5,7 @@ SaveCloudDialog::SaveCloudDialog(std::map<std::string, pcl::PointCloud<pcl::Poin
 {
     InitializeButtonAndConnect();
     this->setWindowTitle("选择点云另存为");
-    this->exec();
+    if (this->exec() != QDialog::Accepted) clearAllCheckBoxes();
 }
 
 SaveCloudDialog::~SaveCloudDialog() = default;

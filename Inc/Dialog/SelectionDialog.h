@@ -1,6 +1,10 @@
 #pragma once
 #include "Dialog/headers.h"
 #include "Basic/Basic.h"
+#include <QPointer>
+
+class ViewportCloudSelector;
+class QEventLoop;
 
 class CloudSelectionDialog : public QDialog {
     Q_OBJECT
@@ -9,6 +13,8 @@ public:
         const std::map<std::string, pcl::PointCloud<pcl::PointXYZ>::Ptr> cloudMap,
         const std::map<std::string, ColorManager> colorMap,
         QWidget* parent = nullptr);
+    ~CloudSelectionDialog() override;
+    int exec() override;
 
     std::vector<std::string> getSelectedList();
     std::vector<std::string> getUnselectedList();
@@ -17,6 +23,7 @@ public:
 
 
 protected:
+    void hideEvent(QHideEvent* event) override;
     void InitializeScrollArea();
     virtual void InitializeButtonAndConnect();
 
@@ -25,6 +32,12 @@ protected:
     QStringList cloudIds;
     std::map<std::string, pcl::PointCloud<pcl::PointXYZ>::Ptr> cloudMap;
     std::map<std::string, ColorManager> colorMap;
+
+private:
+    void syncViewportSelection();
+    QPointer<ViewportCloudSelector> viewportSelector_;
+    QPushButton* viewportButton_ = nullptr;
+    QEventLoop* selectionLoop_ = nullptr;
 };
 
 class CySelectionDialog : public QDialog {

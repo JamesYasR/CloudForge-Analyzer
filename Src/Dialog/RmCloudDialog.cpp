@@ -4,6 +4,7 @@ RmCloudDialog::RmCloudDialog(std::map<std::string, pcl::PointCloud<pcl::PointXYZ
     : CloudSelectionDialog(cloudm, colorm, parent)
 {
     InitializeButtonAndConnect();
+    setWindowTitle(QStringLiteral("管理点云簇"));
     this->exec();
 }
 RmCloudDialog::~RmCloudDialog() = default;

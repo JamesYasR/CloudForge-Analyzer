@@ -34,6 +34,7 @@ class HeightMeasureTool;
 class WeldParallelismTool;
 class MeasurementPresentation;
 class ArcMeasurementTool;
+class ViewportCloudSelector;
 
 class CloudForgeAnalyzer : public QMainWindow
 {
@@ -239,6 +240,7 @@ private:
 
     pcl::visualization::PCLVisualizer::Ptr viewer;
     std::unique_ptr<ViewportPointPicker> m_pointPicker;
+    std::unique_ptr<ViewportCloudSelector> m_cloudSelector;
     std::unique_ptr<PolygonClipTool> m_clipTool;
     std::unique_ptr<HeightMeasureTool> m_heightTool;
     std::unique_ptr<WeldParallelismTool> m_weldParallelTool;
